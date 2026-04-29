@@ -1,0 +1,23 @@
+[package]
+name = "libxgwx"
+version = "0.1.0"
+edition = "2024"
+description = "Parser for LS XG5000 .xgwx workspace files"
+license = "Apache-2.0"
+
+[dependencies]
+base64 = "0.22"
+bzip2 = "0.5"
+crc32fast = "1.4"
+crossterm = "0.28"
+eframe = { version = "0.29", optional = true }
+flate2 = "1.0"
+ratatui = "0.29"
+roxmltree = "0.20"
+
+[features]
+gui = ["dep:eframe"]
+
+[[example]]
+name = "gui"
+required-features = ["gui"]
