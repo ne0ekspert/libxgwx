@@ -139,10 +139,13 @@ wire segments.
 
 ## Fixtures
 
-The repository includes small `fixtures/XGB_Enet01.xgwx` and
-`fixtures/XGB_Enet02.xgwx` files used by the normal test suite. To run an
-additional smoke test against another real workspace, keep that file outside the
-commit and pass it with an environment variable:
+The repository includes small `.xgwx` files in `fixtures/` for the normal test
+suite. They are included with the original author's permission for parser
+development and testing; see `fixtures/README.md` for attribution and
+permission details.
+
+To run an additional smoke test against another real workspace, keep that file
+outside the commit and pass it with an environment variable:
 
 ```sh
 LIBXGWX_FIXTURE=path/to/project.xgwx cargo test parses_real_fixture_from_env -- --ignored
