@@ -2278,6 +2278,7 @@ struct WasmDocumentSummary {
     project: WasmProjectSummary,
     counts: WasmCounts,
     programs: Vec<WasmProgramSummary>,
+    variables: Vec<WasmVariableSummary>,
     ladder: Vec<WasmLadderProgramSummary>,
     networks: Vec<WasmNetworkSummary>,
     cnet: Vec<WasmCnetSummary>,
@@ -2293,8 +2294,8 @@ impl WasmDocumentSummary {
     fn from_document(doc: &XgwxDocument) -> Self {
         let mut warnings = Vec::new();
         let project = doc.project_info();
-        let variables = match doc.variables() {
-            Ok(variables) => Some(variables.len()),
+        let variable_summaries = match doc.variables() {
+            Ok(variables) => Some(variables),
             Err(error) => {
                 warnings.push(format!("variables: {error}"));
                 None
@@ -2346,7 +2347,7 @@ impl WasmDocumentSummary {
                 networks: doc.networks().len(),
                 modules: doc.modules().len(),
                 programs: doc.programs().len(),
-                variables,
+                variables: variable_summaries.as_ref().map(Vec::len),
                 decoded_payloads: decoded_payloads.len(),
                 decoded_payload_errors: decoded_payload_errors.len(),
                 ladder_programs: ladder_programs
@@ -2368,6 +2369,11 @@ impl WasmDocumentSummary {
                 .programs()
                 .into_iter()
                 .map(WasmProgramSummary::from_program)
+                .collect(),
+            variables: variable_summaries
+                .unwrap_or_default()
+                .into_iter()
+                .map(WasmVariableSummary::from_variable)
                 .collect(),
             ladder: ladder_programs
                 .iter()
@@ -2489,6 +2495,42 @@ impl WasmProgramSummary {
             version: program.version,
             object_id: program.object_id,
             comment: program.comment,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmVariableSummary {
+    name: Option<String>,
+    address: Option<String>,
+    address_area: Option<String>,
+    address_number: Option<u32>,
+    data_type: Option<String>,
+    scope: Option<String>,
+    description: Option<String>,
+    comment: Option<String>,
+    source_ref: Option<String>,
+    range: Option<String>,
+    format_version: Option<String>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmVariableSummary {
+    fn from_variable(variable: VariableSummary) -> Self {
+        Self {
+            name: variable.name,
+            address: variable.address,
+            address_area: variable.address_area,
+            address_number: variable.address_number,
+            data_type: variable.data_type.or(variable.type_name),
+            scope: variable.scope,
+            description: variable.description,
+            comment: variable.comment,
+            source_ref: variable.source_ref,
+            range: variable.range,
+            format_version: variable.format_version,
         }
     }
 }

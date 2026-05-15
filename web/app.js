@@ -6,6 +6,7 @@ const statusEl = document.querySelector("#status");
 const panels = {
   summary: document.querySelector("#summary"),
   programs: document.querySelector("#programs"),
+  variables: document.querySelector("#variables"),
   networks: document.querySelector("#networks"),
   parameters: document.querySelector("#parameters"),
 };
@@ -64,6 +65,7 @@ async function parseFile(file) {
 function render(summary, file) {
   renderSummary(summary, file);
   renderPrograms(summary.programs, summary.ladder ?? []);
+  renderVariables(summary.variables ?? []);
   renderNetworks(summary.networks, summary.cnet, summary.fenet);
   renderParameters(summary);
 }
@@ -141,6 +143,48 @@ function renderProgramDetail(program, ladder, index) {
     ])),
     ladder ? renderLadderViewer(ladder) : empty("No decoded ladder structure found for this program."),
   ].join("");
+}
+
+function renderVariables(variables) {
+  if (!variables.length) {
+    panels.variables.innerHTML = empty("No variables found.");
+    return;
+  }
+
+  panels.variables.innerHTML = section("Variables", `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Comment</th>
+            <th>Range</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>${variables.map(renderVariableRow).join("")}</tbody>
+      </table>
+    </div>
+  `);
+}
+
+function renderVariableRow(variable) {
+  const address = variable.address
+    ?? [variable.addressArea, variable.addressNumber]
+      .filter((part) => part !== null && part !== undefined && part !== "")
+      .join("");
+  return `<tr>
+    <td>${escapeHtml(value(variable.name))}</td>
+    <td>${escapeHtml(value(address))}</td>
+    <td>${escapeHtml(value(variable.dataType))}</td>
+    <td>${escapeHtml(value(variable.description))}</td>
+    <td>${escapeHtml(value(variable.comment))}</td>
+    <td>${escapeHtml(value(variable.range))}</td>
+    <td>${escapeHtml(value(variable.sourceRef ?? variable.formatVersion))}</td>
+  </tr>`;
 }
 
 function renderLadderViewer(ladder) {
