@@ -13,6 +13,12 @@ pub(crate) fn decode_base64_payload(text: &str, compressed: bool) -> Result<Vec<
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(encoded)
         .map_err(XgwxError::Base64)?;
+    if decoded.len() > MAX_BASE64_DECODED_LEN {
+        return Err(XgwxError::ResourceLimitExceeded {
+            resource: "base64 decoded payload size",
+            limit: MAX_BASE64_DECODED_LEN,
+        });
+    }
 
     if compressed {
         decompress_bzip2(decoded.as_slice())
@@ -33,6 +39,12 @@ pub(crate) fn decode_base64_payload_with_raw(
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(encoded)
         .map_err(XgwxError::Base64)?;
+    if decoded.len() > MAX_BASE64_DECODED_LEN {
+        return Err(XgwxError::ResourceLimitExceeded {
+            resource: "base64 decoded payload size",
+            limit: MAX_BASE64_DECODED_LEN,
+        });
+    }
 
     if !compressed {
         return Ok((decoded.clone(), decoded));
@@ -175,9 +187,20 @@ fn compact_ascii_len(text: &str) -> usize {
 fn decompress_bzip2(raw: &[u8]) -> Result<Vec<u8>, XgwxError> {
     let mut decoder = BzDecoder::new(raw);
     let mut decompressed = Vec::new();
-    decoder
-        .read_to_end(&mut decompressed)
-        .map_err(XgwxError::Bzip2)?;
+    let mut chunk = [0_u8; 8192];
+    loop {
+        let read = decoder.read(&mut chunk).map_err(XgwxError::Bzip2)?;
+        if read == 0 {
+            break;
+        }
+        if decompressed.len().saturating_add(read) > MAX_BZIP2_DECOMPRESSED_LEN {
+            return Err(XgwxError::ResourceLimitExceeded {
+                resource: "bzip2 decompressed payload size",
+                limit: MAX_BZIP2_DECOMPRESSED_LEN,
+            });
+        }
+        decompressed.extend_from_slice(&chunk[..read]);
+    }
     Ok(decompressed)
 }
 

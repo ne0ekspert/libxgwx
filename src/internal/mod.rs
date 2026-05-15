@@ -6,6 +6,10 @@ pub(crate) const GZIP_HEADER_LEN: usize = 10;
 pub(crate) const GZIP_TRAILER_LEN: usize = 8;
 pub(crate) const GZIP_METHOD_DEFLATE: u8 = 8;
 pub(crate) const UTF16_MARKER: &[u8; 3] = b"\xff\xfe\xff";
+pub(crate) const MAX_GZIP_MEMBER_DECOMPRESSED_LEN: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_TRAILER_GZIP_MEMBERS: usize = 16;
+pub(crate) const MAX_BASE64_DECODED_LEN: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_BZIP2_DECOMPRESSED_LEN: usize = 16 * 1024 * 1024;
 
 pub(crate) fn text_value(element: &XmlElement) -> Option<String> {
     let text = element.text.trim();
