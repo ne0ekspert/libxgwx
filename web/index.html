@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>libxgwx demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>libxgwx</h1>
+          <p>Parse LS XG5000 .xgwx workspace files locally in your browser.</p>
+        </div>
+        <a href="https://github.com/ne0ekspert/libxgwx" rel="noreferrer">GitHub</a>
+      </header>
+
+      <section id="drop-zone" class="drop-zone">
+        <input id="file-input" type="file" accept=".xgwx,application/octet-stream" />
+        <div>
+          <strong>Choose or drop an .xgwx file</strong>
+          <span>No file is uploaded or transmitted. Parsing runs in this page.</span>
+        </div>
+      </section>
+
+      <section id="status" class="status" role="status">Waiting for a file.</section>
+
+      <nav class="tabs" aria-label="Parsed views">
+        <button class="tab active" data-tab="summary" type="button">Summary</button>
+        <button class="tab" data-tab="programs" type="button">Programs</button>
+        <button class="tab" data-tab="networks" type="button">Networks</button>
+        <button class="tab" data-tab="parameters" type="button">Parameters</button>
+      </nav>
+
+      <section id="summary" class="panel active"></section>
+      <section id="programs" class="panel"></section>
+      <section id="networks" class="panel"></section>
+      <section id="parameters" class="panel"></section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -4,19 +4,31 @@ version = "0.1.0"
 edition = "2024"
 description = "Parser for LS XG5000 .xgwx workspace files"
 license = "Apache-2.0"
+repository = "https://github.com/ne0ekspert/libxgwx"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 base64 = "0.22"
-bzip2 = "0.5"
+bzip2 = { version = "0.5", default-features = false, features = ["libbz2-rs-sys"] }
 crc32fast = "1.4"
-crossterm = "0.28"
 eframe = { version = "0.29", optional = true }
 flate2 = "1.0"
-ratatui = "0.29"
+js-sys = { version = "0.3", optional = true }
 roxmltree = "0.20"
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+
+[dev-dependencies]
+crossterm = "0.28"
+ratatui = "0.29"
 
 [features]
+default = []
 gui = ["dep:eframe"]
+wasm = ["dep:js-sys", "dep:serde", "dep:serde_json", "dep:wasm-bindgen"]
 
 [[example]]
 name = "gui"

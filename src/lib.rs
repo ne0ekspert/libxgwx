@@ -32,14 +32,20 @@
 //! ```
 
 use std::fmt;
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs;
 use std::io;
 use std::io::Read;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 use base64::Engine;
 use bzip2::read::BzDecoder;
 use flate2::{Decompress, FlushDecompress, Status};
+#[cfg(feature = "wasm")]
+use serde::Serialize;
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
 
 const XG_MAGIC: &[u8; 2] = b"XG";
 const GZIP_MAGIC: &[u8; 2] = b"\x1f\x8b";
@@ -88,6 +94,7 @@ impl XgwxDocument {
     }
 
     /// Parse an `.xgwx` document from a file path.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, XgwxError> {
         let bytes = fs::read(path).map_err(XgwxError::Io)?;
         Self::parse(&bytes)
@@ -721,7 +728,11 @@ pub struct LadderElement {
 pub struct LadderStructure {
     pub rungs: Vec<LadderRung>,
     pub vertical_lines: Vec<LadderVerticalLine>,
+    pub branch_groups: Vec<LadderBranchGroup>,
     pub horizontal_lines: Vec<LadderHorizontalLine>,
+    pub rung_comments: Vec<LadderRungComment>,
+    pub output_comments: Vec<LadderOutputComment>,
+    pub unknown_records: Vec<LadderUnknownRecord>,
 }
 
 /// One reconstructed LD row/rung.
@@ -752,12 +763,48 @@ pub struct LadderVerticalLine {
     pub raw_y_end: u8,
 }
 
+/// One continuous vertical LD branch group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LadderBranchGroup {
+    pub raw_x: u8,
+    pub raw_y_start: u8,
+    pub raw_y_end: u8,
+}
+
 /// One decoded horizontal LD connection segment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LadderHorizontalLine {
     pub raw_y: u8,
     pub raw_x_start: u8,
     pub raw_x_end: u8,
+}
+
+/// One decoded rung comment spanning the LD code area.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LadderRungComment {
+    pub offset: usize,
+    pub raw_x: u8,
+    pub raw_y: u8,
+    pub text: String,
+}
+
+/// One decoded output comment positioned at the right side of an LD rung.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LadderOutputComment {
+    pub offset: usize,
+    pub raw_x: u8,
+    pub raw_y: u8,
+    pub text: String,
+}
+
+/// Positioned raw LD record whose semantics are not decoded yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LadderUnknownRecord {
+    pub offset: usize,
+    pub marker: [u8; 2],
+    pub raw_x: u8,
+    pub raw_y: u8,
+    pub bytes: Vec<u8>,
 }
 
 /// Best-effort classification for a decoded ladder element.
@@ -779,14 +826,24 @@ pub enum LadderElementKind {
 pub enum LadderContact {
     NormallyOpen,
     NormallyClosed,
+    Inverse,
+    RisingPulse,
+    FallingPulse,
+    AddressedRisingPulse,
+    AddressedRisingPulseNot,
+    AddressedFallingPulse,
+    AddressedFallingPulseNot,
 }
 
 /// Coil kind decoded from LD output coil records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LadderCoil {
     Output,
+    Inverse,
     Set,
     Reset,
+    RisingPulse,
+    FallingPulse,
 }
 
 /// Best-effort instruction call extracted from decoded ladder strings.
@@ -2201,6 +2258,825 @@ pub struct XmlAttribute {
     pub value: String,
 }
 
+/// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
+pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
+    let doc = XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let summary = WasmDocumentSummary::from_document(&doc);
+    let json = serde_json::to_string(&summary).map_err(|error| {
+        JsValue::from_str(&format!("failed to serialize xgwx summary: {error}"))
+    })?;
+    js_sys::JSON::parse(&json)
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmDocumentSummary {
+    header: WasmHeaderSummary,
+    project: WasmProjectSummary,
+    counts: WasmCounts,
+    programs: Vec<WasmProgramSummary>,
+    ladder: Vec<WasmLadderProgramSummary>,
+    networks: Vec<WasmNetworkSummary>,
+    cnet: Vec<WasmCnetSummary>,
+    fenet: Vec<WasmFenetSummary>,
+    hsc: Vec<WasmHscSummary>,
+    position: Vec<WasmPositionSummary>,
+    pid: WasmPidSummary,
+    warnings: Vec<String>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmDocumentSummary {
+    fn from_document(doc: &XgwxDocument) -> Self {
+        let mut warnings = Vec::new();
+        let project = doc.project_info();
+        let variables = match doc.variables() {
+            Ok(variables) => Some(variables.len()),
+            Err(error) => {
+                warnings.push(format!("variables: {error}"));
+                None
+            }
+        };
+        let decoded_payloads = doc.decoded_payloads();
+        let decoded_payload_errors = decoded_payloads
+            .iter()
+            .filter_map(|payload| payload.as_ref().err())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        warnings.extend(
+            decoded_payload_errors
+                .iter()
+                .map(|error| format!("payload: {error}")),
+        );
+        let ladder_programs = doc.ladder_programs();
+        warnings.extend(
+            ladder_programs
+                .iter()
+                .filter_map(|program| program.as_ref().err())
+                .map(|error| format!("ladder: {error}")),
+        );
+        let hsc = doc
+            .hsc_parameters()
+            .into_iter()
+            .filter_map(|result| match result {
+                Ok(parameter) => Some(WasmHscSummary::from_parameter(parameter)),
+                Err(error) => {
+                    warnings.push(format!("hsc: {error}"));
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let pid_cal = doc.pid_cal_parameters();
+        let pid_tune = doc.pid_tune_parameters();
+
+        Self {
+            header: WasmHeaderSummary::from_header(&doc.header, doc.trailer.len()),
+            project: WasmProjectSummary {
+                name: project.name,
+                file_version: project.file_version,
+                comment: project.comment,
+                guid: project.guid,
+                file_last_write_time: project.file_last_write_time,
+            },
+            counts: WasmCounts {
+                configurations: doc.configurations().len(),
+                networks: doc.networks().len(),
+                modules: doc.modules().len(),
+                programs: doc.programs().len(),
+                variables,
+                decoded_payloads: decoded_payloads.len(),
+                decoded_payload_errors: decoded_payload_errors.len(),
+                ladder_programs: ladder_programs
+                    .iter()
+                    .filter(|program| program.is_ok())
+                    .count(),
+                ladder_errors: ladder_programs
+                    .iter()
+                    .filter(|program| program.is_err())
+                    .count(),
+                cnet_modules: doc.cnet_config_infos().len(),
+                fenet_modules: doc.fenet_config_infos().len(),
+                hsc_parameters: hsc.len(),
+                position_parameters: doc.position_parameters().len(),
+                pid_cal_parameters: pid_cal.len(),
+                pid_tune_parameters: pid_tune.len(),
+            },
+            programs: doc
+                .programs()
+                .into_iter()
+                .map(WasmProgramSummary::from_program)
+                .collect(),
+            ladder: ladder_programs
+                .iter()
+                .enumerate()
+                .filter_map(|(index, program)| {
+                    program
+                        .as_ref()
+                        .ok()
+                        .map(|program| WasmLadderProgramSummary::from_program(index, program))
+                })
+                .collect(),
+            networks: doc
+                .networks()
+                .into_iter()
+                .map(WasmNetworkSummary::from_network)
+                .collect(),
+            cnet: doc
+                .cnet_config_infos()
+                .into_iter()
+                .map(WasmCnetSummary::from_cnet)
+                .collect(),
+            fenet: doc
+                .fenet_config_infos()
+                .into_iter()
+                .map(WasmFenetSummary::from_fenet)
+                .collect(),
+            hsc,
+            position: doc
+                .position_parameters()
+                .into_iter()
+                .map(WasmPositionSummary::from_position)
+                .collect(),
+            pid: WasmPidSummary {
+                cal_parameters: pid_cal.len(),
+                tune_parameters: pid_tune.len(),
+                cal_loops: pid_cal.iter().map(|parameter| parameter.loops.len()).sum(),
+                tune_loops: pid_tune.iter().map(|parameter| parameter.loops.len()).sum(),
+            },
+            warnings,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmHeaderSummary {
+    label: Option<String>,
+    gzip_offset: usize,
+    header_bytes: usize,
+    trailer_bytes: usize,
+    compressed_size_hint: Option<u32>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmHeaderSummary {
+    fn from_header(header: &XgwxHeader, trailer_bytes: usize) -> Self {
+        Self {
+            label: header.label.clone(),
+            gzip_offset: header.gzip_offset,
+            header_bytes: header.raw.len(),
+            trailer_bytes,
+            compressed_size_hint: header.compressed_size_hint,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmProjectSummary {
+    name: Option<String>,
+    file_version: Option<String>,
+    comment: Option<String>,
+    guid: Option<String>,
+    file_last_write_time: Option<String>,
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmCounts {
+    configurations: usize,
+    networks: usize,
+    modules: usize,
+    programs: usize,
+    variables: Option<usize>,
+    decoded_payloads: usize,
+    decoded_payload_errors: usize,
+    ladder_programs: usize,
+    ladder_errors: usize,
+    cnet_modules: usize,
+    fenet_modules: usize,
+    hsc_parameters: usize,
+    position_parameters: usize,
+    pid_cal_parameters: usize,
+    pid_tune_parameters: usize,
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmProgramSummary {
+    name: Option<String>,
+    task: Option<String>,
+    kind: Option<u32>,
+    version: Option<u32>,
+    object_id: Option<String>,
+    comment: Option<String>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmProgramSummary {
+    fn from_program(program: ProgramSummary) -> Self {
+        Self {
+            name: program.name,
+            task: program.task,
+            kind: program.kind,
+            version: program.version,
+            object_id: program.object_id,
+            comment: program.comment,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderProgramSummary {
+    program_index: usize,
+    program_name: Option<String>,
+    version: Option<String>,
+    decoded_len: usize,
+    rungs: Vec<WasmLadderRungSummary>,
+    cells: Vec<WasmLadderCellSummary>,
+    vertical_lines: Vec<WasmLadderVerticalLineSummary>,
+    branch_groups: Vec<WasmLadderBranchGroupSummary>,
+    horizontal_lines: Vec<WasmLadderHorizontalLineSummary>,
+    rung_comments: Vec<WasmLadderRungCommentSummary>,
+    output_comments: Vec<WasmLadderOutputCommentSummary>,
+    unknown_records: Vec<WasmLadderUnknownRecordSummary>,
+    instructions: Vec<WasmLadderInstructionSummary>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderProgramSummary {
+    fn from_program(program_index: usize, program: &LadderProgramData) -> Self {
+        Self {
+            program_index,
+            program_name: program.program_name.clone(),
+            version: program.version.clone(),
+            decoded_len: program.decoded_len,
+            rungs: program
+                .structure
+                .rungs
+                .iter()
+                .map(WasmLadderRungSummary::from_rung)
+                .collect(),
+            cells: program
+                .structure
+                .rungs
+                .iter()
+                .flat_map(|rung| rung.cells.iter())
+                .map(WasmLadderCellSummary::from_cell)
+                .collect(),
+            vertical_lines: program
+                .structure
+                .vertical_lines
+                .iter()
+                .map(WasmLadderVerticalLineSummary::from_line)
+                .collect(),
+            branch_groups: program
+                .structure
+                .branch_groups
+                .iter()
+                .map(WasmLadderBranchGroupSummary::from_group)
+                .collect(),
+            horizontal_lines: program
+                .structure
+                .horizontal_lines
+                .iter()
+                .map(WasmLadderHorizontalLineSummary::from_line)
+                .collect(),
+            rung_comments: program
+                .structure
+                .rung_comments
+                .iter()
+                .map(WasmLadderRungCommentSummary::from_comment)
+                .collect(),
+            output_comments: program
+                .structure
+                .output_comments
+                .iter()
+                .map(WasmLadderOutputCommentSummary::from_comment)
+                .collect(),
+            unknown_records: program
+                .structure
+                .unknown_records
+                .iter()
+                .map(WasmLadderUnknownRecordSummary::from_record)
+                .collect(),
+            instructions: program
+                .instructions
+                .iter()
+                .map(WasmLadderInstructionSummary::from_instruction)
+                .collect(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderRungSummary {
+    raw_y: u8,
+    cell_count: usize,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderRungSummary {
+    fn from_rung(rung: &LadderRung) -> Self {
+        Self {
+            raw_y: rung.raw_y,
+            cell_count: rung.cells.len(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderCellSummary {
+    raw_x: u8,
+    raw_y: u8,
+    kind: &'static str,
+    value: String,
+    operands: Vec<String>,
+    contact: Option<&'static str>,
+    coil: Option<&'static str>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderCellSummary {
+    fn from_cell(cell: &LadderCell) -> Self {
+        Self {
+            raw_x: cell.raw_x,
+            raw_y: cell.raw_y,
+            kind: wasm_ladder_kind_label(cell.kind),
+            value: cell.value.clone(),
+            operands: cell.operands.clone(),
+            contact: cell.contact.map(wasm_ladder_contact_label),
+            coil: cell.coil.map(wasm_ladder_coil_label),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderVerticalLineSummary {
+    raw_x: u8,
+    raw_y_start: u8,
+    raw_y_end: u8,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderVerticalLineSummary {
+    fn from_line(line: &LadderVerticalLine) -> Self {
+        Self {
+            raw_x: line.raw_x,
+            raw_y_start: line.raw_y_start,
+            raw_y_end: line.raw_y_end,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderBranchGroupSummary {
+    raw_x: u8,
+    raw_y_start: u8,
+    raw_y_end: u8,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderBranchGroupSummary {
+    fn from_group(group: &LadderBranchGroup) -> Self {
+        Self {
+            raw_x: group.raw_x,
+            raw_y_start: group.raw_y_start,
+            raw_y_end: group.raw_y_end,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderHorizontalLineSummary {
+    raw_y: u8,
+    raw_x_start: u8,
+    raw_x_end: u8,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderHorizontalLineSummary {
+    fn from_line(line: &LadderHorizontalLine) -> Self {
+        Self {
+            raw_y: line.raw_y,
+            raw_x_start: line.raw_x_start,
+            raw_x_end: line.raw_x_end,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderRungCommentSummary {
+    offset: usize,
+    raw_x: u8,
+    raw_y: u8,
+    text: String,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderRungCommentSummary {
+    fn from_comment(comment: &LadderRungComment) -> Self {
+        Self {
+            offset: comment.offset,
+            raw_x: comment.raw_x,
+            raw_y: comment.raw_y,
+            text: comment.text.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderOutputCommentSummary {
+    offset: usize,
+    raw_x: u8,
+    raw_y: u8,
+    text: String,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderOutputCommentSummary {
+    fn from_comment(comment: &LadderOutputComment) -> Self {
+        Self {
+            offset: comment.offset,
+            raw_x: comment.raw_x,
+            raw_y: comment.raw_y,
+            text: comment.text.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderUnknownRecordSummary {
+    offset: usize,
+    marker: String,
+    raw_x: u8,
+    raw_y: u8,
+    bytes: String,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderUnknownRecordSummary {
+    fn from_record(record: &LadderUnknownRecord) -> Self {
+        Self {
+            offset: record.offset,
+            marker: format!("{:02x}{:02x}", record.marker[0], record.marker[1]),
+            raw_x: record.raw_x,
+            raw_y: record.raw_y,
+            bytes: hex_bytes(&record.bytes),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+fn hex_bytes(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderInstructionSummary {
+    mnemonic: String,
+    operands: Vec<String>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmLadderInstructionSummary {
+    fn from_instruction(instruction: &LadderInstruction) -> Self {
+        Self {
+            mnemonic: instruction.mnemonic.clone(),
+            operands: instruction.operands.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+fn wasm_ladder_kind_label(kind: LadderElementKind) -> &'static str {
+    match kind {
+        LadderElementKind::InstructionCall => "Instruction",
+        LadderElementKind::Operation => "Operation",
+        LadderElementKind::Comparison => "Comparison",
+        LadderElementKind::Timer => "Timer",
+        LadderElementKind::Logic => "Logic",
+        LadderElementKind::DeviceRef => "Device",
+        LadderElementKind::InternalRef => "Internal",
+        LadderElementKind::Constant => "Constant",
+        LadderElementKind::Comment => "Comment",
+    }
+}
+
+#[cfg(feature = "wasm")]
+fn wasm_ladder_contact_label(contact: LadderContact) -> &'static str {
+    match contact {
+        LadderContact::NormallyOpen => "NO",
+        LadderContact::NormallyClosed => "NC",
+        LadderContact::Inverse => "INV",
+        LadderContact::RisingPulse => "PUP",
+        LadderContact::FallingPulse => "PDN",
+        LadderContact::AddressedRisingPulse => "P_CONTACT",
+        LadderContact::AddressedRisingPulseNot => "P_NOT_CONTACT",
+        LadderContact::AddressedFallingPulse => "N_CONTACT",
+        LadderContact::AddressedFallingPulseNot => "N_NOT_CONTACT",
+    }
+}
+
+#[cfg(feature = "wasm")]
+fn wasm_ladder_coil_label(coil: LadderCoil) -> &'static str {
+    match coil {
+        LadderCoil::Output => "Output",
+        LadderCoil::Inverse => "Inverse",
+        LadderCoil::Set => "Set",
+        LadderCoil::Reset => "Reset",
+        LadderCoil::RisingPulse => "P_COIL",
+        LadderCoil::FallingPulse => "N_COIL",
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmNetworkSummary {
+    name: Option<String>,
+    network_type: Option<String>,
+    type_name: Option<String>,
+    modules: Vec<WasmNetworkModuleSummary>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmNetworkSummary {
+    fn from_network(network: NetworkSummary) -> Self {
+        Self {
+            name: network.name,
+            network_type: network.network_type,
+            type_name: network.type_name,
+            modules: network
+                .modules
+                .into_iter()
+                .map(WasmNetworkModuleSummary::from_module)
+                .collect(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmNetworkModuleSummary {
+    name: Option<String>,
+    type_name: Option<String>,
+    id: Option<u32>,
+    base: Option<u32>,
+    slot: Option<u32>,
+    alias: Option<String>,
+    description: Option<String>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmNetworkModuleSummary {
+    fn from_module(module: NetworkModuleSummary) -> Self {
+        Self {
+            name: module.name,
+            type_name: module.type_name,
+            id: module.id,
+            base: module.base,
+            slot: module.slot,
+            alias: module.alias,
+            description: module.description,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmCnetSummary {
+    station_no: Option<u32>,
+    type_code: Option<u32>,
+    base: Option<u32>,
+    slot: Option<u32>,
+    sub_type: Option<u32>,
+    ports: Vec<WasmCnetPortSummary>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmCnetSummary {
+    fn from_cnet(cnet: CnetConfigInfoSummary) -> Self {
+        Self {
+            station_no: cnet.station_no,
+            type_code: cnet.type_code,
+            base: cnet.base,
+            slot: cnet.slot,
+            sub_type: cnet.sub_type,
+            ports: cnet
+                .ports
+                .into_iter()
+                .map(WasmCnetPortSummary::from_port)
+                .collect(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmCnetPortSummary {
+    station_no: Option<u32>,
+    mode: Option<String>,
+    baud_rate: Option<u32>,
+    data_bits: Option<String>,
+    stop_bits: Option<String>,
+    parity: Option<String>,
+    di_address: Option<String>,
+    do_address: Option<String>,
+    ai_address: Option<String>,
+    ao_address: Option<String>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmCnetPortSummary {
+    fn from_port(port: CnetPortConfigSummary) -> Self {
+        Self {
+            station_no: port.station_no,
+            mode: port.mode_kind.map(|value| value.label().to_owned()),
+            baud_rate: port.baud_rate,
+            data_bits: port.data_bits.map(|value| value.label().to_owned()),
+            stop_bits: port.stop_bits.map(|value| value.label().to_owned()),
+            parity: port.parity_mode.map(|value| value.label().to_owned()),
+            di_address: port.di_address,
+            do_address: port.do_address,
+            ai_address: port.ai_address,
+            ao_address: port.ao_address,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmFenetSummary {
+    station_no: Option<u32>,
+    type_code: Option<u32>,
+    base: Option<u32>,
+    slot: Option<u32>,
+    sub_type: Option<u32>,
+    ip_address: Option<String>,
+    subnet: Option<String>,
+    gateway: Option<String>,
+    dns: Option<String>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmFenetSummary {
+    fn from_fenet(fenet: FenetConfigInfoSummary) -> Self {
+        Self {
+            station_no: fenet.station_no,
+            type_code: fenet.type_code,
+            base: fenet.base,
+            slot: fenet.slot,
+            sub_type: fenet.sub_type,
+            ip_address: fenet.ip_address.map(|value| value.address),
+            subnet: fenet.subnet.map(|value| value.address),
+            gateway: fenet.gateway.map(|value| value.address),
+            dns: fenet.dns.map(|value| value.address),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmHscSummary {
+    payload_bytes: usize,
+    channels: Vec<WasmHscChannelSummary>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmHscSummary {
+    fn from_parameter(parameter: HscParameterSummary) -> Self {
+        Self {
+            payload_bytes: parameter.payload_bytes.len(),
+            channels: parameter
+                .channels
+                .into_iter()
+                .map(WasmHscChannelSummary::from_channel)
+                .collect(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmHscChannelSummary {
+    channel: usize,
+    counter_mode: Option<String>,
+    pulse_input_mode: Option<String>,
+    compare_output_mode: Option<String>,
+    ring_counter_max: Option<i32>,
+    compare_output_min: Option<i32>,
+    compare_output_max: Option<i32>,
+    unit_time_ms: Option<u16>,
+    pulses_per_revolution: Option<u16>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmHscChannelSummary {
+    fn from_channel(channel: HscChannelSummary) -> Self {
+        Self {
+            channel: channel.channel,
+            counter_mode: channel.counter_mode.map(|value| value.to_string()),
+            pulse_input_mode: channel.pulse_input_mode.map(|value| value.to_string()),
+            compare_output_mode: channel.compare_output_mode.map(|value| value.to_string()),
+            ring_counter_max: channel.ring_counter_max,
+            compare_output_min: channel.compare_output_min,
+            compare_output_max: channel.compare_output_max,
+            unit_time_ms: channel.unit_time_ms,
+            pulses_per_revolution: channel.pulses_per_revolution,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmPositionSummary {
+    axis_count: Option<u32>,
+    axes: Vec<WasmPositionAxisSummary>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmPositionSummary {
+    fn from_position(position: PositionParameterSummary) -> Self {
+        Self {
+            axis_count: position.axis_count,
+            axes: position
+                .axes
+                .into_iter()
+                .map(WasmPositionAxisSummary::from_axis)
+                .collect(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmPositionAxisSummary {
+    axis_name: String,
+    step_count: Option<u32>,
+    parsed_steps: usize,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmPositionAxisSummary {
+    fn from_axis(axis: PositionAxisSummary) -> Self {
+        Self {
+            axis_name: axis.axis_name,
+            step_count: axis.step_count,
+            parsed_steps: axis.steps.len(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmPidSummary {
+    cal_parameters: usize,
+    tune_parameters: usize,
+    cal_loops: usize,
+    tune_loops: usize,
+}
+
 fn text_value(element: &XmlElement) -> Option<String> {
     let text = element.text.trim();
     (!text.is_empty()).then(|| text.to_owned())
@@ -2677,7 +3553,7 @@ fn extract_ladder_elements(data: &[u8], strings: &[LadderString]) -> Vec<LadderE
 
 fn extract_ladder_structure(data: &[u8], elements: &[LadderElement]) -> LadderStructure {
     let vertical_lines = extract_ladder_vertical_lines(data);
-    let horizontal_lines = extract_ladder_horizontal_lines(data);
+    let branch_groups = extract_ladder_branch_groups(&vertical_lines);
     let mut cells = elements
         .iter()
         .filter_map(|element| {
@@ -2695,7 +3571,12 @@ fn extract_ladder_structure(data: &[u8], elements: &[LadderElement]) -> LadderSt
         })
         .collect::<Vec<_>>();
 
+    push_marker_only_ladder_cells(data, &mut cells);
     cells.sort_by_key(|cell| (cell.raw_y, cell.raw_x, cell.offset));
+    let horizontal_lines = extract_ladder_horizontal_lines(data, &cells);
+    let rung_comments = extract_ladder_rung_comments(data);
+    let output_comments = extract_ladder_output_comments(data);
+    let unknown_records = extract_ladder_unknown_records(data, &cells);
 
     let mut rungs = Vec::new();
     for cell in cells {
@@ -2717,7 +3598,11 @@ fn extract_ladder_structure(data: &[u8], elements: &[LadderElement]) -> LadderSt
     LadderStructure {
         rungs,
         vertical_lines,
+        branch_groups,
         horizontal_lines,
+        rung_comments,
+        output_comments,
+        unknown_records,
     }
 }
 
@@ -2731,61 +3616,236 @@ fn extract_ladder_vertical_lines(data: &[u8]) -> Vec<LadderVerticalLine> {
             .position(|window| window == [0xff, 0x43])
     }) {
         let marker = offset + relative;
-        match data.get(marker + 13).copied() {
-            Some(0x24 | 0x32) => {
-                if let (Some((_, raw_y_end)), Some((raw_x, raw_y_start))) = (
-                    read_ladder_coordinate(data, marker + 17),
-                    read_ladder_coordinate(data, marker + 36),
-                ) && raw_x > 1
-                    && raw_y_start.checked_add(4) == Some(raw_y_end)
-                {
-                    lines.push(LadderVerticalLine {
-                        raw_x,
-                        raw_y_start,
-                        raw_y_end,
-                    });
-                }
-            }
-            Some(0x28) => {
-                if let (Some((raw_x, raw_y_end)), Some((_, raw_y_start))) = (
-                    read_ladder_coordinate(data, marker + 17),
-                    read_ladder_coordinate(data, marker + 36),
-                ) && raw_y_start.checked_add(4) == Some(raw_y_end)
-                {
-                    lines.push(LadderVerticalLine {
-                        raw_x,
-                        raw_y_start,
-                        raw_y_end,
-                    });
-                }
-            }
-            Some(0x27) => {
-                if let (Some((target_x, raw_y_end)), Some((source_x, raw_y_start))) = (
-                    read_ladder_coordinate(data, marker + 17),
-                    read_ladder_coordinate(data, marker + 36),
-                ) && source_x == 0x03
-                    && raw_y_start.checked_add(4) == Some(raw_y_end)
-                    && let Some(raw_x) = target_x.checked_sub(3)
-                {
-                    lines.push(LadderVerticalLine {
-                        raw_x,
-                        raw_y_start,
-                        raw_y_end,
-                    });
-                }
-            }
-            _ => {}
+        if let (Some(target), Some(source)) = (
+            read_ladder_coordinate(data, marker + 17),
+            read_ladder_coordinate(data, marker + 36),
+        ) {
+            push_ladder_vertical_line_from_ff43(&mut lines, target, source);
         }
 
         offset = marker + 2;
     }
 
+    push_ladder_marker_vertical_lines(data, &mut lines);
+
     lines.sort_by_key(|line| (line.raw_y_start, line.raw_y_end, line.raw_x));
     lines.dedup();
+    merge_ladder_vertical_lines(&mut lines);
     lines
 }
 
-fn extract_ladder_horizontal_lines(data: &[u8]) -> Vec<LadderHorizontalLine> {
+fn push_ladder_marker_vertical_lines(data: &[u8], lines: &mut Vec<LadderVerticalLine>) {
+    for span in ladder_marker_vertical_spans(data) {
+        lines.push(LadderVerticalLine {
+            raw_x: span.raw_x,
+            raw_y_start: span.raw_y_start,
+            raw_y_end: span.raw_y_end,
+        });
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LadderMarkerRecord {
+    offset: usize,
+    raw_x: u8,
+    raw_y: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LadderMarkerVerticalSpan {
+    raw_x: u8,
+    raw_y_start: u8,
+    raw_y_end: u8,
+}
+
+fn ladder_marker_vertical_spans(data: &[u8]) -> Vec<LadderMarkerVerticalSpan> {
+    let starts = ladder_marker_records(data, [0xff, 0x3e]);
+    let ends = ladder_marker_records(data, [0xff, 0x01]);
+    let mut spans = Vec::new();
+
+    for start in starts {
+        if has_ladder_inline_string_after_marker(data, start.offset) {
+            continue;
+        }
+
+        if let Some(end) = ends
+            .iter()
+            .copied()
+            .filter(|end| {
+                end.raw_x == start.raw_x
+                    && end.raw_y > start.raw_y
+                    && (end.raw_y - start.raw_y) % 4 == 0
+            })
+            .min_by_key(|end| end.raw_y)
+            && let Some(raw_x) = marker_vertical_line_x(data, start, end)
+        {
+            if let Some(raw_y_end) = marker_intermediate_branch_y(data, start, end)
+                && let Some(raw_x) = start.raw_x.checked_sub(1).filter(|raw_x| *raw_x > 1)
+            {
+                spans.push(LadderMarkerVerticalSpan {
+                    raw_x,
+                    raw_y_start: start.raw_y,
+                    raw_y_end,
+                });
+            }
+
+            spans.push(LadderMarkerVerticalSpan {
+                raw_x,
+                raw_y_start: start.raw_y,
+                raw_y_end: end.raw_y,
+            });
+        }
+    }
+
+    spans
+}
+
+fn ladder_marker_records(data: &[u8], marker: [u8; 2]) -> Vec<LadderMarkerRecord> {
+    let mut records = Vec::new();
+    let mut offset = 0;
+
+    while let Some(relative) = data
+        .get(offset..)
+        .and_then(|remaining| remaining.windows(2).position(|window| window == marker))
+    {
+        let marker_offset = offset + relative;
+        if !is_ladder_utf16_length_marker(data, marker_offset)
+            && let Some((raw_x, raw_y)) = ladder_record_coordinate(data, marker_offset)
+            && raw_y > 0
+        {
+            records.push(LadderMarkerRecord {
+                offset: marker_offset,
+                raw_x,
+                raw_y,
+            });
+        }
+
+        offset = marker_offset + 2;
+    }
+
+    records
+}
+
+fn marker_vertical_line_x(
+    data: &[u8],
+    start: LadderMarkerRecord,
+    end: LadderMarkerRecord,
+) -> Option<u8> {
+    marker_embedded_branch_coordinates(data, start.offset, start.raw_y, end.raw_y)
+        .into_iter()
+        .chain(marker_embedded_branch_coordinates(
+            data,
+            end.offset,
+            start.raw_y,
+            end.raw_y,
+        ))
+        .filter(|(raw_x, _)| *raw_x > start.raw_x)
+        .map(|(raw_x, _)| raw_x)
+        .max()
+}
+
+fn marker_intermediate_branch_y(
+    data: &[u8],
+    start: LadderMarkerRecord,
+    end: LadderMarkerRecord,
+) -> Option<u8> {
+    marker_embedded_branch_coordinates(data, start.offset, start.raw_y, end.raw_y)
+        .into_iter()
+        .chain(marker_embedded_branch_coordinates(
+            data,
+            end.offset,
+            start.raw_y,
+            end.raw_y,
+        ))
+        .map(|(_, raw_y)| raw_y)
+        .filter(|raw_y| *raw_y > start.raw_y && *raw_y < end.raw_y)
+        .min()
+}
+
+fn marker_embedded_branch_coordinates(
+    data: &[u8],
+    offset: usize,
+    raw_y_start: u8,
+    raw_y_end: u8,
+) -> Vec<(u8, u8)> {
+    let end_relative = data
+        .get(offset + 2..(offset + 48).min(data.len()))
+        .and_then(|bytes| bytes.iter().position(|byte| *byte == 0xff))
+        .map(|relative| relative + 2)
+        .unwrap_or(48);
+
+    (7..end_relative)
+        .filter_map(|relative| read_ladder_coordinate(data, offset + relative))
+        .filter(|(_, raw_y)| *raw_y >= raw_y_start && *raw_y <= raw_y_end)
+        .collect()
+}
+
+fn push_ladder_vertical_line_from_ff43(
+    lines: &mut Vec<LadderVerticalLine>,
+    target: (u8, u8),
+    source: (u8, u8),
+) {
+    let (target_x, target_y) = target;
+    let (source_x, source_y) = source;
+    if target_y == source_y {
+        return;
+    }
+
+    let raw_y_start = target_y.min(source_y);
+    let raw_y_end = target_y.max(source_y);
+    if (raw_y_end - raw_y_start) % 4 != 0 {
+        return;
+    }
+
+    let raw_x = if source_x > 1 {
+        Some(source_x)
+    } else if target_x > 1 {
+        Some(target_x)
+    } else {
+        None
+    };
+
+    if let Some(raw_x) = raw_x.filter(|raw_x| *raw_x > 1) {
+        lines.push(LadderVerticalLine {
+            raw_x,
+            raw_y_start,
+            raw_y_end,
+        });
+    }
+}
+
+fn merge_ladder_vertical_lines(lines: &mut Vec<LadderVerticalLine>) {
+    lines.sort_by_key(|line| (line.raw_x, line.raw_y_start, line.raw_y_end));
+    let mut merged: Vec<LadderVerticalLine> = Vec::new();
+
+    for line in lines.drain(..) {
+        if let Some(last) = merged.last_mut()
+            && last.raw_x == line.raw_x
+            && line.raw_y_start <= last.raw_y_end
+        {
+            last.raw_y_end = last.raw_y_end.max(line.raw_y_end);
+            continue;
+        }
+
+        merged.push(line);
+    }
+
+    merged.sort_by_key(|line| (line.raw_y_start, line.raw_y_end, line.raw_x));
+    *lines = merged;
+}
+
+fn extract_ladder_branch_groups(lines: &[LadderVerticalLine]) -> Vec<LadderBranchGroup> {
+    lines
+        .iter()
+        .map(|line| LadderBranchGroup {
+            raw_x: line.raw_x,
+            raw_y_start: line.raw_y_start,
+            raw_y_end: line.raw_y_end,
+        })
+        .collect()
+}
+
+fn extract_ladder_horizontal_lines(data: &[u8], cells: &[LadderCell]) -> Vec<LadderHorizontalLine> {
     let mut lines = Vec::new();
     let mut offset = 0;
 
@@ -2823,9 +3883,134 @@ fn extract_ladder_horizontal_lines(data: &[u8]) -> Vec<LadderHorizontalLine> {
         offset = marker + 2;
     }
 
+    push_ladder_ff02_horizontal_lines(&mut lines, data, cells);
+    push_ladder_marker_branch_horizontal_lines(&mut lines, data, cells);
+
     lines.sort_by_key(|line| (line.raw_y, line.raw_x_start, line.raw_x_end));
     lines.dedup();
     lines
+}
+
+fn push_ladder_marker_branch_horizontal_lines(
+    lines: &mut Vec<LadderHorizontalLine>,
+    data: &[u8],
+    cells: &[LadderCell],
+) {
+    let spans = ladder_marker_vertical_spans(data);
+    for span in &spans {
+        let mut raw_y = span.raw_y_start;
+        while raw_y <= span.raw_y_end {
+            if !is_shadowed_marker_branch_tap(&spans, span, raw_y)
+                && let Some(raw_x_start) = cells
+                    .iter()
+                    .filter(|cell| cell.raw_y == raw_y && cell.raw_x < span.raw_x)
+                    .map(|cell| cell.raw_x)
+                    .min()
+            {
+                push_ladder_horizontal_line(lines, raw_y, raw_x_start, span.raw_x);
+            }
+
+            let Some(next_y) = raw_y.checked_add(4) else {
+                break;
+            };
+            raw_y = next_y;
+        }
+    }
+}
+
+fn is_shadowed_marker_branch_tap(
+    spans: &[LadderMarkerVerticalSpan],
+    span: &LadderMarkerVerticalSpan,
+    raw_y: u8,
+) -> bool {
+    spans.iter().any(|other| {
+        other.raw_y_start == raw_y && other.raw_y_end > span.raw_y_end && other.raw_x > span.raw_x
+    }) || (raw_y != span.raw_y_start
+        && raw_y != span.raw_y_end
+        && spans.iter().any(|other| {
+            other.raw_y_start == span.raw_y_start
+                && other.raw_y_end == raw_y
+                && other.raw_x < span.raw_x
+        }))
+}
+
+fn push_ladder_ff02_horizontal_lines(
+    lines: &mut Vec<LadderHorizontalLine>,
+    data: &[u8],
+    cells: &[LadderCell],
+) {
+    let mut offset = 0;
+
+    while let Some(relative) = data.get(offset..).and_then(|remaining| {
+        remaining
+            .windows(2)
+            .position(|window| window == [0xff, 0x02])
+    }) {
+        let marker = offset + relative;
+        if let Some((raw_x, raw_y)) = ladder_record_coordinate(data, marker)
+            && let Some(raw_x_end) = next_ladder_horizontal_stop_x(cells, raw_x, raw_y)
+        {
+            push_ladder_horizontal_line(lines, raw_y, raw_x, raw_x_end);
+        }
+
+        offset = marker + 2;
+    }
+}
+
+fn next_ladder_horizontal_stop_x(cells: &[LadderCell], raw_x: u8, raw_y: u8) -> Option<u8> {
+    cells
+        .iter()
+        .filter(|cell| {
+            cell.raw_y == raw_y && cell.raw_x > raw_x && is_ladder_horizontal_stop_cell(cell)
+        })
+        .map(|cell| cell.raw_x)
+        .min()
+}
+
+fn is_ladder_horizontal_stop_cell(cell: &LadderCell) -> bool {
+    cell.coil.is_some()
+        || matches!(
+            cell.kind,
+            LadderElementKind::InstructionCall
+                | LadderElementKind::Operation
+                | LadderElementKind::Comparison
+                | LadderElementKind::Timer
+                | LadderElementKind::Logic
+        )
+}
+
+fn push_marker_only_ladder_cells(data: &[u8], cells: &mut Vec<LadderCell>) {
+    let mut offset = 0;
+
+    while offset + 2 <= data.len() {
+        let marker = [data[offset], data[offset + 1]];
+        if let Some(contact) = marker_only_ladder_contact(marker)
+            && let Some((raw_x, raw_y)) = ladder_record_coordinate(data, offset)
+            && !is_known_ladder_cell_record(cells, offset, marker, raw_x, raw_y)
+        {
+            cells.push(LadderCell {
+                offset,
+                raw_x,
+                raw_y,
+                kind: LadderElementKind::DeviceRef,
+                value: String::new(),
+                operands: Vec::new(),
+                contact: Some(contact),
+                coil: None,
+            });
+        }
+
+        offset += 1;
+    }
+}
+
+fn marker_only_ladder_contact(marker: [u8; 2]) -> Option<LadderContact> {
+    match marker {
+        [0xff, 0x3e] => Some(LadderContact::Inverse),
+        [0xff, 0x48] => Some(LadderContact::RisingPulse),
+        [0xff, 0x49] => Some(LadderContact::FallingPulse),
+        _ => None,
+    }
 }
 
 fn push_ladder_horizontal_line(
@@ -2842,6 +4027,236 @@ fn push_ladder_horizontal_line(
             raw_x_end,
         });
     }
+}
+
+fn extract_ladder_rung_comments(data: &[u8]) -> Vec<LadderRungComment> {
+    let mut comments = Vec::new();
+    let mut offset = 0;
+
+    while let Some(relative) = data.get(offset..).and_then(|remaining| {
+        remaining
+            .windows(2)
+            .position(|window| window == [0xff, 0x3f])
+    }) {
+        let marker = offset + relative;
+        if let Some((raw_x, raw_y)) = ladder_rung_comment_coordinate(data, marker)
+            && let Some(text) = read_ladder_inline_utf16_string(data, marker + 2, marker + 96)
+        {
+            comments.push(LadderRungComment {
+                offset: marker,
+                raw_x,
+                raw_y,
+                text,
+            });
+        }
+
+        offset = marker + 2;
+    }
+
+    comments.sort_by_key(|comment| (comment.raw_y, comment.raw_x, comment.offset));
+    comments.dedup_by_key(|comment| (comment.offset, comment.raw_x, comment.raw_y));
+    comments
+}
+
+fn extract_ladder_output_comments(data: &[u8]) -> Vec<LadderOutputComment> {
+    let mut comments = Vec::new();
+    let mut offset = 0;
+
+    while let Some(relative) = data.get(offset..).and_then(|remaining| {
+        remaining
+            .windows(2)
+            .position(|window| window == [0xff, 0x40])
+    }) {
+        let marker = offset + relative;
+        if let Some((raw_x, raw_y)) = ladder_record_coordinate(data, marker)
+            && let Some(text) = read_ladder_inline_utf16_string(data, marker + 2, marker + 96)
+        {
+            comments.push(LadderOutputComment {
+                offset: marker,
+                raw_x,
+                raw_y,
+                text,
+            });
+        }
+
+        offset = marker + 2;
+    }
+
+    comments.sort_by_key(|comment| (comment.raw_y, comment.raw_x, comment.offset));
+    comments.dedup_by_key(|comment| (comment.offset, comment.raw_x, comment.raw_y));
+    comments
+}
+
+fn extract_ladder_unknown_records(data: &[u8], cells: &[LadderCell]) -> Vec<LadderUnknownRecord> {
+    let mut records = Vec::new();
+    let mut offset = 0;
+
+    while offset + 2 <= data.len() {
+        if data.get(offset) != Some(&0xff) {
+            offset += 1;
+            continue;
+        }
+
+        let marker = [data[offset], data[offset + 1]];
+        if is_ladder_utf16_length_marker(data, offset) {
+            offset += 1;
+            continue;
+        }
+        if is_ladder_marker_vertical_endpoint(data, offset, marker) {
+            offset += 1;
+            continue;
+        }
+        if marker == [0xff, 0xfe]
+            || marker == [0xff, 0x02]
+            || marker == [0xff, 0x3f]
+            || marker == [0xff, 0x40]
+            || marker == [0xff, 0x43]
+        {
+            offset += 1;
+            continue;
+        }
+
+        if let Some((raw_x, raw_y)) = ladder_record_coordinate(data, offset)
+            && !is_known_ladder_cell_record(cells, offset, marker, raw_x, raw_y)
+        {
+            let end = (offset + 24).min(data.len());
+            records.push(LadderUnknownRecord {
+                offset,
+                marker,
+                raw_x,
+                raw_y,
+                bytes: data[offset..end].to_vec(),
+            });
+        }
+
+        offset += 1;
+    }
+
+    records.sort_by_key(|record| (record.raw_y, record.raw_x, record.offset));
+    records.dedup_by_key(|record| (record.offset, record.raw_x, record.raw_y));
+    records
+}
+
+fn read_ladder_inline_utf16_string(data: &[u8], start: usize, end: usize) -> Option<String> {
+    let end = end.min(data.len());
+    let mut offset = start;
+
+    while offset + 4 <= end {
+        if data.get(offset..offset + 3) == Some(UTF16_MARKER) {
+            let unit_count = usize::from(*data.get(offset + 3)?);
+            let text_start = offset + 4;
+            let text_end = text_start + unit_count * 2;
+            if text_end <= data.len() && text_end <= end {
+                let units = data[text_start..text_end]
+                    .chunks_exact(2)
+                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                    .collect::<Vec<_>>();
+                if let Ok(text) = String::from_utf16(&units) {
+                    return Some(text);
+                }
+            }
+        }
+
+        offset += 1;
+    }
+
+    None
+}
+
+fn ladder_record_coordinate(data: &[u8], offset: usize) -> Option<(u8, u8)> {
+    ladder_record_coordinate_with_min_x(data, offset, 2)
+}
+
+fn ladder_rung_comment_coordinate(data: &[u8], offset: usize) -> Option<(u8, u8)> {
+    ladder_record_coordinate_with_min_x(data, offset, 1)
+}
+
+fn ladder_record_coordinate_with_min_x(
+    data: &[u8],
+    offset: usize,
+    min_raw_x: u8,
+) -> Option<(u8, u8)> {
+    [5, 10, 17, 36]
+        .iter()
+        .filter_map(|relative| read_ladder_coordinate(data, offset + relative))
+        .find(|(raw_x, _)| *raw_x >= min_raw_x)
+}
+
+fn is_ladder_utf16_length_marker(data: &[u8], offset: usize) -> bool {
+    offset >= 2 && data.get(offset - 2..offset + 2) == Some(&[0xff, 0xfe, 0xff, data[offset + 1]])
+}
+
+fn is_ladder_marker_vertical_endpoint(data: &[u8], offset: usize, marker: [u8; 2]) -> bool {
+    if marker != [0xff, 0x01] {
+        return false;
+    }
+
+    let Some((raw_x, raw_y)) = ladder_record_coordinate(data, offset) else {
+        return false;
+    };
+
+    ladder_marker_records(data, [0xff, 0x3e])
+        .into_iter()
+        .filter(|start| {
+            start.raw_x == raw_x
+                && start.raw_y < raw_y
+                && (raw_y - start.raw_y) % 4 == 0
+                && !has_ladder_inline_string_after_marker(data, start.offset)
+        })
+        .any(|start| {
+            marker_vertical_line_x(
+                data,
+                start,
+                LadderMarkerRecord {
+                    offset,
+                    raw_x,
+                    raw_y,
+                },
+            )
+            .is_some()
+        })
+}
+
+fn has_ladder_inline_string_after_marker(data: &[u8], offset: usize) -> bool {
+    read_ladder_inline_utf16_string(data, offset + 2, offset + 40).is_some()
+}
+
+fn is_known_ladder_cell_record(
+    cells: &[LadderCell],
+    offset: usize,
+    marker: [u8; 2],
+    raw_x: u8,
+    raw_y: u8,
+) -> bool {
+    cells.iter().any(|cell| {
+        cell.raw_x == raw_x
+            && cell.raw_y == raw_y
+            && cell.offset >= offset
+            && cell.offset - offset <= 40
+    }) || (is_known_ladder_cell_marker(marker)
+        && cells
+            .iter()
+            .any(|cell| cell.offset >= offset && cell.offset - offset <= 40))
+}
+
+fn is_known_ladder_cell_marker(marker: [u8; 2]) -> bool {
+    matches!(
+        marker,
+        [0xff, 0x06]
+            | [0xff, 0x07]
+            | [0xff, 0x08]
+            | [0xff, 0x09]
+            | [0xff, 0x0a]
+            | [0xff, 0x0b]
+            | [0xff, 0x0e]
+            | [0xff, 0x10]
+            | [0xff, 0x11]
+            | [0xff, 0x12]
+            | [0xff, 0x13]
+            | [0xff, 0x3e]
+            | [0xff, 0x48]
+            | [0xff, 0x49]
+    )
 }
 
 fn ladder_element_coordinate(data: &[u8], element: &LadderElement) -> Option<(u8, u8)> {
@@ -2955,23 +4370,33 @@ fn parse_ladder_element(data: &[u8], ladder_string: &LadderString) -> Option<Lad
 }
 
 fn ladder_contact(data: &[u8], string_offset: usize) -> Option<LadderContact> {
-    [15, 14, 16].iter().find_map(|back| {
-        let marker = string_offset.checked_sub(*back)?;
+    (8..=24).find_map(|back| {
+        let marker = string_offset.checked_sub(back)?;
         match (data.get(marker).copied(), data.get(marker + 1).copied()) {
             (Some(0xff), Some(0x06)) => Some(LadderContact::NormallyOpen),
             (Some(0xff), Some(0x07)) => Some(LadderContact::NormallyClosed),
+            (Some(0xff), Some(0x08)) => Some(LadderContact::AddressedRisingPulse),
+            (Some(0xff), Some(0x09)) => Some(LadderContact::AddressedFallingPulse),
+            (Some(0xff), Some(0x0a)) => Some(LadderContact::AddressedRisingPulseNot),
+            (Some(0xff), Some(0x0b)) => Some(LadderContact::AddressedFallingPulseNot),
+            (Some(0xff), Some(0x3e)) => Some(LadderContact::Inverse),
+            (Some(0xff), Some(0x48)) => Some(LadderContact::RisingPulse),
+            (Some(0xff), Some(0x49)) => Some(LadderContact::FallingPulse),
             _ => None,
         }
     })
 }
 
 fn ladder_coil(data: &[u8], string_offset: usize) -> Option<LadderCoil> {
-    [15, 16, 14].iter().find_map(|back| {
-        let marker = string_offset.checked_sub(*back)?;
+    (8..=24).find_map(|back| {
+        let marker = string_offset.checked_sub(back)?;
         match (data.get(marker).copied(), data.get(marker + 1).copied()) {
             (Some(0xff), Some(0x0e)) => Some(LadderCoil::Output),
+            (Some(0xff), Some(0x0f)) => Some(LadderCoil::Inverse),
             (Some(0xff), Some(0x10)) => Some(LadderCoil::Set),
             (Some(0xff), Some(0x11)) => Some(LadderCoil::Reset),
+            (Some(0xff), Some(0x12)) => Some(LadderCoil::RisingPulse),
+            (Some(0xff), Some(0x13)) => Some(LadderCoil::FallingPulse),
             _ => None,
         }
     })
@@ -3077,6 +4502,7 @@ fn is_ladder_operation(value: &str) -> bool {
             | "DMUL"
             | "DDIV"
             | "GETM"
+            | "XDST"
             | "FOR"
             | "NEXT"
             | "DNEGP"
@@ -3110,9 +4536,10 @@ fn looks_like_device_ref(value: &str) -> bool {
 }
 
 fn looks_like_internal_ref(value: &str) -> bool {
-    value.len() == 6
+    value.len() > 1
         && value.starts_with('F')
         && value.chars().skip(1).all(|ch| ch.is_ascii_hexdigit())
+        && value.chars().skip(1).any(|ch| ch.is_ascii_digit())
 }
 
 fn looks_like_constant(value: &str) -> bool {
@@ -3548,6 +4975,21 @@ mod tests {
         }));
         assert!(elements.iter().any(|element| {
             element.kind == LadderElementKind::DeviceRef
+                && element.value == "M00005"
+                && element.contact == Some(LadderContact::Inverse)
+        }));
+        assert!(elements.iter().any(|element| {
+            element.kind == LadderElementKind::DeviceRef
+                && element.value == "M00006"
+                && element.contact == Some(LadderContact::RisingPulse)
+        }));
+        assert!(elements.iter().any(|element| {
+            element.kind == LadderElementKind::DeviceRef
+                && element.value == "M00007"
+                && element.contact == Some(LadderContact::FallingPulse)
+        }));
+        assert!(elements.iter().any(|element| {
+            element.kind == LadderElementKind::DeviceRef
                 && element.value == "M00003"
                 && element.coil == Some(LadderCoil::Output)
         }));
@@ -3561,16 +5003,172 @@ mod tests {
                 && element.value == "MOV"
                 && element.operands == ["D000001", "D000002"]
         }));
+        assert!(elements.iter().any(|element| {
+            element.kind == LadderElementKind::InternalRef
+                && element.value == "F0092"
+                && element.contact == Some(LadderContact::NormallyOpen)
+        }));
+        assert!(structure.rungs.iter().any(|rung| {
+            rung.cells.iter().any(|cell| {
+                cell.value == "F0092" && cell.contact == Some(LadderContact::NormallyOpen)
+            })
+        }));
         assert!(structure.vertical_lines.iter().any(|line| (
             line.raw_x,
             line.raw_y_start,
             line.raw_y_end
         ) == (0x03, 0x00, 0x04)));
+        assert_eq!(
+            structure
+                .vertical_lines
+                .iter()
+                .filter(|line| (line.raw_x, line.raw_y_start, line.raw_y_end) == (0x06, 0x04, 0x0c))
+                .count(),
+            1
+        );
+        assert!(structure.unknown_records.iter().any(|record| {
+            record.marker == [0xff, 0x55]
+                && (record.raw_x, record.raw_y) == (0x20, 0x04)
+                && record.bytes.starts_with(&[0xff, 0x55])
+        }));
         assert!(structure.horizontal_lines.iter().any(|line| (
             line.raw_y,
             line.raw_x_start,
             line.raw_x_end
         ) == (0x00, 0x01, 0x58)));
+        assert!(structure.horizontal_lines.iter().any(|line| (
+            line.raw_y,
+            line.raw_x_start,
+            line.raw_x_end
+        ) == (0x04, 0x08, 0x5e)));
+        assert!(
+            !structure
+                .unknown_records
+                .iter()
+                .any(|record| record.marker == [0xff, 0x02])
+        );
+    }
+
+    #[test]
+    fn decodes_elements_fixture_pulse_contacts_and_coils() {
+        let doc = XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture parses");
+        let program = doc
+            .ladder_programs()
+            .into_iter()
+            .next()
+            .expect("fixture has a ladder program")
+            .expect("ladder program decodes");
+
+        assert_ladder_contact(&program, "M00002", LadderContact::AddressedRisingPulse);
+        assert_ladder_contact(&program, "M00003", LadderContact::AddressedRisingPulseNot);
+        assert_ladder_contact(&program, "M00004", LadderContact::AddressedFallingPulse);
+        assert_ladder_contact(&program, "M00005", LadderContact::AddressedFallingPulseNot);
+        assert_ladder_coil(&program, "P00021", LadderCoil::Inverse);
+        assert_ladder_coil(&program, "M00100", LadderCoil::RisingPulse);
+        assert_ladder_coil(&program, "M00101", LadderCoil::FallingPulse);
+        assert_ladder_instruction(
+            &program,
+            "XDST",
+            &["1", "1", "7000", "1000", "100", "0", "0"],
+        );
+        assert_eq!(
+            program.structure.rung_comments,
+            vec![LadderRungComment {
+                offset: 0x0035,
+                raw_x: 0x01,
+                raw_y: 0x00,
+                text: "렁 설명문 1".to_owned(),
+            }]
+        );
+        assert!(
+            program
+                .structure
+                .branch_groups
+                .contains(&LadderBranchGroup {
+                    raw_x: 0x03,
+                    raw_y_start: 0x08,
+                    raw_y_end: 0x0c,
+                })
+        );
+        assert!(
+            program
+                .structure
+                .branch_groups
+                .contains(&LadderBranchGroup {
+                    raw_x: 0x06,
+                    raw_y_start: 0x08,
+                    raw_y_end: 0x10,
+                })
+        );
+        assert!(
+            program
+                .structure
+                .branch_groups
+                .contains(&LadderBranchGroup {
+                    raw_x: 0x18,
+                    raw_y_start: 0x14,
+                    raw_y_end: 0x1c,
+                })
+        );
+        assert!(
+            program
+                .structure
+                .branch_groups
+                .contains(&LadderBranchGroup {
+                    raw_x: 0x18,
+                    raw_y_start: 0x20,
+                    raw_y_end: 0x28,
+                })
+        );
+        assert_marker_only_ladder_contact(&program, 0x04, 0x08, LadderContact::Inverse);
+        assert_marker_only_ladder_contact(&program, 0x13, 0x04, LadderContact::RisingPulse);
+        assert_marker_only_ladder_contact(&program, 0x16, 0x04, LadderContact::FallingPulse);
+        assert!(!program.structure.horizontal_lines.iter().any(|line| (
+            line.raw_y,
+            line.raw_x_start,
+            line.raw_x_end
+        ) == (0x08, 0x01, 0x03)));
+        assert!(program.structure.horizontal_lines.iter().any(|line| (
+            line.raw_y,
+            line.raw_x_start,
+            line.raw_x_end
+        ) == (0x08, 0x01, 0x06)));
+        assert!(program.structure.horizontal_lines.iter().any(|line| (
+            line.raw_y,
+            line.raw_x_start,
+            line.raw_x_end
+        ) == (0x0c, 0x01, 0x03)));
+        assert!(!program.structure.horizontal_lines.iter().any(|line| (
+            line.raw_y,
+            line.raw_x_start,
+            line.raw_x_end
+        ) == (0x0c, 0x01, 0x06)));
+        assert!(program.structure.horizontal_lines.iter().any(|line| (
+            line.raw_y,
+            line.raw_x_start,
+            line.raw_x_end
+        ) == (0x10, 0x01, 0x06)));
+        assert_eq!(
+            program.structure.output_comments,
+            vec![LadderOutputComment {
+                offset: 0x0195,
+                raw_x: 0x61,
+                raw_y: 0x04,
+                text: "출력 설명문 1".to_owned(),
+            }]
+        );
+        assert!(!program.structure.unknown_records.iter().any(|record| {
+            matches!(
+                record.marker,
+                [0xff, 0x01]
+                    | [0xff, 0x06]
+                    | [0xff, 0x3e]
+                    | [0xff, 0x3f]
+                    | [0xff, 0x40]
+                    | [0xff, 0x48]
+                    | [0xff, 0x49]
+            )
+        }));
     }
 
     #[test]
@@ -4061,12 +5659,73 @@ mod tests {
         let mut data = Vec::new();
         append_ff43_record(&mut data, 0x32, (0x58, 0x00), (0x01, 0x00));
         append_ff43_record(&mut data, 0x32, (0x58, 0x04), (0x03, 0x00));
+        append_ff43_record(&mut data, 0x99, (0x44, 0x08), (0x06, 0x04));
+        append_ff43_record(&mut data, 0x99, (0x44, 0x0c), (0x06, 0x08));
+        append_unknown_positioned_record(&mut data, 0xff55, (0x20, 0x04));
         append_device_cell(&mut data, 0xff06, (0x01, 0x00), "M00001");
         append_device_cell(&mut data, 0xff07, (0x04, 0x00), "M00002");
+        append_device_cell(&mut data, 0xff3e, (0x08, 0x00), "M00005");
+        append_device_cell(&mut data, 0xff48, (0x0c, 0x00), "M00006");
+        append_device_cell(&mut data, 0xff49, (0x10, 0x00), "M00007");
+        append_wide_marker_device_cell(&mut data, 0xff06, (0x18, 0x00), "F0092");
         append_device_cell(&mut data, 0xff0e, (0x5e, 0x00), "M00003");
+        append_ff02_horizontal_marker(&mut data, (0x08, 0x04));
         append_device_cell(&mut data, 0xff11, (0x5e, 0x04), "M00004");
         append_instruction_cell(&mut data, (0x58, 0x08), "MOV,D000001,D000002");
         data
+    }
+
+    fn assert_ladder_contact(program: &LadderProgramData, value: &str, expected: LadderContact) {
+        let element = program
+            .elements
+            .iter()
+            .find(|element| element.value == value)
+            .unwrap_or_else(|| panic!("{value} element exists"));
+        assert_eq!(element.contact, Some(expected), "{value} contact");
+        assert_eq!(element.coil, None, "{value} is not a coil");
+    }
+
+    fn assert_ladder_coil(program: &LadderProgramData, value: &str, expected: LadderCoil) {
+        let element = program
+            .elements
+            .iter()
+            .find(|element| element.value == value)
+            .unwrap_or_else(|| panic!("{value} element exists"));
+        assert_eq!(element.coil, Some(expected), "{value} coil");
+        assert_eq!(element.contact, None, "{value} is not a contact");
+    }
+
+    fn assert_ladder_instruction(program: &LadderProgramData, mnemonic: &str, operands: &[&str]) {
+        let element = program
+            .elements
+            .iter()
+            .find(|element| {
+                element.kind == LadderElementKind::InstructionCall && element.value == mnemonic
+            })
+            .unwrap_or_else(|| panic!("{mnemonic} instruction exists"));
+        assert_eq!(element.operands, operands);
+        assert!(!program.elements.iter().any(|element| {
+            element.kind == LadderElementKind::Comment
+                && element.value.starts_with(&format!("{mnemonic},"))
+        }));
+    }
+
+    fn assert_marker_only_ladder_contact(
+        program: &LadderProgramData,
+        raw_x: u8,
+        raw_y: u8,
+        expected: LadderContact,
+    ) {
+        let cell = program
+            .structure
+            .rungs
+            .iter()
+            .flat_map(|rung| &rung.cells)
+            .find(|cell| cell.raw_x == raw_x && cell.raw_y == raw_y)
+            .unwrap_or_else(|| panic!("marker-only cell exists at ({raw_x}, {raw_y})"));
+        assert_eq!(cell.value, "");
+        assert_eq!(cell.contact, Some(expected));
+        assert_eq!(cell.coil, None);
     }
 
     fn append_ff43_record(data: &mut Vec<u8>, code: u8, target: (u8, u8), branch: (u8, u8)) {
@@ -4087,6 +5746,32 @@ mod tests {
             marker_hi, marker_lo, 0, 0, 0, coord.0, coord.1, 0, 0, 1, 0, 0, 0, 0, 0,
         ]);
         append_ladder_string(data, value);
+    }
+
+    fn append_wide_marker_device_cell(
+        data: &mut Vec<u8>,
+        marker: u16,
+        coord: (u8, u8),
+        value: &str,
+    ) {
+        let [marker_hi, marker_lo] = marker.to_be_bytes();
+        data.extend_from_slice(&[
+            marker_hi, marker_lo, 0, 0, 0, 0, 0, 0, 0, 0, coord.0, coord.1, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]);
+        append_ladder_string(data, value);
+    }
+
+    fn append_unknown_positioned_record(data: &mut Vec<u8>, marker: u16, coord: (u8, u8)) {
+        let [marker_hi, marker_lo] = marker.to_be_bytes();
+        data.extend_from_slice(&[
+            marker_hi, marker_lo, 0xaa, 0xbb, 0xcc, coord.0, coord.1, 0xdd, 0xee, 0xff, 0, 1, 2, 3,
+        ]);
+    }
+
+    fn append_ff02_horizontal_marker(data: &mut Vec<u8>, coord: (u8, u8)) {
+        data.extend_from_slice(&[
+            0xff, 0x02, 0xaa, 0xbb, 0xcc, coord.0, coord.1, 0xdd, 0xee, 0xff, 0, 1, 2, 3,
+        ]);
     }
 
     fn append_instruction_cell(data: &mut Vec<u8>, coord: (u8, u8), value: &str) {

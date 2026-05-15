@@ -550,10 +550,20 @@ fn cell_text(cell: &LadderCell) -> String {
     match cell.kind {
         LadderElementKind::DeviceRef | LadderElementKind::InternalRef => match cell.coil {
             Some(LadderCoil::Output) => cell.value.clone(),
+            Some(LadderCoil::Inverse) => format!("/ {}", cell.value),
             Some(LadderCoil::Set) => format!("S {}", cell.value),
             Some(LadderCoil::Reset) => format!("R {}", cell.value),
+            Some(LadderCoil::RisingPulse) => format!("P {}", cell.value),
+            Some(LadderCoil::FallingPulse) => format!("N {}", cell.value),
             None => match cell.contact {
                 Some(LadderContact::NormallyClosed) => format!("/{}", cell.value),
+                Some(LadderContact::Inverse) => format!("* {}", cell.value),
+                Some(LadderContact::RisingPulse) => format!("^^ {}", cell.value),
+                Some(LadderContact::FallingPulse) => format!("vv {}", cell.value),
+                Some(LadderContact::AddressedRisingPulse) => format!("P {}", cell.value),
+                Some(LadderContact::AddressedRisingPulseNot) => format!("P/ {}", cell.value),
+                Some(LadderContact::AddressedFallingPulse) => format!("N {}", cell.value),
+                Some(LadderContact::AddressedFallingPulseNot) => format!("N/ {}", cell.value),
                 _ => cell.value.clone(),
             },
         },

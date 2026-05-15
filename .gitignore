@@ -1,3 +1,5 @@
 /target
+/web/dist
+/pkg
 *.xgwx
 !fixtures/*.xgwx

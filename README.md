@@ -137,6 +137,23 @@ The GUI lists decoded ladder programs on the left and renders the selected
 program as a scrollable, zoomable ladder canvas using parsed rungs, cells, and
 wire segments.
 
+## WebAssembly Demo
+
+The parser can be compiled for browser use through the optional `wasm` feature.
+The browser-facing API accepts bytes, so users can parse files selected from a
+local file picker without uploading them anywhere.
+
+```sh
+cargo check --target wasm32-unknown-unknown --features wasm
+wasm-pack build --target web --out-dir web/dist/pkg --features wasm --no-default-features
+cp web/index.html web/styles.css web/app.js web/dist/
+```
+
+The GitHub Pages workflow builds the same upload-only demo from `web/`. It does
+not publish `.xgwx` fixtures into the Pages artifact. The demo shows project
+summaries, a program sidebar, decoded network and parameter summaries, and a
+best-effort SVG ladder viewer for decoded ladder programs.
+
 ## Fixtures
 
 The repository includes small `.xgwx` files in `fixtures/` for the normal test
