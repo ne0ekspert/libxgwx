@@ -24,6 +24,40 @@ pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
     js_sys::JSON::parse(&json)
 }
 
+/// Return category and description metadata for known ladder mnemonics.
+#[wasm_bindgen(js_name = known_ladder_mnemonics)]
+pub fn known_ladder_mnemonics_wasm() -> Result<JsValue, JsValue> {
+    let mnemonics = crate::known_ladder_mnemonics()
+        .iter()
+        .copied()
+        .map(WasmLadderMnemonicSummary::from_info)
+        .collect::<Vec<_>>();
+    let json = serde_json::to_string(&mnemonics).map_err(|error| {
+        JsValue::from_str(&format!(
+            "failed to serialize ladder mnemonic metadata: {error}"
+        ))
+    })?;
+    js_sys::JSON::parse(&json)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmLadderMnemonicSummary {
+    mnemonic: &'static str,
+    category: &'static str,
+    description: &'static str,
+}
+
+impl WasmLadderMnemonicSummary {
+    fn from_info(info: LadderMnemonicInfo) -> Self {
+        Self {
+            mnemonic: info.mnemonic,
+            category: info.category.label(),
+            description: info.description,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmDocumentSummary {
