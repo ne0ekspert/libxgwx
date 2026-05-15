@@ -13,7 +13,7 @@ use network::*;
 use parameters::*;
 use project::*;
 
-const MAX_WASM_VARIABLES: usize = 5_000;
+const MAX_WASM_VARIABLES: usize = 65536;
 
 /// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
 #[wasm_bindgen]
@@ -98,11 +98,16 @@ impl WasmDocumentSummary {
         };
         let variable_count = variable_summaries.as_ref().map(Vec::len);
         let variables_for_output = variable_summaries
-            .unwrap_or_default()
-            .into_iter()
-            .take(MAX_WASM_VARIABLES)
-            .map(WasmVariableSummary::from_variable)
-            .collect::<Vec<_>>();
+            .as_ref()
+            .map(|variables| {
+                variables
+                    .iter()
+                    .take(MAX_WASM_VARIABLES)
+                    .map(WasmVariableSummary::from_variable)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
         if let Some(total) = variable_count
             && total > MAX_WASM_VARIABLES
         {
@@ -110,22 +115,14 @@ impl WasmDocumentSummary {
                 "variables: truncated to {MAX_WASM_VARIABLES} entries from {total}"
             ));
         }
-        let decoded_payloads = doc.decoded_payloads();
-        let mut decoded_payload_errors = 0;
-        for error in decoded_payloads
-            .iter()
-            .filter_map(|payload| payload.as_ref().err())
-        {
-            decoded_payload_errors += 1;
-            warnings.push(format!("payload: {error}"));
-        }
-        let ladder_programs = doc.ladder_programs();
-        warnings.extend(
-            ladder_programs
-                .iter()
-                .filter_map(|program| program.as_ref().err())
-                .map(|error| format!("ladder: {error}")),
-        );
+
+        // Avoid eager payload and ladder decoding in the browser summary path.
+        // These operations can decode unbounded attacker-controlled data and are
+        // not required for the lightweight metadata shown in the web demo.
+        let decoded_payload_count = 0;
+        let decoded_payload_errors = 0;
+        let ladder_program_count = 0;
+        let ladder_errors = 0;
         let hsc = doc
             .hsc_parameters()
             .into_iter()
@@ -157,16 +154,10 @@ impl WasmDocumentSummary {
                 modules: modules.len(),
                 programs: programs.len(),
                 variables: variable_count,
-                decoded_payloads: decoded_payloads.len(),
+                decoded_payloads: decoded_payload_count,
                 decoded_payload_errors,
-                ladder_programs: ladder_programs
-                    .iter()
-                    .filter(|program| program.is_ok())
-                    .count(),
-                ladder_errors: ladder_programs
-                    .iter()
-                    .filter(|program| program.is_err())
-                    .count(),
+                ladder_programs: ladder_program_count,
+                ladder_errors,
                 cnet_modules: cnet_configs.len(),
                 fenet_modules: fenet_configs.len(),
                 hsc_parameters: hsc.len(),
@@ -186,16 +177,7 @@ impl WasmDocumentSummary {
                     .map(WasmModuleSummary::from_module)
                     .collect(),
             },
-            ladder: ladder_programs
-                .iter()
-                .enumerate()
-                .filter_map(|(index, program)| {
-                    program
-                        .as_ref()
-                        .ok()
-                        .map(|program| WasmLadderProgramSummary::from_program(index, program))
-                })
-                .collect(),
+            ladder: Vec::new(),
             networks: networks
                 .into_iter()
                 .map(WasmNetworkSummary::from_network)
