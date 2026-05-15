@@ -834,29 +834,16 @@ pub(crate) fn parse_ladder_element(
         return None;
     }
 
-    let parts = value
-        .split(',')
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
-
-    if parts.len() > 1 && is_ladder_operation(parts[0]) {
+    if let Some((mnemonic, operands)) = parse_ladder_operation_call(value) {
         return Some(LadderElement {
             offset: ladder_string.offset,
-            kind: ladder_operation_kind(parts[0]),
-            value: parts[0].to_owned(),
-            operands: parts[1..].iter().map(|part| (*part).to_owned()).collect(),
-            contact: None,
-            coil: None,
-        });
-    }
-
-    if is_ladder_operation(value) {
-        return Some(LadderElement {
-            offset: ladder_string.offset,
-            kind: ladder_operation_kind(value),
-            value: value.to_owned(),
-            operands: Vec::new(),
+            kind: if is_ladder_operation(&mnemonic) {
+                ladder_operation_kind(&mnemonic)
+            } else {
+                LadderElementKind::InstructionCall
+            },
+            value: mnemonic,
+            operands,
             contact: None,
             coil: None,
         });
@@ -903,14 +890,7 @@ pub(crate) fn parse_ladder_element(
         });
     }
 
-    Some(LadderElement {
-        offset: ladder_string.offset,
-        kind: LadderElementKind::Comment,
-        value: value.to_owned(),
-        operands: Vec::new(),
-        contact: None,
-        coil: None,
-    })
+    None
 }
 
 pub(crate) fn ladder_contact(data: &[u8], string_offset: usize) -> Option<LadderContact> {
@@ -947,23 +927,70 @@ pub(crate) fn ladder_coil(data: &[u8], string_offset: usize) -> Option<LadderCoi
 }
 
 pub(crate) fn parse_ladder_instruction(ladder_string: &LadderString) -> Option<LadderInstruction> {
-    let parts = ladder_string
-        .value
-        .split(',')
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
-
-    if parts.len() < 2 || !looks_like_mnemonic(parts[0]) {
+    let (mnemonic, operands) = parse_ladder_operation_call(ladder_string.value.trim())?;
+    if operands.is_empty() {
         return None;
     }
 
     Some(LadderInstruction {
         offset: ladder_string.offset,
-        mnemonic: parts[0].to_owned(),
-        operands: parts[1..].iter().map(|part| (*part).to_owned()).collect(),
+        mnemonic,
+        operands,
         raw: ladder_string.value.clone(),
     })
+}
+
+pub(crate) fn parse_ladder_operation_call(value: &str) -> Option<(String, Vec<String>)> {
+    let parts = value
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+
+    if parts.len() > 1 && (is_ladder_operation(parts[0]) || looks_like_mnemonic(parts[0])) {
+        return Some((
+            parts[0].to_owned(),
+            parts[1..].iter().map(|part| (*part).to_owned()).collect(),
+        ));
+    }
+
+    if is_ladder_operation(value) {
+        return Some((value.to_owned(), Vec::new()));
+    }
+
+    prefixed_ladder_operation_call(value)
+}
+
+fn prefixed_ladder_operation_call(value: &str) -> Option<(String, Vec<String>)> {
+    let mut best = None;
+    for mnemonic in known_ladder_mnemonics()
+        .iter()
+        .map(|info| info.mnemonic)
+        .chain(FALLBACK_LADDER_OPERATIONS.iter().copied())
+    {
+        let Some(rest) = value.strip_prefix(mnemonic) else {
+            continue;
+        };
+        if rest.is_empty() || !rest.starts_with(|ch: char| ch == ',' || ch.is_ascii_whitespace()) {
+            continue;
+        }
+        if best.is_none_or(|best: &str| mnemonic.len() > best.len()) {
+            best = Some(mnemonic);
+        }
+    }
+
+    let mnemonic = best?;
+    let operands = value
+        .strip_prefix(mnemonic)
+        .unwrap_or_default()
+        .trim_start_matches(|ch: char| ch == ',' || ch.is_ascii_whitespace())
+        .split(|ch: char| ch == ',' || ch.is_ascii_whitespace())
+        .map(str::trim)
+        .filter(|operand| !operand.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+
+    (!operands.is_empty()).then(|| (mnemonic.to_owned(), operands))
 }
 
 pub(crate) fn duplicate_decomposed_string_count(
@@ -1002,61 +1029,17 @@ pub(crate) fn duplicate_decomposed_string_count(
     }
 }
 
+const FALLBACK_LADDER_OPERATIONS: &[&str] = &[
+    "AND", "OR", "XOR", "NOT", "SET", "RST", "RESET", "OUT", "OUTP", "FF", "TON", "TOFF", "TMR",
+    "TFLK", "TMON", "TRTG", "CTR", "CTU", "CTD", "CTUD", "MOV", "MOVP", "FMOV", "FMOVP", "DMOV",
+    "RMOV", "INC", "INCP", "DEC", "DECP", "I2R", "R2I", "RADD", "RSUB", "RMUL", "RDIV", "ADD",
+    "SUB", "MUL", "DIV", "DADD", "DSUB", "DMUL", "DDIV", "GETM", "XDST", "FOR", "NEXT", "DNEGP",
+];
+
 pub(crate) fn is_ladder_operation(value: &str) -> bool {
     is_ladder_comparison_mnemonic(value)
         || ladder_mnemonic_info(value).is_some()
-        || matches!(
-            value,
-            "AND"
-                | "OR"
-                | "XOR"
-                | "NOT"
-                | "SET"
-                | "RST"
-                | "RESET"
-                | "OUT"
-                | "OUTP"
-                | "FF"
-                | "TON"
-                | "TOFF"
-                | "TMR"
-                | "TFLK"
-                | "TMON"
-                | "TRTG"
-                | "CTR"
-                | "CTU"
-                | "CTD"
-                | "CTUD"
-                | "MOV"
-                | "MOVP"
-                | "FMOV"
-                | "FMOVP"
-                | "DMOV"
-                | "RMOV"
-                | "INC"
-                | "INCP"
-                | "DEC"
-                | "DECP"
-                | "I2R"
-                | "R2I"
-                | "RADD"
-                | "RSUB"
-                | "RMUL"
-                | "RDIV"
-                | "ADD"
-                | "SUB"
-                | "MUL"
-                | "DIV"
-                | "DADD"
-                | "DSUB"
-                | "DMUL"
-                | "DDIV"
-                | "GETM"
-                | "XDST"
-                | "FOR"
-                | "NEXT"
-                | "DNEGP"
-        )
+        || FALLBACK_LADDER_OPERATIONS.contains(&value)
 }
 
 pub(crate) fn ladder_operation_kind(value: &str) -> LadderElementKind {

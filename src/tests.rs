@@ -234,6 +234,68 @@ fn recognizes_additional_ladder_mnemonics() {
         );
     }
 
+    for (source, expected_value, expected_kind, expected_operands) in [
+        (
+            "INC",
+            "INC",
+            LadderElementKind::InstructionCall,
+            Vec::<&str>::new(),
+        ),
+        ("TFLK", "TFLK", LadderElementKind::Timer, Vec::new()),
+        ("<=3", "<=3", LadderElementKind::Comparison, Vec::new()),
+        ("CTUD", "CTUD", LadderElementKind::Timer, Vec::new()),
+        (
+            "INC D00001",
+            "INC",
+            LadderElementKind::InstructionCall,
+            vec!["D00001"],
+        ),
+        (
+            "TFLK T0 D0",
+            "TFLK",
+            LadderElementKind::Timer,
+            vec!["T0", "D0"],
+        ),
+        (
+            "<=3 D0 D1",
+            "<=3",
+            LadderElementKind::Comparison,
+            vec!["D0", "D1"],
+        ),
+        (
+            "CTUD C0 D0",
+            "CTUD",
+            LadderElementKind::Timer,
+            vec!["C0", "D0"],
+        ),
+    ] {
+        let element = parse_ladder_element(
+            &[],
+            &LadderString {
+                offset: 0,
+                end_offset: source.len(),
+                value: source.to_owned(),
+            },
+        )
+        .unwrap_or_else(|| panic!("{source} parses"));
+
+        assert_eq!(element.value, expected_value);
+        assert_eq!(element.kind, expected_kind, "{source} kind");
+        assert_eq!(element.operands, expected_operands, "{source} operands");
+    }
+
+    assert_eq!(
+        parse_ladder_element(
+            &[],
+            &LadderString {
+                offset: 0,
+                end_offset: 8,
+                value: "Auto Run".to_owned(),
+            },
+        ),
+        None
+    );
+
     for instruction in ["INC,D00001", "INCP,D00001", "DEC,D00001", "DECP,D00001"] {
         let element = parse_ladder_element(
             &[],
@@ -317,6 +379,16 @@ fn recognizes_additional_ladder_mnemonics() {
 
     assert_eq!(string_add_instruction.mnemonic, "$ADDP");
     assert_eq!(string_add_instruction.operands, ["S0", "S1", "S2"]);
+
+    let whitespace_instruction = parse_ladder_instruction(&LadderString {
+        offset: 0,
+        end_offset: 14,
+        value: "CTUD C0 D0".to_owned(),
+    })
+    .expect("whitespace instruction parses");
+
+    assert_eq!(whitespace_instruction.mnemonic, "CTUD");
+    assert_eq!(whitespace_instruction.operands, ["C0", "D0"]);
 
     let binary_instruction = parse_ladder_element(
         &[],
