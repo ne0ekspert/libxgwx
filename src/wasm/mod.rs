@@ -13,6 +13,8 @@ use network::*;
 use parameters::*;
 use project::*;
 
+const MAX_WASM_VARIABLES: usize = 5_000;
+
 /// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
 #[wasm_bindgen]
 pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
@@ -94,6 +96,20 @@ impl WasmDocumentSummary {
                 None
             }
         };
+        let variable_count = variable_summaries.as_ref().map(Vec::len);
+        let variables_for_output = variable_summaries
+            .unwrap_or_default()
+            .into_iter()
+            .take(MAX_WASM_VARIABLES)
+            .map(WasmVariableSummary::from_variable)
+            .collect::<Vec<_>>();
+        if let Some(total) = variable_count
+            && total > MAX_WASM_VARIABLES
+        {
+            warnings.push(format!(
+                "variables: truncated to {MAX_WASM_VARIABLES} entries from {total}"
+            ));
+        }
         let decoded_payloads = doc.decoded_payloads();
         let mut decoded_payload_errors = 0;
         for error in decoded_payloads
@@ -140,7 +156,7 @@ impl WasmDocumentSummary {
                 networks: networks.len(),
                 modules: modules.len(),
                 programs: programs.len(),
-                variables: variable_summaries.as_ref().map(Vec::len),
+                variables: variable_count,
                 decoded_payloads: decoded_payloads.len(),
                 decoded_payload_errors,
                 ladder_programs: ladder_programs
@@ -162,11 +178,7 @@ impl WasmDocumentSummary {
                 .into_iter()
                 .map(WasmProgramSummary::from_program)
                 .collect(),
-            variables: variable_summaries
-                .unwrap_or_default()
-                .into_iter()
-                .map(WasmVariableSummary::from_variable)
-                .collect(),
+            variables: variables_for_output,
             hardware: WasmHardwareSummary {
                 bases: bases.into_iter().map(WasmBaseSummary::from_base).collect(),
                 modules: modules
