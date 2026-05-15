@@ -13,7 +13,7 @@ Unknown binary sections are preserved so callers can inspect them later.
 ## Usage
 
 ```rust
-use libxgwx::XgwxDocument;
+use xgwx::XgwxDocument;
 
 let doc = XgwxDocument::from_path("project.xgwx")?;
 let project = doc.project_info();

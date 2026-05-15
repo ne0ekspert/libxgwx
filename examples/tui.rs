@@ -8,7 +8,13 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use libxgwx::{
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
+use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use xgwx::{
     CnetConfigInfoSummary, CnetPortConfigSummary, DecodedPayloadSummary, FenetConfigInfoSummary,
     HscChannelSummary, HscParameterSummary, Ipv4Summary, LadderProgramData, NetworkModuleSummary,
     NetworkSummary, ParameterSummary, PidCalLoopSummary, PidCalParameterSummary,
@@ -16,12 +22,6 @@ use libxgwx::{
     ProgramSummary, VariableSummary, XgwxDocument, XgwxError, XmlAttribute, XmlElement,
     XmlSectionSummary,
 };
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Direction, Layout};
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = env::args().nth(1).ok_or_else(|| {
@@ -1862,7 +1862,7 @@ fn push_xml_tree(element: &XmlElement, depth: usize, lines: &mut Vec<Line<'stati
     }
 }
 
-fn summarize_attributes(attributes: &[libxgwx::XmlAttribute]) -> String {
+fn summarize_attributes(attributes: &[xgwx::XmlAttribute]) -> String {
     let parts = attributes
         .iter()
         .map(|attribute| format!("{}=\"{}\"", attribute.name, attribute.value))

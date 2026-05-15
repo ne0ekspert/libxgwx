@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 use std::io;
 
-use libxgwx::{CnetPortConfigSummary, Ipv4Summary, XgwxDocument};
+use xgwx::{CnetPortConfigSummary, Ipv4Summary, XgwxDocument};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = env::args().nth(1).ok_or_else(|| {

@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec2};
-use libxgwx::{
+use xgwx::{
     LadderCell, LadderCoil, LadderContact, LadderElementKind, LadderHorizontalLine,
     LadderProgramData, LadderVerticalLine, XgwxDocument, XgwxError,
 };

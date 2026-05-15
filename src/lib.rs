@@ -8,7 +8,7 @@
 //! # Example
 //!
 //! ```text
-//! use libxgwx::XgwxDocument;
+//! use xgwx::XgwxDocument;
 //!
 //! if let Ok(doc) = XgwxDocument::from_path("project.xgwx") {
 //!     let project = doc.project_info();
