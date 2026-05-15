@@ -229,6 +229,10 @@ input {
   background: var(--panel);
 }
 
+.data-table.is-compact {
+  min-width: 280px;
+}
+
 .data-table th,
 .data-table td {
   padding: 8px 10px;

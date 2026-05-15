@@ -2279,6 +2279,7 @@ struct WasmDocumentSummary {
     counts: WasmCounts,
     programs: Vec<WasmProgramSummary>,
     variables: Vec<WasmVariableSummary>,
+    hardware: WasmHardwareSummary,
     ladder: Vec<WasmLadderProgramSummary>,
     networks: Vec<WasmNetworkSummary>,
     cnet: Vec<WasmCnetSummary>,
@@ -2332,6 +2333,8 @@ impl WasmDocumentSummary {
             .collect::<Vec<_>>();
         let pid_cal = doc.pid_cal_parameters();
         let pid_tune = doc.pid_tune_parameters();
+        let cnet_configs = doc.cnet_config_infos();
+        let fenet_configs = doc.fenet_config_infos();
 
         Self {
             header: WasmHeaderSummary::from_header(&doc.header, doc.trailer.len()),
@@ -2358,8 +2361,8 @@ impl WasmDocumentSummary {
                     .iter()
                     .filter(|program| program.is_err())
                     .count(),
-                cnet_modules: doc.cnet_config_infos().len(),
-                fenet_modules: doc.fenet_config_infos().len(),
+                cnet_modules: cnet_configs.len(),
+                fenet_modules: fenet_configs.len(),
                 hsc_parameters: hsc.len(),
                 position_parameters: doc.position_parameters().len(),
                 pid_cal_parameters: pid_cal.len(),
@@ -2375,6 +2378,18 @@ impl WasmDocumentSummary {
                 .into_iter()
                 .map(WasmVariableSummary::from_variable)
                 .collect(),
+            hardware: WasmHardwareSummary {
+                bases: doc
+                    .bases()
+                    .into_iter()
+                    .map(WasmBaseSummary::from_base)
+                    .collect(),
+                modules: doc
+                    .modules()
+                    .into_iter()
+                    .map(WasmModuleSummary::from_module)
+                    .collect(),
+            },
             ladder: ladder_programs
                 .iter()
                 .enumerate()
@@ -2390,14 +2405,12 @@ impl WasmDocumentSummary {
                 .into_iter()
                 .map(WasmNetworkSummary::from_network)
                 .collect(),
-            cnet: doc
-                .cnet_config_infos()
-                .into_iter()
+            cnet: cnet_configs
+                .iter()
                 .map(WasmCnetSummary::from_cnet)
                 .collect(),
-            fenet: doc
-                .fenet_config_infos()
-                .into_iter()
+            fenet: fenet_configs
+                .iter()
                 .map(WasmFenetSummary::from_fenet)
                 .collect(),
             hsc,
@@ -2531,6 +2544,60 @@ impl WasmVariableSummary {
             source_ref: variable.source_ref,
             range: variable.range,
             format_version: variable.format_version,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmHardwareSummary {
+    bases: Vec<WasmBaseSummary>,
+    modules: Vec<WasmModuleSummary>,
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmBaseSummary {
+    base: Option<u32>,
+    slot_count: Option<u32>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmBaseSummary {
+    fn from_base(base: BaseSummary) -> Self {
+        Self {
+            base: base.base,
+            slot_count: base.slot_count,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmModuleSummary {
+    base: Option<u32>,
+    slot: Option<u32>,
+    id: Option<u32>,
+    sub_type: Option<u32>,
+    name: Option<String>,
+    comment: Option<String>,
+    details: Option<String>,
+}
+
+#[cfg(feature = "wasm")]
+impl WasmModuleSummary {
+    fn from_module(module: ModuleSummary) -> Self {
+        Self {
+            base: module.base,
+            slot: module.slot,
+            id: module.id,
+            sub_type: module.sub_type,
+            name: module.name,
+            comment: module.comment,
+            details: module.details,
         }
     }
 }
@@ -2931,7 +2998,7 @@ struct WasmCnetSummary {
 
 #[cfg(feature = "wasm")]
 impl WasmCnetSummary {
-    fn from_cnet(cnet: CnetConfigInfoSummary) -> Self {
+    fn from_cnet(cnet: &CnetConfigInfoSummary) -> Self {
         Self {
             station_no: cnet.station_no,
             type_code: cnet.type_code,
@@ -2940,7 +3007,7 @@ impl WasmCnetSummary {
             sub_type: cnet.sub_type,
             ports: cnet
                 .ports
-                .into_iter()
+                .iter()
                 .map(WasmCnetPortSummary::from_port)
                 .collect(),
         }
@@ -2965,7 +3032,7 @@ struct WasmCnetPortSummary {
 
 #[cfg(feature = "wasm")]
 impl WasmCnetPortSummary {
-    fn from_port(port: CnetPortConfigSummary) -> Self {
+    fn from_port(port: &CnetPortConfigSummary) -> Self {
         Self {
             station_no: port.station_no,
             mode: port.mode_kind.map(|value| value.label().to_owned()),
@@ -2973,10 +3040,10 @@ impl WasmCnetPortSummary {
             data_bits: port.data_bits.map(|value| value.label().to_owned()),
             stop_bits: port.stop_bits.map(|value| value.label().to_owned()),
             parity: port.parity_mode.map(|value| value.label().to_owned()),
-            di_address: port.di_address,
-            do_address: port.do_address,
-            ai_address: port.ai_address,
-            ao_address: port.ao_address,
+            di_address: port.di_address.clone(),
+            do_address: port.do_address.clone(),
+            ai_address: port.ai_address.clone(),
+            ao_address: port.ao_address.clone(),
         }
     }
 }
@@ -2998,17 +3065,17 @@ struct WasmFenetSummary {
 
 #[cfg(feature = "wasm")]
 impl WasmFenetSummary {
-    fn from_fenet(fenet: FenetConfigInfoSummary) -> Self {
+    fn from_fenet(fenet: &FenetConfigInfoSummary) -> Self {
         Self {
             station_no: fenet.station_no,
             type_code: fenet.type_code,
             base: fenet.base,
             slot: fenet.slot,
             sub_type: fenet.sub_type,
-            ip_address: fenet.ip_address.map(|value| value.address),
-            subnet: fenet.subnet.map(|value| value.address),
-            gateway: fenet.gateway.map(|value| value.address),
-            dns: fenet.dns.map(|value| value.address),
+            ip_address: fenet.ip_address.as_ref().map(|value| value.address.clone()),
+            subnet: fenet.subnet.as_ref().map(|value| value.address.clone()),
+            gateway: fenet.gateway.as_ref().map(|value| value.address.clone()),
+            dns: fenet.dns.as_ref().map(|value| value.address.clone()),
         }
     }
 }

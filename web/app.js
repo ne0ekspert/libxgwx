@@ -7,6 +7,7 @@ const panels = {
   summary: document.querySelector("#summary"),
   programs: document.querySelector("#programs"),
   variables: document.querySelector("#variables"),
+  hardware: document.querySelector("#hardware"),
   networks: document.querySelector("#networks"),
   parameters: document.querySelector("#parameters"),
 };
@@ -66,6 +67,7 @@ function render(summary, file) {
   renderSummary(summary, file);
   renderPrograms(summary.programs, summary.ladder ?? []);
   renderVariables(summary.variables ?? []);
+  renderHardware(summary.hardware ?? { bases: [], modules: [] });
   renderNetworks(summary.networks, summary.cnet, summary.fenet);
   renderParameters(summary);
 }
@@ -184,6 +186,74 @@ function renderVariableRow(variable) {
     <td>${escapeHtml(value(variable.comment))}</td>
     <td>${escapeHtml(value(variable.range))}</td>
     <td>${escapeHtml(value(variable.sourceRef ?? variable.formatVersion))}</td>
+  </tr>`;
+}
+
+function renderHardware(hardware) {
+  const bases = hardware.bases ?? [];
+  const modules = hardware.modules ?? [];
+
+  if (!bases.length && !modules.length) {
+    panels.hardware.innerHTML = empty("No hardware modules found.");
+    return;
+  }
+
+  const baseHtml = bases.length
+    ? section("Bases", `
+      <div class="table-wrap">
+        <table class="data-table is-compact">
+          <thead>
+            <tr>
+              <th>Base</th>
+              <th>Slots</th>
+            </tr>
+          </thead>
+          <tbody>${bases.map(renderBaseRow).join("")}</tbody>
+        </table>
+      </div>
+    `)
+    : "";
+
+  const moduleHtml = modules.length
+    ? section("Modules", `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Base</th>
+              <th>Slot</th>
+              <th>ID</th>
+              <th>Subtype</th>
+              <th>Name</th>
+              <th>Comment</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>${modules.map(renderModuleRow).join("")}</tbody>
+        </table>
+      </div>
+    `)
+    : "";
+
+  panels.hardware.innerHTML = baseHtml + moduleHtml;
+}
+
+function renderBaseRow(base) {
+  return `<tr>
+    <td>${escapeHtml(value(base.base))}</td>
+    <td>${escapeHtml(value(base.slotCount))}</td>
+  </tr>`;
+}
+
+function renderModuleRow(module) {
+  return `<tr>
+    <td>${escapeHtml(value(module.base))}</td>
+    <td>${escapeHtml(value(module.slot))}</td>
+    <td>${escapeHtml(value(module.id))}</td>
+    <td>${escapeHtml(value(module.subType))}</td>
+    <td>${escapeHtml(value(module.name))}</td>
+    <td>${escapeHtml(value(module.comment))}</td>
+    <td>${escapeHtml(value(module.details))}</td>
   </tr>`;
 }
 
@@ -716,10 +786,12 @@ function formatBytes(bytes) {
 }
 
 function escapeHtml(text) {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+  const replacements = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  };
+  return String(text).replace(/[&<>"']/g, (character) => replacements[character]);
 }
