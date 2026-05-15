@@ -13,6 +13,8 @@ use network::*;
 use parameters::*;
 use project::*;
 
+const MAX_WASM_VARIABLES: usize = 65536;
+
 /// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
 #[wasm_bindgen]
 pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
@@ -94,6 +96,26 @@ impl WasmDocumentSummary {
                 None
             }
         };
+        let variable_count = variable_summaries.as_ref().map(Vec::len);
+        let variables_for_output = variable_summaries
+            .as_ref()
+            .map(|variables| {
+                variables
+                    .iter()
+                    .take(MAX_WASM_VARIABLES)
+                    .map(WasmVariableSummary::from_variable)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        if let Some(total) = variable_count
+            && total > MAX_WASM_VARIABLES
+        {
+            warnings.push(format!(
+                "variables: truncated to {MAX_WASM_VARIABLES} entries from {total}"
+            ));
+        }
+
         // Avoid eager payload and ladder decoding in the browser summary path.
         // These operations can decode unbounded attacker-controlled data and are
         // not required for the lightweight metadata shown in the web demo.
@@ -131,7 +153,7 @@ impl WasmDocumentSummary {
                 networks: networks.len(),
                 modules: modules.len(),
                 programs: programs.len(),
-                variables: variable_summaries.as_ref().map(Vec::len),
+                variables: variable_count,
                 decoded_payloads: decoded_payload_count,
                 decoded_payload_errors,
                 ladder_programs: ladder_program_count,
@@ -147,11 +169,7 @@ impl WasmDocumentSummary {
                 .into_iter()
                 .map(WasmProgramSummary::from_program)
                 .collect(),
-            variables: variable_summaries
-                .unwrap_or_default()
-                .into_iter()
-                .map(WasmVariableSummary::from_variable)
-                .collect(),
+            variables: variables_for_output,
             hardware: WasmHardwareSummary {
                 bases: bases.into_iter().map(WasmBaseSummary::from_base).collect(),
                 modules: modules
