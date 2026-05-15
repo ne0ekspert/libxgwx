@@ -268,6 +268,18 @@ fn recognizes_additional_ladder_mnemonics() {
             LadderElementKind::Timer,
             vec!["C0", "D0"],
         ),
+        (
+            "BRST,M0001,3",
+            "BRST",
+            LadderElementKind::Operation,
+            vec!["M0001", "3"],
+        ),
+        (
+            "TFLK,P0040,1000,1000,D0000",
+            "TFLK",
+            LadderElementKind::Timer,
+            vec!["P0040", "1000", "1000", "D0000"],
+        ),
     ] {
         let element = parse_ladder_element(
             &[],
