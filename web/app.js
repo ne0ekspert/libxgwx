@@ -446,7 +446,7 @@ function renderLadderCommandTableCells(ladder, cell, rawX, rawY, rawXs) {
   const baseClasses = ["ladder-table-cell", "has-cell", "is-command-part"];
   baseClasses.push(...verticalLineClasses(ladder, rawX, rawY, rawXs));
 
-  const title = [cell.kind, cell.value, cell.operands?.join(", ")].filter(Boolean).join(" ");
+  const title = ladderCellTitle(cell);
   const command = `<td class="${[...baseClasses, "is-command-mnemonic-cell"].join(" ")}">
     <div class="ladder-command-cell-token is-mnemonic" title="${escapeHtml(title)}">${escapeHtml(cell.value || cell.kind)}</div>
   </td>`;
@@ -466,11 +466,21 @@ function renderUnknownRecordToken(record) {
 }
 
 function renderLadderCellToken(cell) {
-  const title = [cell.kind, cell.value, cell.operands?.join(", ")].filter(Boolean).join(" ");
+  const title = ladderCellTitle(cell);
   const classes = ["ladder-token", ladderCellClass(cell)];
   return `<div class="${classes.join(" ")}" title="${escapeHtml(title)}">
     ${ladderCellBody(cell)}
   </div>`;
+}
+
+function ladderCellTitle(cell) {
+  return [
+    cell.kind,
+    cell.value,
+    cell.operands?.join(", "),
+    cell.mnemonicCategory,
+    cell.mnemonicDescription,
+  ].filter(Boolean).join(" | ");
 }
 
 function isSplitCommandCell(cell) {

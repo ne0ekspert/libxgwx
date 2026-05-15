@@ -121,6 +121,294 @@ fn decodes_synthetic_ladder_records() {
 }
 
 #[test]
+fn recognizes_additional_ladder_mnemonics() {
+    let categorized_samples = [
+        ("LOAD NOT", LadderMnemonicCategory::BasicInstructions),
+        ("BRST", LadderMnemonicCategory::BasicInstructions),
+        ("TON", LadderMnemonicCategory::TimerCounter),
+        ("CTUD", LadderMnemonicCategory::TimerCounter),
+        ("$MOVP", LadderMnemonicCategory::DataTransfer),
+        ("GBMOVP", LadderMnemonicCategory::DataTransfer),
+        ("WTODWP", LadderMnemonicCategory::BcdBinConversion),
+        ("L2UDP", LadderMnemonicCategory::DataTypeConversion),
+        ("CMP8P", LadderMnemonicCategory::Comparison),
+        ("LOAD X", LadderMnemonicCategory::Comparison),
+        ("OR4X", LadderMnemonicCategory::Comparison),
+        ("DINCUP", LadderMnemonicCategory::IncrementDecrement),
+        ("RCR8P", LadderMnemonicCategory::Rotation),
+        ("DBSFRP", LadderMnemonicCategory::Shift),
+        ("GSWAP2P", LadderMnemonicCategory::Exchange),
+        ("$ADDP", LadderMnemonicCategory::BinaryArithmetic),
+        ("GADDP", LadderMnemonicCategory::BinaryArithmetic),
+        ("ADDCP", LadderMnemonicCategory::BcdArithmetic),
+        ("ABXNRP", LadderMnemonicCategory::LogicalOperations),
+        ("SEGP", LadderMnemonicCategory::Display),
+        ("DETECTP", LadderMnemonicCategory::DataProcessing),
+        ("FIINSP", LadderMnemonicCategory::DataTableProcessing),
+        ("DDABCDP", LadderMnemonicCategory::StringProcessing),
+        ("EXPTP", LadderMnemonicCategory::SpecialFunctions),
+        ("PIDRUN", LadderMnemonicCategory::DataControl),
+        ("ADDCAL", LadderMnemonicCategory::Time),
+        ("JMP", LadderMnemonicCategory::Branching),
+        ("BREAK", LadderMnemonicCategory::Loop),
+        ("STC", LadderMnemonicCategory::Flag),
+        ("TFLK", LadderMnemonicCategory::System),
+        ("EIN", LadderMnemonicCategory::Interrupt),
+        ("LNEGP", LadderMnemonicCategory::SignInversion),
+        ("RSETP", LadderMnemonicCategory::File),
+        ("FWRITE", LadderMnemonicCategory::FAreaControl),
+        ("BRESET", LadderMnemonicCategory::WordBitControl),
+        ("GETEP", LadderMnemonicCategory::SpecialCommunication),
+        ("GETIP", LadderMnemonicCategory::Communication),
+        ("PWM", LadderMnemonicCategory::Positioning),
+        ("XCCCONEX", LadderMnemonicCategory::Positioning),
+        ("XGETP", LadderMnemonicCategory::MotionControl),
+    ];
+
+    for (mnemonic, category) in categorized_samples {
+        let info = ladder_mnemonic_info(mnemonic).expect("mnemonic metadata exists");
+        assert_eq!(info.category, category, "{mnemonic} category");
+        assert!(!info.description.is_empty());
+        assert!(is_ladder_operation(mnemonic), "{mnemonic} is recognized");
+    }
+
+    let known = known_ladder_mnemonics();
+    assert!(known.len() > 500, "manual mnemonic coverage is broad");
+    for (index, info) in known.iter().enumerate() {
+        assert!(!info.mnemonic.is_empty());
+        assert!(!info.description.is_empty());
+        assert_eq!(
+            known
+                .iter()
+                .position(|other| other.mnemonic == info.mnemonic),
+            Some(index),
+            "{} appears only once",
+            info.mnemonic
+        );
+    }
+
+    for invalid_group_arithmetic in ["GADDU", "GADDUP", "GMUL", "GMULP", "GDIV", "GDIVP"] {
+        assert_eq!(ladder_mnemonic_info(invalid_group_arithmetic), None);
+    }
+    for invalid_string_arithmetic in ["$SUB", "$SUBP", "$MUL", "$MULP", "$DIV", "$DIVP"] {
+        assert_eq!(ladder_mnemonic_info(invalid_string_arithmetic), None);
+    }
+
+    assert_eq!(ladder_operation_kind("BRSTP"), LadderElementKind::Operation);
+    assert_eq!(
+        ladder_operation_kind("LOAD NOT"),
+        LadderElementKind::Operation
+    );
+    assert_eq!(
+        ladder_operation_kind("MCSCLR"),
+        LadderElementKind::Operation
+    );
+
+    for comparison in [
+        "=3", "<>3", ">3", "<3", ">=3", "<=3", "4=", "4<>", "4>", "4<", "4>=", "4<=", "8=", "8<>",
+        "8>", "8<", "8>=", "8<=",
+    ] {
+        assert!(
+            is_ladder_comparison_mnemonic(comparison),
+            "{comparison} is recognized as comparison mnemonic"
+        );
+        assert_eq!(
+            ladder_operation_kind(comparison),
+            LadderElementKind::Comparison,
+            "{comparison} is a comparison"
+        );
+    }
+
+    for comparison in ["4=3", "4>=3", "8<>3", "8<=3"] {
+        assert!(
+            !is_ladder_comparison_mnemonic(comparison),
+            "{comparison} is invalid because prefix and suffix are both present"
+        );
+    }
+
+    for timer in ["TFLK", "TMON", "TRTG", "CTR", "CTUD"] {
+        assert_eq!(
+            ladder_operation_kind(timer),
+            LadderElementKind::Timer,
+            "{timer} is timer-like"
+        );
+    }
+
+    for instruction in ["INC,D00001", "INCP,D00001", "DEC,D00001", "DECP,D00001"] {
+        let element = parse_ladder_element(
+            &[],
+            &LadderString {
+                offset: 0,
+                end_offset: instruction.len(),
+                value: instruction.to_owned(),
+            },
+        )
+        .expect("instruction parses");
+
+        assert_eq!(element.kind, LadderElementKind::InstructionCall);
+        assert_eq!(element.operands, ["D00001"]);
+    }
+
+    let comparison = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 12,
+            value: ">=3,D0,D1".to_owned(),
+        },
+    )
+    .expect("comparison parses");
+
+    assert_eq!(comparison.kind, LadderElementKind::Comparison);
+    assert_eq!(comparison.value, ">=3");
+    assert_eq!(comparison.operands, ["D0", "D1"]);
+
+    let prefixed_comparison = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 13,
+            value: "4>=,D0,D1".to_owned(),
+        },
+    )
+    .expect("prefixed comparison parses");
+
+    assert_eq!(prefixed_comparison.kind, LadderElementKind::Comparison);
+    assert_eq!(prefixed_comparison.value, "4>=");
+    assert_eq!(prefixed_comparison.operands, ["D0", "D1"]);
+
+    let bcd_instruction = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 19,
+            value: "DADDBP,D0,D2,D4".to_owned(),
+        },
+    )
+    .expect("BCD arithmetic instruction parses");
+
+    assert_eq!(bcd_instruction.kind, LadderElementKind::InstructionCall);
+    assert_eq!(bcd_instruction.value, "DADDBP");
+    assert_eq!(bcd_instruction.operands, ["D0", "D2", "D4"]);
+
+    let conversion_instruction = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 15,
+            value: "GBCDP,D0,D2".to_owned(),
+        },
+    )
+    .expect("BCD/BIN conversion instruction parses");
+
+    assert_eq!(
+        conversion_instruction.kind,
+        LadderElementKind::InstructionCall
+    );
+    assert_eq!(conversion_instruction.value, "GBCDP");
+    assert_eq!(conversion_instruction.operands, ["D0", "D2"]);
+
+    let string_add_instruction = parse_ladder_instruction(&LadderString {
+        offset: 0,
+        end_offset: 17,
+        value: "$ADDP,S0,S1,S2".to_owned(),
+    })
+    .expect("string add instruction parses");
+
+    assert_eq!(string_add_instruction.mnemonic, "$ADDP");
+    assert_eq!(string_add_instruction.operands, ["S0", "S1", "S2"]);
+
+    let binary_instruction = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 15,
+            value: "DADDUP,D0,D2,D4".to_owned(),
+        },
+    )
+    .expect("binary arithmetic instruction parses");
+
+    assert_eq!(binary_instruction.kind, LadderElementKind::InstructionCall);
+    assert_eq!(binary_instruction.value, "DADDUP");
+    assert_eq!(binary_instruction.operands, ["D0", "D2", "D4"]);
+
+    let exchange_instruction = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 17,
+            value: "SWAP2P,D0,D2".to_owned(),
+        },
+    )
+    .expect("exchange instruction parses");
+
+    assert_eq!(
+        exchange_instruction.kind,
+        LadderElementKind::InstructionCall
+    );
+    assert_eq!(exchange_instruction.value, "SWAP2P");
+    assert_eq!(exchange_instruction.operands, ["D0", "D2"]);
+
+    let logical_instruction = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 17,
+            value: "DWXORP,D0,D2,D4".to_owned(),
+        },
+    )
+    .expect("logical instruction parses");
+
+    assert_eq!(logical_instruction.kind, LadderElementKind::InstructionCall);
+    assert_eq!(logical_instruction.value, "DWXORP");
+    assert_eq!(logical_instruction.operands, ["D0", "D2", "D4"]);
+
+    let string_move_instruction = parse_ladder_instruction(&LadderString {
+        offset: 0,
+        end_offset: 15,
+        value: "$MOVP,S0,S1".to_owned(),
+    })
+    .expect("string move instruction parses");
+
+    assert_eq!(string_move_instruction.mnemonic, "$MOVP");
+    assert_eq!(string_move_instruction.operands, ["S0", "S1"]);
+
+    let transfer_instruction = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 17,
+            value: "GBMOVP,M0,M10".to_owned(),
+        },
+    )
+    .expect("data transfer instruction parses");
+
+    assert_eq!(
+        transfer_instruction.kind,
+        LadderElementKind::InstructionCall
+    );
+    assert_eq!(transfer_instruction.value, "GBMOVP");
+    assert_eq!(transfer_instruction.operands, ["M0", "M10"]);
+
+    let spaced_comparison_instruction = parse_ladder_element(
+        &[],
+        &LadderString {
+            offset: 0,
+            end_offset: 15,
+            value: "LOAD X,D0,D1".to_owned(),
+        },
+    )
+    .expect("spaced comparison instruction parses");
+
+    assert_eq!(
+        spaced_comparison_instruction.kind,
+        LadderElementKind::Comparison
+    );
+    assert_eq!(spaced_comparison_instruction.value, "LOAD X");
+    assert_eq!(spaced_comparison_instruction.operands, ["D0", "D1"]);
+}
+
+#[test]
 fn decodes_elements_fixture_pulse_contacts_and_coils() {
     let doc = XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture parses");
     let program = doc

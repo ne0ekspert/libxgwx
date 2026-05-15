@@ -1003,65 +1003,97 @@ pub(crate) fn duplicate_decomposed_string_count(
 }
 
 pub(crate) fn is_ladder_operation(value: &str) -> bool {
-    matches!(
-        value,
-        "=" | "<>"
-            | ">"
-            | "<"
-            | ">="
-            | "<="
-            | "AND"
-            | "OR"
-            | "XOR"
-            | "NOT"
-            | "SET"
-            | "RST"
-            | "RESET"
-            | "OUT"
-            | "OUTP"
-            | "FF"
-            | "TON"
-            | "TOFF"
-            | "TMR"
-            | "CTU"
-            | "CTD"
-            | "MOV"
-            | "MOVP"
-            | "FMOV"
-            | "FMOVP"
-            | "DMOV"
-            | "RMOV"
-            | "I2R"
-            | "R2I"
-            | "RADD"
-            | "RSUB"
-            | "RMUL"
-            | "RDIV"
-            | "ADD"
-            | "SUB"
-            | "MUL"
-            | "DIV"
-            | "DADD"
-            | "DSUB"
-            | "DMUL"
-            | "DDIV"
-            | "GETM"
-            | "XDST"
-            | "FOR"
-            | "NEXT"
-            | "DNEGP"
-            | "END"
-    )
+    is_ladder_comparison_mnemonic(value)
+        || ladder_mnemonic_info(value).is_some()
+        || matches!(
+            value,
+            "AND"
+                | "OR"
+                | "XOR"
+                | "NOT"
+                | "SET"
+                | "RST"
+                | "RESET"
+                | "OUT"
+                | "OUTP"
+                | "FF"
+                | "TON"
+                | "TOFF"
+                | "TMR"
+                | "TFLK"
+                | "TMON"
+                | "TRTG"
+                | "CTR"
+                | "CTU"
+                | "CTD"
+                | "CTUD"
+                | "MOV"
+                | "MOVP"
+                | "FMOV"
+                | "FMOVP"
+                | "DMOV"
+                | "RMOV"
+                | "INC"
+                | "INCP"
+                | "DEC"
+                | "DECP"
+                | "I2R"
+                | "R2I"
+                | "RADD"
+                | "RSUB"
+                | "RMUL"
+                | "RDIV"
+                | "ADD"
+                | "SUB"
+                | "MUL"
+                | "DIV"
+                | "DADD"
+                | "DSUB"
+                | "DMUL"
+                | "DDIV"
+                | "GETM"
+                | "XDST"
+                | "FOR"
+                | "NEXT"
+                | "DNEGP"
+        )
 }
 
 pub(crate) fn ladder_operation_kind(value: &str) -> LadderElementKind {
+    if is_ladder_comparison_mnemonic(value) {
+        return LadderElementKind::Comparison;
+    }
+
+    if let Some(info) = ladder_mnemonic_info(value) {
+        match info.category {
+            LadderMnemonicCategory::Comparison => return LadderElementKind::Comparison,
+            LadderMnemonicCategory::TimerCounter => return LadderElementKind::Timer,
+            LadderMnemonicCategory::BasicInstructions => return LadderElementKind::Operation,
+            _ => {}
+        }
+    }
+
     match value {
-        "=" | "<>" | ">" | "<" | ">=" | "<=" => LadderElementKind::Comparison,
-        "TON" | "TOFF" | "TMR" | "CTU" | "CTD" => LadderElementKind::Timer,
+        "TON" | "TOFF" | "TMR" | "TFLK" | "TMON" | "TRTG" | "CTR" | "CTU" | "CTD" | "CTUD" => {
+            LadderElementKind::Timer
+        }
         "AND" | "OR" | "XOR" | "NOT" => LadderElementKind::Logic,
-        "SET" | "RST" | "RESET" | "OUT" | "OUTP" | "FF" => LadderElementKind::Operation,
+        "BRST" | "BRSTP" | "MCS" | "MCSCLR" | "SET" | "RST" | "RESET" | "OUT" | "OUTP" | "FF" => {
+            LadderElementKind::Operation
+        }
         _ => LadderElementKind::InstructionCall,
     }
+}
+
+pub(crate) fn is_ladder_comparison_mnemonic(value: &str) -> bool {
+    if let Some(value) = value.strip_prefix('4').or_else(|| value.strip_prefix('8')) {
+        return matches!(value, "=" | "<>" | ">" | "<" | ">=" | "<=");
+    }
+
+    matches!(
+        value,
+        "=" | "<>" | ">" | "<" | ">=" | "<=" | "=3" | "<>3" | ">3" | "<3" | ">=3" | "<=3"
+    )
 }
 
 pub(crate) fn looks_like_device_ref(value: &str) -> bool {
@@ -1100,7 +1132,7 @@ pub(crate) fn looks_like_mnemonic(value: &str) -> bool {
         return false;
     };
 
-    first.is_ascii_alphabetic()
-        && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    (first.is_ascii_alphabetic() || first == '$')
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '$' || ch == ' ')
         && value.chars().any(|ch| ch.is_ascii_alphabetic())
 }

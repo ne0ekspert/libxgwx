@@ -110,10 +110,13 @@ pub(super) struct WasmLadderCellSummary {
     pub(super) operands: Vec<String>,
     pub(super) contact: Option<&'static str>,
     pub(super) coil: Option<&'static str>,
+    pub(super) mnemonic_category: Option<&'static str>,
+    pub(super) mnemonic_description: Option<&'static str>,
 }
 
 impl WasmLadderCellSummary {
     pub(super) fn from_cell(cell: &LadderCell) -> Self {
+        let mnemonic = ladder_mnemonic_info(&cell.value);
         Self {
             raw_x: cell.raw_x,
             raw_y: cell.raw_y,
@@ -122,6 +125,8 @@ impl WasmLadderCellSummary {
             operands: cell.operands.clone(),
             contact: cell.contact.map(wasm_ladder_contact_label),
             coil: cell.coil.map(wasm_ladder_coil_label),
+            mnemonic_category: mnemonic.map(|info| info.category.label()),
+            mnemonic_description: mnemonic.map(|info| info.description),
         }
     }
 }
@@ -255,13 +260,18 @@ fn hex_bytes(bytes: &[u8]) -> String {
 pub(super) struct WasmLadderInstructionSummary {
     pub(super) mnemonic: String,
     pub(super) operands: Vec<String>,
+    pub(super) category: Option<&'static str>,
+    pub(super) description: Option<&'static str>,
 }
 
 impl WasmLadderInstructionSummary {
     pub(super) fn from_instruction(instruction: &LadderInstruction) -> Self {
+        let mnemonic = ladder_mnemonic_info(&instruction.mnemonic);
         Self {
             mnemonic: instruction.mnemonic.clone(),
             operands: instruction.operands.clone(),
+            category: mnemonic.map(|info| info.category.label()),
+            description: mnemonic.map(|info| info.description),
         }
     }
 }

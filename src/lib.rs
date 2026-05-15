@@ -34,6 +34,7 @@
 mod document;
 mod error;
 mod internal;
+mod mnemonic;
 mod model;
 
 #[cfg(feature = "wasm")]
@@ -41,6 +42,7 @@ mod wasm;
 
 pub use document::XgwxDocument;
 pub use error::XgwxError;
+pub use mnemonic::*;
 pub use model::*;
 
 #[cfg(feature = "wasm")]

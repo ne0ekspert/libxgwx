@@ -54,6 +54,8 @@ for program in doc.programs() {
   `ProgramData`, preserving raw bytes and extracting embedded strings and likely
   ladder elements such as instruction calls, comparisons, timers, logic
   operators, device references, constants, comments, and internal references.
+- `ladder_mnemonic_info(...)` and `known_ladder_mnemonics()` expose category
+  and description metadata for known ladder instruction mnemonics.
 - `XgwxDocument::project_options()`, `parameters()`, `hsc_parameters()`,
   `safety_comm()`, `trend_monitoring()`, `xgpd_config_infos()`,
   `cnet_config_infos()`, `fenet_config_infos()`, and `properties()` expose
