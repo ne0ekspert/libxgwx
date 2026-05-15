@@ -98,10 +98,9 @@ impl WasmDocumentSummary {
         };
         let variable_count = variable_summaries.as_ref().map(Vec::len);
         let variables_for_output = variable_summaries
-            .as_ref()
             .map(|variables| {
                 variables
-                    .iter()
+                    .into_iter()
                     .take(MAX_WASM_VARIABLES)
                     .map(WasmVariableSummary::from_variable)
                     .collect::<Vec<_>>()

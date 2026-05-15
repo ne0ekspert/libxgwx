@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+
+// These DTO converters back the optional full ladder summary path. The browser
+// parser currently skips eager ladder decoding, so the constructors are dormant.
 use crate::*;
 use serde::Serialize;
 
