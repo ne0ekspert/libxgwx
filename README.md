@@ -157,7 +157,7 @@ local file picker without uploading them anywhere.
 
 ```sh
 cargo check --target wasm32-unknown-unknown --features wasm
-wasm-pack build --target web --out-dir web/dist/pkg --features wasm --no-default-features
+wasm-pack build --target web --out-dir web/dist/pkg --out-name libxgwx --features wasm --no-default-features
 cp web/index.html web/styles.css web/app.js web/dist/
 ```
 
