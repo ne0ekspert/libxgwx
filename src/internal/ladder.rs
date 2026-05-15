@@ -20,12 +20,7 @@ pub(crate) fn extract_utf16_marker_strings(
             let text_end = text_start + char_len.saturating_mul(2);
 
             if let Some(encoded) = data.get(text_start..text_end) {
-                let units = encoded
-                    .chunks_exact(2)
-                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
-                    .collect::<Vec<_>>();
-
-                if let Ok(value) = String::from_utf16(&units)
+                if let Some(value) = decode_utf16_bytes(encoded)
                     && (include_empty || !value.is_empty())
                     && (!ascii_graphic_only
                         || value.chars().all(|ch| ch.is_ascii_graphic() || ch == ' '))
@@ -683,11 +678,7 @@ pub(crate) fn read_ladder_inline_utf16_string(
             let text_start = offset + 4;
             let text_end = text_start + unit_count * 2;
             if text_end <= data.len() && text_end <= end {
-                let units = data[text_start..text_end]
-                    .chunks_exact(2)
-                    .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
-                    .collect::<Vec<_>>();
-                if let Ok(text) = String::from_utf16(&units) {
+                if let Some(text) = decode_utf16_bytes(&data[text_start..text_end]) {
                     return Some(text);
                 }
             }
@@ -697,6 +688,16 @@ pub(crate) fn read_ladder_inline_utf16_string(
     }
 
     None
+}
+
+fn decode_utf16_bytes(bytes: &[u8]) -> Option<String> {
+    char::decode_utf16(
+        bytes
+            .chunks_exact(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]])),
+    )
+    .collect::<Result<String, _>>()
+    .ok()
 }
 
 pub(crate) fn ladder_record_coordinate(data: &[u8], offset: usize) -> Option<(u8, u8)> {

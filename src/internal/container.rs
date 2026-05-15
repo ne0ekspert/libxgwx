@@ -20,12 +20,13 @@ pub(crate) fn parse_header_label(raw: &[u8]) -> (Option<String>, Option<u32>) {
         return (None, None);
     };
 
-    let mut utf16_units = Vec::with_capacity(unit_count);
-    for unit in encoded.chunks_exact(2) {
-        utf16_units.push(u16::from_le_bytes([unit[0], unit[1]]));
-    }
-
-    let label = String::from_utf16(&utf16_units).ok();
+    let label = char::decode_utf16(
+        encoded
+            .chunks_exact(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]])),
+    )
+    .collect::<Result<String, _>>()
+    .ok();
     let label_following_u32 = raw
         .get(end..end + 4)
         .and_then(|bytes| bytes.try_into().ok())

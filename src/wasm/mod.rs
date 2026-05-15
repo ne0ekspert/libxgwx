@@ -47,6 +47,12 @@ impl WasmDocumentSummary {
     fn from_document(doc: &XgwxDocument) -> Self {
         let mut warnings = Vec::new();
         let project = doc.project_info();
+        let configurations = doc.configurations();
+        let networks = doc.networks();
+        let bases = doc.bases();
+        let modules = doc.modules();
+        let programs = doc.programs();
+        let position_parameters = doc.position_parameters();
         let variable_summaries = match doc.variables() {
             Ok(variables) => Some(variables),
             Err(error) => {
@@ -55,16 +61,14 @@ impl WasmDocumentSummary {
             }
         };
         let decoded_payloads = doc.decoded_payloads();
-        let decoded_payload_errors = decoded_payloads
+        let mut decoded_payload_errors = 0;
+        for error in decoded_payloads
             .iter()
             .filter_map(|payload| payload.as_ref().err())
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
-        warnings.extend(
-            decoded_payload_errors
-                .iter()
-                .map(|error| format!("payload: {error}")),
-        );
+        {
+            decoded_payload_errors += 1;
+            warnings.push(format!("payload: {error}"));
+        }
         let ladder_programs = doc.ladder_programs();
         warnings.extend(
             ladder_programs
@@ -98,13 +102,13 @@ impl WasmDocumentSummary {
                 file_last_write_time: project.file_last_write_time,
             },
             counts: WasmCounts {
-                configurations: doc.configurations().len(),
-                networks: doc.networks().len(),
-                modules: doc.modules().len(),
-                programs: doc.programs().len(),
+                configurations: configurations.len(),
+                networks: networks.len(),
+                modules: modules.len(),
+                programs: programs.len(),
                 variables: variable_summaries.as_ref().map(Vec::len),
                 decoded_payloads: decoded_payloads.len(),
-                decoded_payload_errors: decoded_payload_errors.len(),
+                decoded_payload_errors,
                 ladder_programs: ladder_programs
                     .iter()
                     .filter(|program| program.is_ok())
@@ -116,12 +120,11 @@ impl WasmDocumentSummary {
                 cnet_modules: cnet_configs.len(),
                 fenet_modules: fenet_configs.len(),
                 hsc_parameters: hsc.len(),
-                position_parameters: doc.position_parameters().len(),
+                position_parameters: position_parameters.len(),
                 pid_cal_parameters: pid_cal.len(),
                 pid_tune_parameters: pid_tune.len(),
             },
-            programs: doc
-                .programs()
+            programs: programs
                 .into_iter()
                 .map(WasmProgramSummary::from_program)
                 .collect(),
@@ -131,13 +134,8 @@ impl WasmDocumentSummary {
                 .map(WasmVariableSummary::from_variable)
                 .collect(),
             hardware: WasmHardwareSummary {
-                bases: doc
-                    .bases()
-                    .into_iter()
-                    .map(WasmBaseSummary::from_base)
-                    .collect(),
-                modules: doc
-                    .modules()
+                bases: bases.into_iter().map(WasmBaseSummary::from_base).collect(),
+                modules: modules
                     .into_iter()
                     .map(WasmModuleSummary::from_module)
                     .collect(),
@@ -152,8 +150,7 @@ impl WasmDocumentSummary {
                         .map(|program| WasmLadderProgramSummary::from_program(index, program))
                 })
                 .collect(),
-            networks: doc
-                .networks()
+            networks: networks
                 .into_iter()
                 .map(WasmNetworkSummary::from_network)
                 .collect(),
@@ -166,8 +163,7 @@ impl WasmDocumentSummary {
                 .map(WasmFenetSummary::from_fenet)
                 .collect(),
             hsc,
-            position: doc
-                .position_parameters()
+            position: position_parameters
                 .into_iter()
                 .map(WasmPositionSummary::from_position)
                 .collect(),

@@ -5,21 +5,33 @@ use bzip2::read::BzDecoder;
 use std::io::Read;
 
 pub(crate) fn decode_base64_payload(text: &str, compressed: bool) -> Result<Vec<u8>, XgwxError> {
-    let (_, decoded) = decode_base64_payload_with_raw(text, compressed)?;
-    Ok(decoded)
+    let encoded = compact_ascii_bytes(text);
+    if encoded.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(XgwxError::Base64)?;
+
+    if compressed {
+        decompress_bzip2(decoded.as_slice())
+    } else {
+        Ok(decoded)
+    }
 }
 
 pub(crate) fn decode_base64_payload_with_raw(
     text: &str,
     compressed: bool,
 ) -> Result<(Vec<u8>, Vec<u8>), XgwxError> {
-    let encoded = text.split_whitespace().collect::<String>();
+    let encoded = compact_ascii_bytes(text);
     if encoded.is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
 
     let decoded = base64::engine::general_purpose::STANDARD
-        .decode(encoded.as_bytes())
+        .decode(encoded)
         .map_err(XgwxError::Base64)?;
 
     if !compressed {
@@ -27,11 +39,7 @@ pub(crate) fn decode_base64_payload_with_raw(
     }
 
     let raw = decoded;
-    let mut decoder = BzDecoder::new(raw.as_slice());
-    let mut decompressed = Vec::new();
-    decoder
-        .read_to_end(&mut decompressed)
-        .map_err(XgwxError::Bzip2)?;
+    let decompressed = decompress_bzip2(raw.as_slice())?;
     Ok((raw, decompressed))
 }
 
@@ -40,7 +48,7 @@ pub(crate) fn decode_hex_ascii_payload(
     element: &str,
     attribute: &str,
 ) -> Result<Vec<u8>, XgwxError> {
-    let encoded = text.split_whitespace().collect::<String>();
+    let encoded = compact_ascii_bytes(text);
     if encoded.len() % 2 != 0 {
         return Err(XgwxError::InvalidHexPayload {
             element: element.to_owned(),
@@ -49,21 +57,20 @@ pub(crate) fn decode_hex_ascii_payload(
     }
 
     let mut bytes = Vec::with_capacity(encoded.len() / 2);
-    let mut chars = encoded.chars();
-    while let (Some(high), Some(low)) = (chars.next(), chars.next()) {
-        let Some(high) = high.to_digit(16) else {
+    for pair in encoded.chunks_exact(2) {
+        let Some(high) = hex_nibble(pair[0]) else {
             return Err(XgwxError::InvalidHexPayload {
                 element: element.to_owned(),
                 attribute: attribute.to_owned(),
             });
         };
-        let Some(low) = low.to_digit(16) else {
+        let Some(low) = hex_nibble(pair[1]) else {
             return Err(XgwxError::InvalidHexPayload {
                 element: element.to_owned(),
                 attribute: attribute.to_owned(),
             });
         };
-        bytes.push(((high << 4) | low) as u8);
+        bytes.push((high << 4) | low);
     }
 
     Ok(bytes)
@@ -92,14 +99,14 @@ pub(crate) fn decoded_payload_summary(
     path: &[String],
 ) -> Result<DecodedPayloadSummary, XgwxError> {
     let compressed = attr_bool(element, "Compressed").unwrap_or(false);
-    let encoded = element.text.split_whitespace().collect::<String>();
+    let encoded_len = compact_ascii_len(&element.text);
     let (raw, data) = decode_base64_payload_with_raw(&element.text, compressed)?;
 
     Ok(DecodedPayloadSummary {
         path: path.join("/"),
         tag: element.name.clone(),
         compressed,
-        encoded_len: encoded.len(),
+        encoded_len,
         raw_len: raw.len(),
         decoded_len: data.len(),
         data,
@@ -142,10 +149,43 @@ pub(crate) fn is_known_payload_tag(name: &str) -> bool {
 }
 
 pub(crate) fn looks_like_base64_payload_text(text: &str) -> bool {
-    let encoded = text.split_whitespace().collect::<String>();
-    !encoded.is_empty()
-        && encoded.len() % 4 == 0
-        && encoded
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
+    let mut len = 0;
+    for byte in text.bytes().filter(|byte| !byte.is_ascii_whitespace()) {
+        if !(byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=')) {
+            return false;
+        }
+        len += 1;
+    }
+
+    len != 0 && len % 4 == 0
+}
+
+fn compact_ascii_bytes(text: &str) -> Vec<u8> {
+    text.bytes()
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .collect()
+}
+
+fn compact_ascii_len(text: &str) -> usize {
+    text.bytes()
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .count()
+}
+
+fn decompress_bzip2(raw: &[u8]) -> Result<Vec<u8>, XgwxError> {
+    let mut decoder = BzDecoder::new(raw);
+    let mut decompressed = Vec::new();
+    decoder
+        .read_to_end(&mut decompressed)
+        .map_err(XgwxError::Bzip2)?;
+    Ok(decompressed)
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }

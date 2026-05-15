@@ -125,6 +125,18 @@ This prints project counts plus decoded Cnet, FEnet, HSC, position, and PID
 summaries. It is useful for comparing parser output across fixture files without
 opening the TUI.
 
+## Benchmark Example
+
+Run the fixture-backed benchmark in release mode:
+
+```sh
+cargo run --release --example bench -- --warmup 50 --iterations 500 fixtures
+```
+
+The benchmark reads `.xgwx` fixture bytes once, then measures parser-only work
+and parser plus higher-level decoding paths such as variables, ladder programs,
+parameters, network summaries, and decoded payloads.
+
 ## GUI Ladder PoC
 
 Run the graphical ladder viewer:
