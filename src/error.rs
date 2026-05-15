@@ -41,6 +41,10 @@ pub enum XgwxError {
     Bzip2(io::Error),
     Utf8(std::string::FromUtf8Error),
     Xml(roxmltree::Error),
+    ResourceLimitExceeded {
+        resource: &'static str,
+        limit: usize,
+    },
 }
 
 impl fmt::Display for XgwxError {
@@ -87,6 +91,9 @@ impl fmt::Display for XgwxError {
             Self::Bzip2(error) => write!(f, "failed to bzip2-decompress ProgramData: {error}"),
             Self::Utf8(error) => write!(f, "XML payload is not valid UTF-8: {error}"),
             Self::Xml(error) => write!(f, "XML payload is not well-formed: {error}"),
+            Self::ResourceLimitExceeded { resource, limit } => {
+                write!(f, "{resource} exceeds parser limit ({limit} bytes/items)")
+            }
         }
     }
 }

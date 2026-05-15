@@ -48,6 +48,9 @@ pub(crate) fn find_trailer_gzip_members(bytes: &[u8], trailer_start: usize) -> V
     let mut search_from = trailer_start;
 
     while let Some(offset) = find_gzip_member(bytes, search_from) {
+        if members.len() >= MAX_TRAILER_GZIP_MEMBERS {
+            break;
+        }
         match parse_gzip_member(bytes, offset) {
             Ok(member) => {
                 search_from = member.end_offset;
@@ -80,6 +83,12 @@ pub(crate) fn parse_gzip_member(bytes: &[u8], offset: usize) -> Result<GzipMembe
         let produced = usize::try_from(decompressor.total_out() - total_out_before)
             .map_err(|_| XgwxError::TruncatedGzipMember { offset })?;
 
+        if data.len().saturating_add(produced) > MAX_GZIP_MEMBER_DECOMPRESSED_LEN {
+            return Err(XgwxError::ResourceLimitExceeded {
+                resource: "gzip member decompressed size",
+                limit: MAX_GZIP_MEMBER_DECOMPRESSED_LEN,
+            });
+        }
         data.extend_from_slice(&output[..produced]);
         input = &input[consumed..];
 
