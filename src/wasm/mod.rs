@@ -122,6 +122,10 @@ impl WasmDocumentSummary {
         let decoded_payload_errors = 0;
         let ladder_program_count = 0;
         let ladder_errors = 0;
+        warnings.push(
+            "payload and ladder decode skipped in browser summary to avoid unbounded decoding; zero counts here do not imply absence"
+                .to_owned(),
+        );
         let hsc = doc
             .hsc_parameters()
             .into_iter()
