@@ -348,7 +348,7 @@ pub struct VariableSummary {
 impl VariableSummary {
     pub(crate) fn from_symbols_element(symbols: &XmlElement) -> Result<Vec<Self>, XgwxError> {
         let compressed = attr_bool(symbols, "Compressed").unwrap_or(false);
-        let data = decode_base64_payload(&symbols.text, compressed)?;
+        let data = decode_base64_payload(&symbols.text, compressed)?.data;
         let strings = extract_utf16_marker_strings(&data, false, true);
         let starts = strings
             .iter()
@@ -423,8 +423,9 @@ impl LadderProgramData {
             .next()
             .ok_or(XgwxError::MissingProgramData)?;
         let compressed = attr_bool(program_data, "Compressed").unwrap_or(false);
-        let encoded = program_data.text.split_whitespace().collect::<String>();
-        let data = decode_base64_payload(&program_data.text, compressed)?;
+        let payload = decode_base64_payload(&program_data.text, compressed)?;
+        let encoded_len = payload.encoded_len;
+        let data = payload.data;
         let strings = extract_ladder_strings(&data);
         let elements = extract_ladder_elements(&data, &strings);
         let structure = extract_ladder_structure(&data, &elements);
@@ -436,7 +437,7 @@ impl LadderProgramData {
             project_type: attr_u32(program_data, "ProjectType"),
             eno_control_option: attr_u32(program_data, "ENOControlOption"),
             compressed,
-            encoded_len: encoded.len(),
+            encoded_len,
             decoded_len: data.len(),
             data,
             strings,

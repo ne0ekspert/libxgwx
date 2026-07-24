@@ -4,14 +4,27 @@ use base64::Engine;
 use bzip2::read::BzDecoder;
 use std::io::Read;
 
-pub(crate) fn decode_base64_payload(text: &str, compressed: bool) -> Result<Vec<u8>, XgwxError> {
+pub(crate) struct Base64Payload {
+    pub(crate) encoded_len: usize,
+    pub(crate) raw_len: usize,
+    pub(crate) data: Vec<u8>,
+}
+
+pub(crate) fn decode_base64_payload(
+    text: &str,
+    compressed: bool,
+) -> Result<Base64Payload, XgwxError> {
     let encoded = compact_ascii_bytes(text);
     if encoded.is_empty() {
-        return Ok(Vec::new());
+        return Ok(Base64Payload {
+            encoded_len: 0,
+            raw_len: 0,
+            data: Vec::new(),
+        });
     }
 
     let decoded = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
+        .decode(&encoded)
         .map_err(XgwxError::Base64)?;
     if decoded.len() > MAX_BASE64_DECODED_LEN {
         return Err(XgwxError::ResourceLimitExceeded {
@@ -20,39 +33,18 @@ pub(crate) fn decode_base64_payload(text: &str, compressed: bool) -> Result<Vec<
         });
     }
 
-    if compressed {
+    let raw_len = decoded.len();
+    let data = if compressed {
         decompress_bzip2(decoded.as_slice())
     } else {
         Ok(decoded)
-    }
-}
+    }?;
 
-pub(crate) fn decode_base64_payload_with_raw(
-    text: &str,
-    compressed: bool,
-) -> Result<(Vec<u8>, Vec<u8>), XgwxError> {
-    let encoded = compact_ascii_bytes(text);
-    if encoded.is_empty() {
-        return Ok((Vec::new(), Vec::new()));
-    }
-
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .map_err(XgwxError::Base64)?;
-    if decoded.len() > MAX_BASE64_DECODED_LEN {
-        return Err(XgwxError::ResourceLimitExceeded {
-            resource: "base64 decoded payload size",
-            limit: MAX_BASE64_DECODED_LEN,
-        });
-    }
-
-    if !compressed {
-        return Ok((decoded.clone(), decoded));
-    }
-
-    let raw = decoded;
-    let decompressed = decompress_bzip2(raw.as_slice())?;
-    Ok((raw, decompressed))
+    Ok(Base64Payload {
+        encoded_len: encoded.len(),
+        raw_len,
+        data,
+    })
 }
 
 pub(crate) fn decode_hex_ascii_payload(
@@ -61,7 +53,7 @@ pub(crate) fn decode_hex_ascii_payload(
     attribute: &str,
 ) -> Result<Vec<u8>, XgwxError> {
     let encoded = compact_ascii_bytes(text);
-    if encoded.len() % 2 != 0 {
+    if !encoded.len().is_multiple_of(2) {
         return Err(XgwxError::InvalidHexPayload {
             element: element.to_owned(),
             attribute: attribute.to_owned(),
@@ -111,17 +103,16 @@ pub(crate) fn decoded_payload_summary(
     path: &[String],
 ) -> Result<DecodedPayloadSummary, XgwxError> {
     let compressed = attr_bool(element, "Compressed").unwrap_or(false);
-    let encoded_len = compact_ascii_len(&element.text);
-    let (raw, data) = decode_base64_payload_with_raw(&element.text, compressed)?;
+    let payload = decode_base64_payload(&element.text, compressed)?;
 
     Ok(DecodedPayloadSummary {
         path: path.join("/"),
         tag: element.name.clone(),
         compressed,
-        encoded_len,
-        raw_len: raw.len(),
-        decoded_len: data.len(),
-        data,
+        encoded_len: payload.encoded_len,
+        raw_len: payload.raw_len,
+        decoded_len: payload.data.len(),
+        data: payload.data,
         attributes: element.attributes.clone(),
     })
 }
@@ -176,12 +167,6 @@ fn compact_ascii_bytes(text: &str) -> Vec<u8> {
     text.bytes()
         .filter(|byte| !byte.is_ascii_whitespace())
         .collect()
-}
-
-fn compact_ascii_len(text: &str) -> usize {
-    text.bytes()
-        .filter(|byte| !byte.is_ascii_whitespace())
-        .count()
 }
 
 fn decompress_bzip2(raw: &[u8]) -> Result<Vec<u8>, XgwxError> {

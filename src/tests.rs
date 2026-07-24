@@ -28,6 +28,29 @@ fn parses_synthetic_workspace() {
 }
 
 #[test]
+fn reports_base64_payload_lengths() {
+    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Project>
+  <TableData dt="bin.base64">
+    YW
+    Jj
+  </TableData>
+</Project>"#;
+    let doc = XgwxDocument::parse(&synthetic_xgwx_bytes(xml)).expect("synthetic parses");
+    let payload = doc
+        .decoded_payloads()
+        .into_iter()
+        .next()
+        .expect("payload exists")
+        .expect("payload decodes");
+
+    assert_eq!(payload.encoded_len, 4);
+    assert_eq!(payload.raw_len, 3);
+    assert_eq!(payload.decoded_len, 3);
+    assert_eq!(payload.data, b"abc");
+}
+
+#[test]
 fn decodes_xgi_d24_input_filter() {
     let doc = XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture parses");
     let module = doc

@@ -677,10 +677,11 @@ pub(crate) fn read_ladder_inline_utf16_string(
             let unit_count = usize::from(*data.get(offset + 3)?);
             let text_start = offset + 4;
             let text_end = text_start + unit_count * 2;
-            if text_end <= data.len() && text_end <= end {
-                if let Some(text) = decode_utf16_bytes(&data[text_start..text_end]) {
-                    return Some(text);
-                }
+            if text_end <= data.len()
+                && text_end <= end
+                && let Some(text) = decode_utf16_bytes(&data[text_start..text_end])
+            {
+                return Some(text);
             }
         }
 
