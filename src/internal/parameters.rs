@@ -69,6 +69,13 @@ pub(crate) fn hex_nibble_at(text: &str, offset: usize) -> Option<u8> {
         .and_then(|value| u8::try_from(value).ok())
 }
 
+pub(crate) fn hex_byte_at(text: &str, offset: usize) -> Option<u8> {
+    let nibble_offset = offset.checked_mul(2)?;
+    let high = hex_nibble_at(text, nibble_offset)?;
+    let low = hex_nibble_at(text, nibble_offset + 1)?;
+    Some((high << 4) | low)
+}
+
 pub(crate) fn position_axis_name(axis_index: usize) -> &'static str {
     match axis_index {
         0 => "X",

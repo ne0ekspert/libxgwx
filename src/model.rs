@@ -150,20 +150,103 @@ pub struct ModuleSummary {
     pub name: Option<String>,
     pub comment: Option<String>,
     pub details: Option<String>,
+    /// Raw first `Details` byte for an XGI-D24A/B input module.
+    pub input_filter_raw: Option<u8>,
+    /// Decoded XGI-D24A/B digital input filter.
+    pub input_filter: Option<ModuleInputFilter>,
     pub attributes: Vec<XmlAttribute>,
 }
 
 impl ModuleSummary {
     pub(crate) fn from_element(element: &XmlElement) -> Self {
+        let name = attr_string(element, "Name");
+        let details = attr_string(element, "Details");
+        let input_filter_raw = name
+            .as_deref()
+            .filter(|name| name.contains("XGI-D24A/B"))
+            .and(details.as_deref())
+            .and_then(|details| hex_byte_at(details, 0));
+
         Self {
             base: attr_u32(element, "Base"),
             slot: attr_u32(element, "Slot"),
             id: attr_u32(element, "Id"),
             sub_type: attr_u32(element, "SubType"),
-            name: attr_string(element, "Name"),
+            name,
             comment: attr_string(element, "Comment"),
-            details: attr_string(element, "Details"),
+            details,
+            input_filter_raw,
+            input_filter: input_filter_raw.map(ModuleInputFilter::from_raw),
             attributes: element.attributes.clone(),
+        }
+    }
+}
+
+/// Digital input filter configured for an XGI-D24A/B module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModuleInputFilter {
+    /// Use the module's default filter (`0`).
+    Default,
+    /// 1 millisecond (`1`).
+    Ms1,
+    /// 3 milliseconds (`3`).
+    Ms3,
+    /// 5 milliseconds (`5`).
+    Ms5,
+    /// 10 milliseconds (`10`).
+    Ms10,
+    /// 20 milliseconds (`20`).
+    Ms20,
+    /// 70 milliseconds (`70`).
+    Ms70,
+    /// 100 milliseconds (`100`).
+    Ms100,
+    /// Unrecognized raw filter value.
+    Unknown(u8),
+}
+
+impl ModuleInputFilter {
+    pub(crate) fn from_raw(value: u8) -> Self {
+        match value {
+            0 => Self::Default,
+            1 => Self::Ms1,
+            3 => Self::Ms3,
+            5 => Self::Ms5,
+            10 => Self::Ms10,
+            20 => Self::Ms20,
+            70 => Self::Ms70,
+            100 => Self::Ms100,
+            value => Self::Unknown(value),
+        }
+    }
+
+    /// Return the configured duration, or `None` for default and unknown values.
+    pub const fn milliseconds(self) -> Option<u8> {
+        match self {
+            Self::Default | Self::Unknown(_) => None,
+            Self::Ms1 => Some(1),
+            Self::Ms3 => Some(3),
+            Self::Ms5 => Some(5),
+            Self::Ms10 => Some(10),
+            Self::Ms20 => Some(20),
+            Self::Ms70 => Some(70),
+            Self::Ms100 => Some(100),
+        }
+    }
+}
+
+impl fmt::Display for ModuleInputFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Default => write!(f, "Default"),
+            Self::Ms1 => write!(f, "1 ms"),
+            Self::Ms3 => write!(f, "3 ms"),
+            Self::Ms5 => write!(f, "5 ms"),
+            Self::Ms10 => write!(f, "10 ms"),
+            Self::Ms20 => write!(f, "20 ms"),
+            Self::Ms70 => write!(f, "70 ms"),
+            Self::Ms100 => write!(f, "100 ms"),
+            Self::Unknown(value) => write!(f, "Unknown ({value})"),
         }
     }
 }

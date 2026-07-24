@@ -28,6 +28,67 @@ fn parses_synthetic_workspace() {
 }
 
 #[test]
+fn decodes_xgi_d24_input_filter() {
+    let doc = XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture parses");
+    let module = doc
+        .modules()
+        .into_iter()
+        .find(|module| {
+            module
+                .name
+                .as_deref()
+                .is_some_and(|name| name.contains("XGI-D24A/B"))
+        })
+        .expect("fixture has an XGI-D24A/B module");
+
+    assert_eq!(module.input_filter_raw, Some(0));
+    assert_eq!(module.input_filter, Some(ModuleInputFilter::Default));
+    assert_eq!(
+        module.input_filter.and_then(|value| value.milliseconds()),
+        None
+    );
+
+    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Project>
+  <Parameter Type="IO PARAMETER">
+    <Module Name="XGI-D24A/B" Details="0500000000000000" />
+  </Parameter>
+</Project>"#;
+    let doc = XgwxDocument::parse(&synthetic_xgwx_bytes(xml)).expect("synthetic parses");
+    let module = doc.modules().into_iter().next().expect("module exists");
+
+    assert_eq!(module.input_filter_raw, Some(5));
+    assert_eq!(module.input_filter, Some(ModuleInputFilter::Ms5));
+    assert_eq!(
+        module.input_filter.and_then(|value| value.milliseconds()),
+        Some(5)
+    );
+}
+
+#[test]
+fn maps_xgi_d24_input_filter_steps() {
+    let expected = [
+        (0, ModuleInputFilter::Default, None),
+        (1, ModuleInputFilter::Ms1, Some(1)),
+        (3, ModuleInputFilter::Ms3, Some(3)),
+        (5, ModuleInputFilter::Ms5, Some(5)),
+        (10, ModuleInputFilter::Ms10, Some(10)),
+        (20, ModuleInputFilter::Ms20, Some(20)),
+        (70, ModuleInputFilter::Ms70, Some(70)),
+        (100, ModuleInputFilter::Ms100, Some(100)),
+    ];
+
+    for (raw, filter, milliseconds) in expected {
+        assert_eq!(ModuleInputFilter::from_raw(raw), filter);
+        assert_eq!(filter.milliseconds(), milliseconds);
+    }
+    assert_eq!(
+        ModuleInputFilter::from_raw(4),
+        ModuleInputFilter::Unknown(4)
+    );
+}
+
+#[test]
 fn decodes_synthetic_ladder_records() {
     let data = synthetic_ladder_data();
     let strings = extract_ladder_strings(&data);

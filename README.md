@@ -47,6 +47,9 @@ for program in doc.programs() {
 - `XgwxDocument::configurations()`, `networks()`, `network_modules()`, `bases()`,
   `modules()`, `tasks()`, `programs()`, `high_speed_links()`, and
   `high_speed_link_blocks()` return owned high-level summaries.
+- XGI-D24A/B hardware module summaries decode the first `Details` byte as the
+  digital input filter: default (`0`) or `1`, `3`, `5`, `10`, `20`, `70`, or
+  `100` milliseconds. Unknown raw values are preserved.
 - `XgwxDocument::variables()` decodes the compressed global symbol table into
   variable summaries with name, formatted address, memory area, address number,
   data type, description, source reference, and range.

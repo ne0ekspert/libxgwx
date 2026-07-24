@@ -238,6 +238,7 @@ function renderHardware(hardware) {
               <th>Subtype</th>
               <th>Name</th>
               <th>Comment</th>
+              <th>Input filter</th>
               <th>Details</th>
             </tr>
           </thead>
@@ -265,6 +266,7 @@ function renderModuleRow(module) {
     <td>${escapeHtml(value(module.subType))}</td>
     <td>${escapeHtml(value(module.name))}</td>
     <td>${escapeHtml(value(module.comment))}</td>
+    <td>${escapeHtml(value(module.inputFilter))}</td>
     <td>${escapeHtml(value(module.details))}</td>
   </tr>`;
 }

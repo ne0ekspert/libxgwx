@@ -144,6 +144,8 @@ pub(super) struct WasmModuleSummary {
     pub(super) name: Option<String>,
     pub(super) comment: Option<String>,
     pub(super) details: Option<String>,
+    pub(super) input_filter_raw: Option<u8>,
+    pub(super) input_filter: Option<String>,
 }
 
 impl WasmModuleSummary {
@@ -156,6 +158,8 @@ impl WasmModuleSummary {
             name: module.name,
             comment: module.comment,
             details: module.details,
+            input_filter_raw: module.input_filter_raw,
+            input_filter: module.input_filter.map(|value| value.to_string()),
         }
     }
 }
