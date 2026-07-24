@@ -73,6 +73,8 @@ struct WasmDocumentSummary {
     networks: Vec<WasmNetworkSummary>,
     cnet: Vec<WasmCnetSummary>,
     fenet: Vec<WasmFenetSummary>,
+    parameters: Vec<WasmParameterSummary>,
+    safety_comm: Option<WasmSafetyCommSummary>,
     hsc: Vec<WasmHscSummary>,
     position: Vec<WasmPositionSummary>,
     pid: WasmPidSummary,
@@ -88,6 +90,8 @@ impl WasmDocumentSummary {
         let bases = doc.bases();
         let modules = doc.modules();
         let programs = doc.programs();
+        let parameters = doc.parameters();
+        let safety_comm = doc.safety_comm();
         let position_parameters = doc.position_parameters();
         let variable_summaries = match doc.variables() {
             Ok(variables) => Some(variables),
@@ -193,18 +197,74 @@ impl WasmDocumentSummary {
                 .iter()
                 .map(WasmFenetSummary::from_fenet)
                 .collect(),
+            parameters: parameters
+                .into_iter()
+                .map(WasmParameterSummary::from_parameter)
+                .collect(),
+            safety_comm: safety_comm.map(WasmSafetyCommSummary::from_safety),
             hsc,
             position: position_parameters
                 .into_iter()
                 .map(WasmPositionSummary::from_position)
                 .collect(),
-            pid: WasmPidSummary {
-                cal_parameters: pid_cal.len(),
-                tune_parameters: pid_tune.len(),
-                cal_loops: pid_cal.iter().map(|parameter| parameter.loops.len()).sum(),
-                tune_loops: pid_tune.iter().map(|parameter| parameter.loops.len()).sum(),
-            },
+            pid: WasmPidSummary::from_parameters(pid_cal, pid_tune),
             warnings,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn browser_summary_preserves_parameter_details() {
+        let doc =
+            XgwxDocument::from_path("fixtures/XGB_Enet02.xgwx").expect("fixture should parse");
+        let parameter_count = doc.parameters().len();
+        let summary = WasmDocumentSummary::from_document(&doc);
+
+        assert_eq!(summary.parameters.len(), parameter_count);
+        let basic = summary
+            .parameters
+            .iter()
+            .find(|parameter| parameter.parameter_type.as_deref() == Some("BASIC PARAMETER"))
+            .expect("basic parameter should be present");
+        assert!(
+            basic
+                .sections
+                .iter()
+                .any(|section| !section.attributes.is_empty())
+        );
+
+        assert!(
+            summary
+                .hsc
+                .iter()
+                .any(|parameter| !parameter.channels.is_empty())
+        );
+        assert!(
+            summary
+                .position
+                .iter()
+                .any(|parameter| { parameter.axes.iter().any(|axis| axis.parameter.is_some()) })
+        );
+        assert!(!summary.pid.calculation.is_empty());
+        assert!(!summary.pid.tuning.is_empty());
+
+        let json = serde_json::to_value(&summary).expect("summary should serialize");
+        assert!(json.pointer("/parameters/0/sections").is_some());
+        assert!(json.pointer("/position/0/axes/0/parameter").is_some());
+        assert!(json.pointer("/pid/calculation/0/loops").is_some());
+        assert!(json.pointer("/pid/tuning/0/loops").is_some());
+        assert!(json.pointer("/cnet/0/ports/0/rxTimeout").is_some());
+        assert!(json.pointer("/fenet/0/ipAddress2").is_some());
+
+        let safety_doc =
+            XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture should parse");
+        let safety_summary = WasmDocumentSummary::from_document(&safety_doc);
+        assert!(safety_summary.safety_comm.is_some());
+        let safety_json = serde_json::to_value(&safety_summary).expect("summary should serialize");
+        assert!(safety_json.pointer("/safetyComm/channels").is_some());
     }
 }

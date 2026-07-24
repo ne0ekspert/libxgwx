@@ -722,40 +722,500 @@ function renderFenet(config) {
 }
 
 function renderParameters(summary) {
-  const hsc = summary.hsc.length
-    ? section("HSC", `<div class="list">${summary.hsc.map((parameter, index) => listItem(`HSC parameter ${index + 1}`, [
-        details([["Payload bytes", parameter.payloadBytes], ["Channels", parameter.channels.length]]),
-        `<div class="list">${parameter.channels.map((channel) => listItem(`Channel ${channel.channel}`, details([
-          ["Counter mode", value(channel.counterMode)],
-          ["Pulse input", value(channel.pulseInputMode)],
-          ["Compare output", value(channel.compareOutputMode)],
-          ["Ring max", value(channel.ringCounterMax)],
-          ["Compare min", value(channel.compareOutputMin)],
-          ["Compare max", value(channel.compareOutputMax)],
-          ["Unit time ms", value(channel.unitTimeMs)],
-          ["Pulses/rev", value(channel.pulsesPerRevolution)],
-        ]))).join("")}</div>`,
-      ].join(""))).join("")}</div>`)
-    : "";
+  const parameters = summary.parameters ?? [];
+  if (!parameters.length) {
+    panels.parameters.innerHTML = empty("No parameters found.");
+    return;
+  }
 
-  const position = summary.position.length
-    ? section("Position", `<div class="list">${summary.position.map((parameter, index) => listItem(`Position parameter ${index + 1}`, [
-        details([["Axis count", value(parameter.axisCount)], ["Parsed axes", parameter.axes.length]]),
-        `<div class="list">${parameter.axes.map((axis) => listItem(`${axis.axisName} axis`, details([
-          ["Step count", value(axis.stepCount)],
-          ["Parsed steps", axis.parsedSteps],
-        ]))).join("")}</div>`,
-      ].join(""))).join("")}</div>`)
-    : "";
+  panels.parameters.innerHTML = `
+    <div class="parameter-layout">
+      <aside class="parameter-sidebar" aria-label="Parameter list">
+        ${parameters.map((parameter, index) => `<button class="parameter-button ${index === 0 ? "active" : ""}" type="button" data-parameter-index="${index}">
+          <span>${escapeHtml(value(parameter.parameterType, `<parameter ${index + 1}>`))}</span>
+          <small>${escapeHtml(`${parameter.sections.length} sections`)}</small>
+        </button>`).join("")}
+      </aside>
+      <div id="parameter-detail" class="parameter-detail"></div>
+    </div>`;
 
-  const pid = section("PID", details([
-    ["CAL parameters", summary.pid.calParameters],
-    ["TUNE parameters", summary.pid.tuneParameters],
-    ["CAL loops", summary.pid.calLoops],
-    ["TUNE loops", summary.pid.tuneLoops],
+  const detail = panels.parameters.querySelector("#parameter-detail");
+  const buttons = panels.parameters.querySelectorAll(".parameter-button");
+  const showParameter = (index) => {
+    buttons.forEach((button) => {
+      button.classList.toggle("active", Number(button.dataset.parameterIndex) === index);
+    });
+    detail.innerHTML = renderParameterDetail(summary, parameters[index], index);
+  };
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => showParameter(Number(button.dataset.parameterIndex)));
+  });
+
+  showParameter(0);
+}
+
+function renderParameterDetail(summary, parameter, index) {
+  const parameterType = value(parameter.parameterType, `<parameter ${index + 1}>`);
+  const output = [
+    section(parameterType, [
+      details([
+        ["Sections", parameter.sections.length],
+        ["Attributes", parameter.attributes.length],
+      ]),
+      renderAttributeTable(parameter.attributes),
+    ].join("")),
+    ...parameter.sections.map((parameterSection) => renderParameterSection(
+      parameterSection,
+      parameter.parameterType === "BASIC PARAMETER",
+    )),
+  ];
+
+  if (parameter.parameterType === "BASIC PARAMETER") {
+    const timerAreaCharts = renderTimerAreaCharts(parameter);
+    if (timerAreaCharts) {
+      output.splice(1, 0, timerAreaCharts);
+    }
+  }
+
+  const typeIndex = (summary.parameters ?? [])
+    .slice(0, index + 1)
+    .filter((item) => item.parameterType === parameter.parameterType)
+    .length - 1;
+
+  if (parameter.parameterType?.includes("FENET") && summary.safetyComm) {
+    output.push(renderSafetyComm(summary.safetyComm));
+  }
+  if (parameter.parameterType === "HSC PARAMETER" && summary.hsc?.[typeIndex]) {
+    output.push(...renderHscParameter(summary.hsc[typeIndex]));
+  }
+  if (parameter.parameterType === "POSITION PARAMETER" && summary.position?.[typeIndex]) {
+    output.push(...renderPositionParameter(summary.position[typeIndex]));
+  }
+  if (parameter.parameterType === "IO PARAMETER") {
+    output.push(...renderIoParameter(summary.cnet ?? [], summary.fenet ?? []));
+  }
+  if (parameter.parameterType === "PID CAL PARAMETER" && summary.pid?.calculation?.[typeIndex]) {
+    output.push(...renderPidCalculation(summary.pid.calculation[typeIndex]));
+  }
+  if (parameter.parameterType === "PID TUNE PARAMETER" && summary.pid?.tuning?.[typeIndex]) {
+    output.push(...renderPidTuning(summary.pid.tuning[typeIndex]));
+  }
+
+  return output.join("");
+}
+
+function renderParameterSection(parameterSection, groupIndexed) {
+  const rows = [["Children", parameterSection.childCount]];
+  if (parameterSection.text !== null && parameterSection.text !== undefined) {
+    rows.push(["Text", parameterSection.text]);
+  }
+  return section(parameterSection.name, [
+    details(rows),
+    renderAttributeTable(parameterSection.attributes, groupIndexed),
+  ].join(""));
+}
+
+function renderAttributeTable(attributes, groupIndexed = false) {
+  if (!attributes?.length) {
+    return "";
+  }
+
+  const rows = groupIndexed
+    ? groupParameterAttributes(attributes)
+    : attributes.map((attribute) => ({
+        name: attribute.name,
+        value: attribute.value,
+        indexed: false,
+      }));
+
+  return `<div class="table-wrap parameter-attributes">
+    <table class="data-table is-compact">
+      <thead><tr><th>Attribute</th><th>Value</th></tr></thead>
+      <tbody>${rows.map((row) => `<tr class="${row.indexed ? "is-indexed" : ""}">
+        <td>${escapeHtml(row.name)}</td>
+        <td>${escapeHtml(value(row.value))}</td>
+      </tr>`).join("")}</tbody>
+    </table>
+  </div>`;
+}
+
+function groupParameterAttributes(attributes) {
+  const groups = [];
+
+  attributes.forEach((attribute) => {
+    const match = attribute.name.match(/^(.*)_(\d+)$/);
+    if (!match || !match[1]) {
+      groups.push({
+        name: attribute.name,
+        scalar: attribute.value,
+        values: [],
+      });
+      return;
+    }
+
+    const [, name, rawIndex] = match;
+    let group = groups.find((item) => item.name === name && item.scalar === undefined);
+    if (!group) {
+      group = { name, scalar: undefined, values: [] };
+      groups.push(group);
+    }
+    group.values.push([Number(rawIndex), attribute.value]);
+  });
+
+  return groups.flatMap((group) => {
+    if (group.scalar !== undefined) {
+      return [{ name: group.name, value: group.scalar, indexed: false }];
+    }
+
+    group.values.sort(([left], [right]) => left - right);
+    return [
+      { name: group.name, value: `${group.values.length} values`, indexed: false },
+      ...group.values.map(([index, attributeValue]) => ({
+        name: `[${index}]`,
+        value: attributeValue,
+        indexed: true,
+      })),
+    ];
+  });
+}
+
+function renderTimerAreaCharts(parameter) {
+  const attributes = parameter.sections
+    .flatMap((parameterSection) => parameterSection.attributes);
+  const areaRangeGroups = collectTimerRangeGroups(attributes, (name) => {
+    const match = name.match(/^T_(.+)_AREA_RANGE_(START|END)$/);
+    if (!match) {
+      return null;
+    }
+    const [, timerCode, bound] = match;
+    return {
+      bound,
+      field: `T_${timerCode}_AREA_RANGE`,
+      groupLabel: "RANGE",
+      timerCode,
+    };
+  });
+  const latchGroups = collectTimerRangeGroups(attributes, (name) => {
+    const match = name.match(/^T_(.+)_AREA_LATCH(\d+)_(START|END)$/);
+    if (!match) {
+      return null;
+    }
+    const [, timerCode, latch, bound] = match;
+    return {
+      bound,
+      field: `T_${timerCode}_AREA_LATCH${latch}`,
+      groupLabel: `LATCH${latch}`,
+      timerCode,
+    };
+  });
+
+  return [
+    renderTimerRangeChart("Timer Area Range", areaRangeGroups),
+    renderTimerRangeChart("Timer Latch Allocation", latchGroups),
+  ].filter(Boolean).join("");
+}
+
+function collectTimerRangeGroups(attributes, parseName) {
+  const groups = new Map();
+
+  attributes.forEach((attribute) => {
+    const parsed = parseName(attribute.name);
+    const numericValue = Number(attribute.value);
+    if (!parsed || !Number.isFinite(numericValue)) {
+      return;
+    }
+
+    if (!groups.has(parsed.groupLabel)) {
+      groups.set(parsed.groupLabel, new Map());
+    }
+    const timerRanges = groups.get(parsed.groupLabel);
+    if (!timerRanges.has(parsed.timerCode)) {
+      timerRanges.set(parsed.timerCode, {
+        field: parsed.field,
+        timerCode: parsed.timerCode,
+      });
+    }
+    timerRanges.get(parsed.timerCode)[parsed.bound.toLowerCase()] = numericValue;
+  });
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+    .map(([label, timerRanges]) => ({
+      label,
+      ranges: [...timerRanges.values()]
+        .filter((range) => range.start !== undefined
+          && range.end !== undefined
+          && range.end >= range.start)
+        .sort((left, right) => left.start - right.start),
+    }))
+    .filter((group) => group.ranges.length);
+}
+
+function renderTimerRangeChart(title, groups) {
+  if (!groups.length) {
+    return "";
+  }
+
+  const scaleStart = Math.min(...groups.flatMap((group) => group.ranges.map((range) => range.start)));
+  const scaleEnd = Math.max(...groups.flatMap((group) => group.ranges.map((range) => range.end)));
+  const scaleSize = scaleEnd - scaleStart + 1;
+
+  const rows = groups.map((group) => {
+    const segments = group.ranges.map((range, colorIndex) => {
+      const left = ((range.start - scaleStart) / scaleSize) * 100;
+      const width = ((range.end - range.start + 1) / scaleSize) * 100;
+      const label = timerCodeLabel(range.timerCode);
+      const count = range.end - range.start + 1;
+      return {
+        ...range,
+        colorIndex,
+        count,
+        label,
+        left,
+        width,
+      };
+    });
+
+    return `<div class="timer-range-row">
+      <div class="timer-range-row-label">${escapeHtml(group.label)}</div>
+      <div class="timer-range-track" role="img" aria-label="${escapeHtml(`${group.label} timer allocation from ${scaleStart} to ${scaleEnd}`)}">
+        ${segments.map((segment) => `<span class="timer-range-segment timer-range-color-${segment.colorIndex % 4}" style="left:${segment.left.toFixed(4)}%;width:${segment.width.toFixed(4)}%" title="${escapeHtml(`${segment.field}: ${segment.start}-${segment.end} (${segment.count})`)}"></span>`).join("")}
+      </div>
+      <div class="timer-range-legend">
+        ${segments.map((segment) => `<div class="timer-range-legend-item">
+          <span class="timer-range-swatch timer-range-color-${segment.colorIndex % 4}"></span>
+          <span><strong>${escapeHtml(segment.label)}</strong> ${escapeHtml(`${segment.start}-${segment.end}`)} <small>${escapeHtml(`${segment.count} points`)}</small></span>
+          <code>${escapeHtml(segment.field)}</code>
+        </div>`).join("")}
+      </div>
+    </div>`;
+  }).join("");
+
+  return section(title, `
+    <div class="timer-range-chart">
+      <div class="timer-range-scale"><span>${escapeHtml(scaleStart)}</span><span>${escapeHtml(scaleEnd)}</span></div>
+      ${rows}
+    </div>`);
+}
+
+function timerCodeLabel(timerCode) {
+  return {
+    "100US": "100 us",
+    "001MS": "1 ms",
+    "010MS": "10 ms",
+    "100MS": "100 ms",
+  }[timerCode] ?? timerCode;
+}
+
+function renderSafetyComm(safety) {
+  const channelRows = safety.channels.map((channel) => [
+    channel.name,
+    `${value(channel.address)} (type=${value(channel.dataType)} | size=${value(channel.size)} | raw=${value(channel.addr)})`,
+  ]);
+
+  return section("Safety Comm", details([
+    ["Rcv wait", value(safety.rcvWaitTime)],
+    ["Retrans", value(safety.retransTime)],
+    ["Glofa sockets", value(safety.glofaSocketCount)],
+    ["Driver type", value(safety.driverType)],
+    ["IP address", value(safety.ipAddress)],
+    ["IP raw", value(safety.ipAddressRaw)],
+    ["Gateway", value(safety.gateway)],
+    ["Gateway raw", value(safety.gatewayRaw)],
+    ["Subnet", value(safety.subnet)],
+    ["Subnet raw", value(safety.subnetRaw)],
+    ["Host table", value(safety.enableHostTable)],
+    ...channelRows,
   ]));
+}
 
-  panels.parameters.innerHTML = hsc + position + pid;
+function renderHscParameter(parameter) {
+  return [
+    section("HSC Payload", details([
+      ["Payload ASCII", value(parameter.payloadAscLength)],
+      ["Payload bytes", parameter.payloadBytes],
+      ["Initial unknown", value(parameter.initialUnknownNibble)],
+      ["Channels", parameter.channels.length],
+    ])),
+    ...parameter.channels.map((channel) => section(`HSC Channel ${channel.channel}`, details([
+      ["Counter mode", modeWithRaw(channel.counterMode, channel.counterModeRaw)],
+      ["Pulse input mode", modeWithRaw(channel.pulseInputMode, channel.pulseInputModeRaw)],
+      ["Compare output mode", modeWithRaw(channel.compareOutputMode, channel.compareOutputModeRaw)],
+      ["Internal preset", formatHex(channel.internalPreset, 2)],
+      ["External preset", formatHex(channel.externalPreset, 2)],
+      ["Ring counter max", formatHex(channel.ringCounterMax, 8)],
+      ["Compare output min", formatHex(channel.compareOutputMin, 8)],
+      ["Compare output max", formatHex(channel.compareOutputMax, 8)],
+      ["Unit time", formatHex(channel.unitTimeMs, 4)],
+      ["Pulses per revolution", formatHex(channel.pulsesPerRevolution, 4)],
+      ["Raw bytes", channel.rawBytes],
+    ]))),
+  ];
+}
+
+function renderPositionParameter(parameter) {
+  return [
+    section("Position Parameter", details([
+      ["Axis count", value(parameter.axisCount)],
+      ["Parsed axes", parameter.axes.length],
+    ])),
+    ...parameter.axes.map((axis) => {
+      const axisParameter = axis.parameter;
+      const rows = [
+        ["Step count", value(axis.stepCount)],
+        ["Steps parsed", axis.parsedSteps],
+      ];
+      if (axisParameter) {
+        rows.push(
+          ["Bias velocity", value(axisParameter.biasVelocity)],
+          ["Velocity limit", value(axisParameter.velocityLimit)],
+          ["Accel times", formatOptionArray(axisParameter.accelTimes)],
+          ["Decel times", formatOptionArray(axisParameter.decelTimes)],
+          ["Soft upper limit", value(axisParameter.softUpperLimit)],
+          ["Soft lower limit", value(axisParameter.softLowerLimit)],
+          ["Backlash compensation", value(axisParameter.backlashCompensation)],
+          ["S-curve ratio", value(axisParameter.sCurveRatio)],
+          ["Use limit", value(axisParameter.useLimit)],
+          ["Pulse output mode", value(axisParameter.pulseOutputMode)],
+          ["Orientation", value(axisParameter.orientation)],
+          ["Return velocity", `high=${value(axisParameter.returnVelocityHigh)} | low=${value(axisParameter.returnVelocityLow)}`],
+          ["Return timing", `accel=${value(axisParameter.returnAccelTime)} | decel=${value(axisParameter.returnDecelTime)} | dwell=${value(axisParameter.returnDwellTime)}`],
+          ["Return mode", `policy=${value(axisParameter.returnPolicy)} | direction=${value(axisParameter.returnDirection)}`],
+          ["Jog timing", `accel=${value(axisParameter.jogAccelTime)} | decel=${value(axisParameter.jogDecelTime)} | inching=${value(axisParameter.inchingTime)}`],
+          ["Jog velocity", `high=${value(axisParameter.jogVelocityHigh)} | low=${value(axisParameter.jogVelocityLow)}`],
+          ["Interpolation method", value(axisParameter.interpolationMethod)],
+        );
+      } else {
+        rows.push(["Axis parameter", "<missing>"]);
+      }
+      if (axis.firstStep) {
+        rows.push(
+          ["First step target", value(axis.firstStep.targetPosition)],
+          ["First step velocity", value(axis.firstStep.operationVelocity)],
+          ["First step dwell", value(axis.firstStep.dwellTime)],
+          ["First step mode", value(axis.firstStep.operationMode)],
+        );
+      }
+      return section(`${axis.axisName} Axis`, details(rows));
+    }),
+  ];
+}
+
+function renderIoParameter(cnet, fenet) {
+  return [
+    ...cnet.flatMap((config, configIndex) => [
+      section(`Cnet Module ${configIndex + 1}`, details([
+        ["Station", value(config.stationNo)],
+        ["Base", value(config.base)],
+        ["Slot", value(config.slot)],
+        ["Type", value(config.typeCode)],
+        ["Subtype", value(config.subType)],
+        ["Ports", config.ports.length],
+      ])),
+      ...config.ports.map((port, portIndex) => section(`Cnet Port ${portIndex + 1}`, details([
+        ["Station", value(port.stationNo)],
+        ["Mode", modeWithRaw(port.mode, port.modeRaw)],
+        ["Serial", `baud=${value(port.baudRate)} (${value(port.bps)}) | data=${modeWithRaw(port.dataBits, port.dataBitRaw)} | stop=${modeWithRaw(port.stopBits, port.stopBitRaw)} | parity=${modeWithRaw(port.parity, port.parityRaw)}`],
+        ["Timeout", `rx=${value(port.rxTimeout)} | char=${value(port.charTimeout)} | inter-char=${value(port.interCharTimeout)}`],
+        ["Driver type", value(port.driverType)],
+        ["DI", formatCnetDevice(port, "di")],
+        ["DO", formatCnetDevice(port, "do")],
+        ["AI", formatCnetDevice(port, "ai")],
+        ["AO", formatCnetDevice(port, "ao")],
+        ["Terminating resistor", value(port.terminatingResister)],
+        ["Repeater", value(port.repeater)],
+      ]))),
+    ]),
+    ...fenet.map((config, index) => section(`FEnet Module ${index + 1}`, details([
+      ["Station", value(config.stationNo)],
+      ["Base", value(config.base)],
+      ["Slot", value(config.slot)],
+      ["Type", value(config.typeCode)],
+      ["Subtype", value(config.subType)],
+      ["IP", value(config.ipAddress)],
+      ["Subnet", value(config.subnet)],
+      ["Gateway", value(config.gateway)],
+      ["DNS", value(config.dns)],
+      ["Secondary IP", value(config.ipAddress2)],
+      ["Secondary subnet", value(config.subnet2)],
+      ["Secondary gateway", value(config.gateway2)],
+      ["Secondary DNS", value(config.dns2)],
+      ["DHCP", value(config.dhcp)],
+      ["Driver type", value(config.driverType)],
+      ["Rcv wait", value(config.rcvWaitTime)],
+      ["Client wait", value(config.clientWaitTime)],
+      ["Glofa sockets", value(config.glofaSocketCount)],
+    ]))),
+  ];
+}
+
+function renderPidCalculation(parameter) {
+  return [
+    section("PID Calculation", details([
+      ["Loops", parameter.loops.length],
+      ["Header", formatOptionArray(parameter.header)],
+      ["Parameter size", value(parameter.parameterSize)],
+      ["Set PID out", value(parameter.setPidOut)],
+      ["Set direction", value(parameter.setDirection)],
+      ["Prevent anti windup", value(parameter.preventAntiWindup)],
+      ["Control method", `P=${value(parameter.proportionalControlMethod)} | D=${value(parameter.differentialControlMethod)}`],
+      ["Permit PWM", value(parameter.permitPwm)],
+    ])),
+    ...parameter.loops.map((loop) => section(`PID Calculation Loop ${loop.loopIndex}`, details([
+      ["Target value", value(loop.targetValue)],
+      ["Scan time", value(loop.scanTime)],
+      ["Gain", `P=${formatDecimalPair(loop.proportionalGain)} | I=${formatDecimalPair(loop.integralGain)} | D=${formatDecimalPair(loop.differentialGain)}`],
+      ["MV", `min=${value(loop.mvMin)} | max=${value(loop.mvMax)} | manual=${value(loop.mvManual)} | limit=${value(loop.mvLimit)}`],
+      ["PV", `min=${value(loop.pvMin)} | max=${value(loop.pvMax)} | limit=${value(loop.pvLimit)} | tracking=${value(loop.pvTrackingSetValue)}`],
+      ["Dead band", value(loop.deadBand)],
+      ["PWM", `forward=${value(loop.forwardPwm)} (${value(loop.forwardPwmAddress)}) | period=${value(loop.pwmOutPeriod)}`],
+    ]))),
+  ];
+}
+
+function renderPidTuning(parameter) {
+  return [
+    section("PID Tuning", details([
+      ["Loops", parameter.loops.length],
+      ["Set direction", value(parameter.setDirection)],
+      ["Permit PWM", value(parameter.permitPwm)],
+      ["Checksum", value(parameter.checksum)],
+      ["Footer", formatOptionArray(parameter.footer)],
+    ])),
+    ...parameter.loops.map((loop) => section(`PID Tuning Loop ${loop.loopIndex}`, details([
+      ["Target value", value(loop.targetValue)],
+      ["Scan time", value(loop.scanTime)],
+      ["MV", `min=${value(loop.mvMin)} | max=${value(loop.mvMax)}`],
+      ["PWM", `point=${value(loop.setPwmAtPoint)} (${value(loop.setPwmAtAddress)}) | period=${value(loop.outPeriod)}`],
+      ["Hysteresis", value(loop.hysteresis)],
+    ]))),
+  ];
+}
+
+function modeWithRaw(mode, raw) {
+  return `${value(mode)} (${value(raw, "?")})`;
+}
+
+function formatCnetDevice(port, prefix) {
+  const property = (suffix) => `${prefix}${suffix}`;
+  return `address=${value(port[property("Address")])} | device=${value(port[property("Device")])} (${value(port[property("DeviceType")])}) | data=${value(port[property("DataType")])} | size=${value(port[property("Size")])} | addr=${value(port[property("Addr")])}`;
+}
+
+function formatHex(item, width) {
+  if (item === null || item === undefined) {
+    return "<none>";
+  }
+  const unsigned = item < 0 ? item >>> 0 : item;
+  return `0x${unsigned.toString(16).toUpperCase().padStart(width, "0")} (${item})`;
+}
+
+function formatOptionArray(items) {
+  return (items ?? []).map((item) => value(item)).join(", ");
+}
+
+function formatDecimalPair(items) {
+  return `${value(items?.[0])}.${value(items?.[1])}`;
 }
 
 function clearPanels() {

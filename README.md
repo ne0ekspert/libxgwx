@@ -169,8 +169,9 @@ cp web/index.html web/styles.css web/app.js web/dist/
 The GitHub Pages workflow builds the same upload-only demo from `web/`. It does
 not publish `.xgwx` fixtures into the Pages artifact. The demo shows project
 summaries, a program sidebar, decoded variables, hardware modules, decoded
-network and parameter summaries, and a best-effort SVG ladder viewer for
-decoded ladder programs.
+network summaries, and a parameter selector with the same section attributes
+and decoded HSC, position, PID, safety, Cnet, and FEnet details as the TUI. It
+also includes a best-effort SVG ladder viewer for decoded ladder programs.
 
 ## Fixtures
 
