@@ -65,8 +65,11 @@ async function parseFile(file) {
 
 function render(summary, file) {
   renderSummary(summary, file);
-  const decodeSkipped = summaryIndicatesSkippedDecode(summary);
-  renderPrograms(summary.programs, summary.ladder ?? [], decodeSkipped);
+  renderPrograms(
+    summary.programs,
+    summary.ladder ?? [],
+    summaryIndicatesSkippedLadderDecode(summary),
+  );
   renderVariables(summary.variables ?? []);
   renderHardware(summary.hardware ?? { bases: [], modules: [] });
   renderNetworks(summary.networks, summary.cnet, summary.fenet);
@@ -75,7 +78,8 @@ function render(summary, file) {
 
 function renderSummary(summary, file) {
   const warnings = summary.warnings ?? [];
-  const decodeSkipped = summaryIndicatesSkippedDecode(summary);
+  const payloadDecodeSkipped = summaryIndicatesSkippedPayloadDecode(summary);
+  const ladderDecodeSkipped = summaryIndicatesSkippedLadderDecode(summary);
   panels.summary.innerHTML = [
     section("Project", details([
       ["Uploaded file", file.name],
@@ -88,7 +92,7 @@ function renderSummary(summary, file) {
       ["Header bytes", summary.header.headerBytes],
       ["Trailer bytes", summary.header.trailerBytes],
     ])),
-    `<div class="grid">${metric("Programs", summary.counts.programs)}${metric("Networks", summary.counts.networks)}${metric("Modules", summary.counts.modules)}${metric("Variables", value(summary.counts.variables))}${metric("Payloads", decodeSkipped ? "Skipped" : summary.counts.decodedPayloads)}${metric("Ladder", decodeSkipped ? "Skipped" : summary.counts.ladderPrograms)}</div>`,
+    `<div class="grid">${metric("Programs", summary.counts.programs)}${metric("Networks", summary.counts.networks)}${metric("Modules", summary.counts.modules)}${metric("Variables", value(summary.counts.variables))}${metric("Payloads", payloadDecodeSkipped ? "Skipped" : summary.counts.decodedPayloads)}${metric("Ladder", ladderDecodeSkipped ? "Skipped" : summary.counts.ladderPrograms)}</div>`,
     warnings.length
       ? section("Warnings", `<div class="list">${warnings.map((warning) => `<div class="list-item warning">${escapeHtml(warning)}</div>`).join("")}</div>`)
       : "",
@@ -155,8 +159,18 @@ function renderProgramDetail(program, ladder, index, decodeSkipped = false) {
   ].join("");
 }
 
-function summaryIndicatesSkippedDecode(summary) {
-  return (summary.warnings ?? []).some((warning) => warning.includes("decode skipped in browser summary"));
+function summaryIndicatesSkippedPayloadDecode(summary) {
+  return (summary.warnings ?? []).some((warning) => (
+    warning.includes("payload decode skipped in browser summary")
+    || warning.includes("payload and ladder decode skipped in browser summary")
+  ));
+}
+
+function summaryIndicatesSkippedLadderDecode(summary) {
+  return (summary.warnings ?? []).some((warning) => (
+    warning.includes("ladder decode skipped in browser summary")
+    || warning.includes("payload and ladder decode skipped in browser summary")
+  ));
 }
 
 function renderVariables(variables) {

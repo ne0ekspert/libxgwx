@@ -1,7 +1,3 @@
-#![allow(dead_code)]
-
-// These DTO converters back the optional full ladder summary path. The browser
-// parser currently skips eager ladder decoding, so the constructors are dormant.
 use crate::*;
 use serde::Serialize;
 
@@ -24,6 +20,23 @@ pub(super) struct WasmLadderProgramSummary {
 }
 
 impl WasmLadderProgramSummary {
+    pub(super) fn source_item_count(program: &LadderProgramData) -> usize {
+        program.structure.rungs.len()
+            + program
+                .structure
+                .rungs
+                .iter()
+                .map(|rung| rung.cells.len())
+                .sum::<usize>()
+            + program.structure.vertical_lines.len()
+            + program.structure.branch_groups.len()
+            + program.structure.horizontal_lines.len()
+            + program.structure.rung_comments.len()
+            + program.structure.output_comments.len()
+            + program.structure.unknown_records.len()
+            + program.instructions.len()
+    }
+
     pub(super) fn from_program(program_index: usize, program: &LadderProgramData) -> Self {
         Self {
             program_index,

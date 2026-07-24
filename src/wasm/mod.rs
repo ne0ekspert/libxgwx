@@ -14,6 +14,9 @@ use parameters::*;
 use project::*;
 
 const MAX_WASM_VARIABLES: usize = 65536;
+const MAX_WASM_LADDER_PROGRAMS: usize = 64;
+const MAX_WASM_LADDER_DECODED_BYTES: usize = 32 * 1024 * 1024;
+const MAX_WASM_LADDER_ITEMS: usize = 100_000;
 
 /// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
 #[wasm_bindgen]
@@ -119,17 +122,16 @@ impl WasmDocumentSummary {
             ));
         }
 
-        // Avoid eager payload and ladder decoding in the browser summary path.
-        // These operations can decode unbounded attacker-controlled data and are
-        // not required for the lightweight metadata shown in the web demo.
+        // The web UI does not display the general payload inventory. Ladder
+        // programs are decoded separately below under browser-specific budgets.
         let decoded_payload_count = 0;
         let decoded_payload_errors = 0;
-        let ladder_program_count = 0;
-        let ladder_errors = 0;
         warnings.push(
-            "payload and ladder decode skipped in browser summary to avoid unbounded decoding; zero counts here do not imply absence"
+            "payload decode skipped in browser summary; zero counts here do not imply absence"
                 .to_owned(),
         );
+        let (ladder, ladder_errors) = decode_browser_ladder(doc, programs.len(), &mut warnings);
+        let ladder_program_count = ladder.len();
         let hsc = doc
             .hsc_parameters()
             .into_iter()
@@ -184,7 +186,7 @@ impl WasmDocumentSummary {
                     .map(WasmModuleSummary::from_module)
                     .collect(),
             },
-            ladder: Vec::new(),
+            ladder,
             networks: networks
                 .into_iter()
                 .map(WasmNetworkSummary::from_network)
@@ -211,6 +213,62 @@ impl WasmDocumentSummary {
             warnings,
         }
     }
+}
+
+fn decode_browser_ladder(
+    doc: &XgwxDocument,
+    program_count: usize,
+    warnings: &mut Vec<String>,
+) -> (Vec<WasmLadderProgramSummary>, usize) {
+    let mut ladder = Vec::new();
+    let mut errors = 0;
+    let mut decoded_bytes = 0usize;
+    let mut item_count = 0usize;
+
+    for (program_index, element) in doc
+        .root
+        .descendants_named("Program")
+        .take(MAX_WASM_LADDER_PROGRAMS)
+        .enumerate()
+    {
+        let program = match LadderProgramData::from_program_element(element) {
+            Ok(program) => program,
+            Err(error) => {
+                errors += 1;
+                warnings.push(format!("ladder program {program_index}: {error}"));
+                continue;
+            }
+        };
+        let program_items = WasmLadderProgramSummary::source_item_count(&program);
+
+        if decoded_bytes.saturating_add(program.decoded_len) > MAX_WASM_LADDER_DECODED_BYTES {
+            warnings.push(format!(
+                "ladder program {program_index}: omitted after reaching the {MAX_WASM_LADDER_DECODED_BYTES}-byte browser decode budget"
+            ));
+            break;
+        }
+        if item_count.saturating_add(program_items) > MAX_WASM_LADDER_ITEMS {
+            warnings.push(format!(
+                "ladder program {program_index}: omitted after reaching the {MAX_WASM_LADDER_ITEMS}-item browser summary budget"
+            ));
+            break;
+        }
+
+        decoded_bytes += program.decoded_len;
+        item_count += program_items;
+        ladder.push(WasmLadderProgramSummary::from_program(
+            program_index,
+            &program,
+        ));
+    }
+
+    if program_count > MAX_WASM_LADDER_PROGRAMS {
+        warnings.push(format!(
+            "ladder: limited to the first {MAX_WASM_LADDER_PROGRAMS} of {program_count} programs"
+        ));
+    }
+
+    (ladder, errors)
 }
 
 #[cfg(test)]
@@ -266,5 +324,22 @@ mod tests {
         assert!(safety_summary.safety_comm.is_some());
         let safety_json = serde_json::to_value(&safety_summary).expect("summary should serialize");
         assert!(safety_json.pointer("/safetyComm/channels").is_some());
+    }
+
+    #[test]
+    fn browser_summary_includes_drawable_ladder_data() {
+        let doc =
+            XgwxDocument::from_path("fixtures/elements.xgwx").expect("ladder fixture should parse");
+        let summary = WasmDocumentSummary::from_document(&doc);
+
+        assert_eq!(summary.counts.ladder_programs, 1);
+        assert_eq!(summary.counts.ladder_errors, 0);
+        assert_eq!(summary.ladder.len(), 1);
+        assert!(!summary.ladder[0].rungs.is_empty());
+        assert!(!summary.ladder[0].cells.is_empty());
+
+        let json = serde_json::to_value(&summary).expect("summary should serialize");
+        assert!(json.pointer("/ladder/0/cells/0/rawX").is_some());
+        assert!(json.pointer("/ladder/0/cells/0/rawY").is_some());
     }
 }
