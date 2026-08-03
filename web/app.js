@@ -252,7 +252,6 @@ function renderHardware(hardware) {
               <th>Subtype</th>
               <th>Name</th>
               <th>Comment</th>
-              <th>Input filter</th>
               <th>Details</th>
             </tr>
           </thead>
@@ -280,9 +279,56 @@ function renderModuleRow(module) {
     <td>${escapeHtml(value(module.subType))}</td>
     <td>${escapeHtml(value(module.name))}</td>
     <td>${escapeHtml(value(module.comment))}</td>
-    <td>${escapeHtml(value(module.inputFilter))}</td>
-    <td>${escapeHtml(value(module.details))}</td>
+    <td>${renderModuleDetails(module)}</td>
   </tr>`;
+}
+
+function renderModuleDetails(module) {
+  const rawDetails = module?.details;
+  if (rawDetails === null || rawDetails === undefined || rawDetails === "") {
+    return escapeHtml(value(rawDetails));
+  }
+
+  const hexDetails = parseHexDetails(rawDetails);
+  if (!hexDetails) {
+    return `<div class="module-details">
+      <span class="module-details-value">Unrecognized details format</span>
+      <details><summary>Show raw value</summary><code>${escapeHtml(String(rawDetails))}</code></details>
+    </div>`;
+  }
+
+  const decoded = module.inputFilter
+    ? `Input filter: ${module.inputFilter}`
+    : null;
+  const byteLabel = `${hexDetails.bytes.length} ${hexDetails.bytes.length === 1 ? "byte" : "bytes"}`;
+  const zeroLabel = hexDetails.bytes.every((byte) => byte === "00") ? " · all 00" : "";
+  const rawHex = hexDetails.bytes.join(" ");
+
+  if (decoded) {
+    return `<div class="module-details">
+      <span class="module-details-value">${escapeHtml(decoded)}</span>
+      <details><summary>Raw hex · ${escapeHtml(byteLabel)}</summary><code>${escapeHtml(rawHex)}</code></details>
+    </div>`;
+  }
+
+  const previewBytes = hexDetails.bytes.slice(0, 16);
+  const truncated = previewBytes.length < hexDetails.bytes.length;
+  return `<div class="module-details">
+    <span class="module-details-value">Hex payload · ${escapeHtml(byteLabel + zeroLabel)}</span>
+    <code class="module-details-preview">${escapeHtml(previewBytes.join(" ") + (truncated ? " …" : ""))}</code>
+    ${truncated ? `<details><summary>Show all raw hex</summary><code>${escapeHtml(rawHex)}</code></details>` : ""}
+  </div>`;
+}
+
+function parseHexDetails(rawDetails) {
+  const compact = String(rawDetails).replace(/\s+/g, "");
+  if (!compact || compact.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(compact)) {
+    return null;
+  }
+
+  return {
+    bytes: compact.match(/.{2}/g).map((byte) => byte.toUpperCase()),
+  };
 }
 
 function renderLadderViewer(ladder) {
@@ -779,10 +825,16 @@ function renderParameterDetail(summary, parameter, index) {
       ]),
       renderAttributeTable(parameter.attributes),
     ].join("")),
-    ...parameter.sections.map((parameterSection) => renderParameterSection(
-      parameterSection,
-      parameter.parameterType === "BASIC PARAMETER",
-    )),
+    ...parameter.sections.map((parameterSection) => {
+      const module = parameter.parameterType === "IO PARAMETER"
+        ? moduleFromParameterSection(parameterSection, summary.hardware?.modules ?? [])
+        : null;
+      return renderParameterSection(
+        parameterSection,
+        parameter.parameterType === "BASIC PARAMETER",
+        module,
+      );
+    }),
   ];
 
   if (parameter.parameterType === "BASIC PARAMETER") {
@@ -819,18 +871,18 @@ function renderParameterDetail(summary, parameter, index) {
   return output.join("");
 }
 
-function renderParameterSection(parameterSection, groupIndexed) {
+function renderParameterSection(parameterSection, groupIndexed, module = null) {
   const rows = [["Children", parameterSection.childCount]];
   if (parameterSection.text !== null && parameterSection.text !== undefined) {
     rows.push(["Text", parameterSection.text]);
   }
   return section(parameterSection.name, [
     details(rows),
-    renderAttributeTable(parameterSection.attributes, groupIndexed),
+    renderAttributeTable(parameterSection.attributes, groupIndexed, module),
   ].join(""));
 }
 
-function renderAttributeTable(attributes, groupIndexed = false) {
+function renderAttributeTable(attributes, groupIndexed = false, module = null) {
   if (!attributes?.length) {
     return "";
   }
@@ -848,10 +900,33 @@ function renderAttributeTable(attributes, groupIndexed = false) {
       <thead><tr><th>Attribute</th><th>Value</th></tr></thead>
       <tbody>${rows.map((row) => `<tr class="${row.indexed ? "is-indexed" : ""}">
         <td>${escapeHtml(row.name)}</td>
-        <td>${escapeHtml(value(row.value))}</td>
+        <td>${row.name === "Details" && module
+          ? renderModuleDetails(module)
+          : escapeHtml(value(row.value))}</td>
       </tr>`).join("")}</tbody>
     </table>
   </div>`;
+}
+
+function moduleFromParameterSection(parameterSection, modules) {
+  if (parameterSection.name !== "Module") {
+    return null;
+  }
+
+  const attributes = Object.fromEntries(
+    parameterSection.attributes.map((attribute) => [attribute.name, attribute.value]),
+  );
+  const matchingModule = modules.find((module) =>
+    String(module.base) === attributes.Base
+    && String(module.slot) === attributes.Slot
+    && module.name === attributes.Name,
+  );
+
+  return {
+    ...matchingModule,
+    name: matchingModule?.name ?? attributes.Name,
+    details: matchingModule?.details ?? attributes.Details,
+  };
 }
 
 function groupParameterAttributes(attributes) {

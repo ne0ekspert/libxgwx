@@ -349,6 +349,38 @@ input {
   color: var(--muted);
 }
 
+.module-details {
+  min-width: 190px;
+}
+
+.module-details-value,
+.module-details-preview {
+  display: block;
+}
+
+.module-details-value {
+  font-weight: 650;
+}
+
+.module-details-preview,
+.module-details details code {
+  margin-top: 4px;
+  color: var(--muted);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.module-details details {
+  margin-top: 4px;
+}
+
+.module-details summary {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+}
+
 .timer-range-chart {
   display: grid;
   gap: 18px;
