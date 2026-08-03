@@ -29,7 +29,12 @@ ratatui = "0.29"
 [features]
 default = []
 gui = ["dep:eframe"]
+il = []
 wasm = ["dep:js-sys", "dep:serde", "dep:serde_json", "dep:wasm-bindgen"]
+
+[[example]]
+name = "il"
+required-features = ["il"]
 
 [[example]]
 name = "gui"

@@ -4,6 +4,7 @@
 //! UTF-8 XML project payload, and optional trailing binary metadata. This crate
 //! validates and decodes that container, parses the project XML into a compact
 //! tree, and keeps unknown binary sections available for callers that need them.
+//! Enable the optional `il` feature for typed LD-to-IL conversion.
 //!
 //! # Example
 //!
@@ -33,6 +34,8 @@
 
 mod document;
 mod error;
+#[cfg(feature = "il")]
+mod il;
 mod internal;
 mod mnemonic;
 mod model;
@@ -42,6 +45,8 @@ mod wasm;
 
 pub use document::XgwxDocument;
 pub use error::XgwxError;
+#[cfg(feature = "il")]
+pub use il::*;
 pub use mnemonic::*;
 pub use model::*;
 

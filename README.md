@@ -57,6 +57,10 @@ for program in doc.programs() {
   `ProgramData`, preserving raw bytes and extracting embedded strings and likely
   ladder elements such as instruction calls, comparisons, timers, logic
   operators, device references, constants, comments, and internal references.
+- With the opt-in `il` feature, `LadderProgramData::to_il()` converts positioned
+  LD structure to typed, one-step-per-line instruction list output. The related
+  `to_il_with_variable_names(...)` method resolves unique exact address matches
+  through the decoded symbol table.
 - `ladder_mnemonic_info(...)` and `known_ladder_mnemonics()` expose category
   and description metadata for known ladder instruction mnemonics.
 - `XgwxDocument::project_options()`, `parameters()`, `hsc_parameters()`,
@@ -95,6 +99,38 @@ for program in doc.programs() {
 - `XgwxDocument::root` contains a lightweight owned XML tree.
 - `XgwxDocument::trailer` contains raw bytes after the main XML payload.
 - `XgwxDocument::trailer_gzip_members` contains any valid gzip members found in the trailer.
+
+## LD to IL Conversion
+
+Enable the optional `il` feature to convert decoded ladder programs. Literal
+device addresses are retained by default:
+
+```rust,no_run
+use xgwx::XgwxDocument;
+
+let doc = XgwxDocument::from_path("fixtures/elements.xgwx")?;
+for program in doc.ladder_programs() {
+    let il = program?.to_il()?;
+    println!("{il}");
+}
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Run that code with `--features il`. Each `IlStep` is either a rung comment or
+an instruction, and `IlProgram` renders the steps separated by newlines;
+embedded comment newlines are escaped. For symbolic operands, decode
+`doc.variables()` and pass them to
+`to_il_with_variable_names(...)`; addresses without one unique exact match are
+left unchanged, as are symbols whose address or name is duplicated. Conversion
+fails when the partial ladder decoder encounters an unknown record or
+disconnected/unsupported topology rather than guessing.
+
+Print the IL generated for a workspace with the included example:
+
+```bash
+cargo run --quiet --features il --example il -- fixtures/elements.xgwx
+```
 
 ## TUI PoC
 

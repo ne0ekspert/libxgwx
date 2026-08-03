@@ -698,6 +698,174 @@ fn decodes_elements_fixture_pulse_contacts_and_coils() {
     }));
 }
 
+#[cfg(feature = "il")]
+#[test]
+fn converts_elements_fixture_from_ld_to_il() {
+    let doc = XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture parses");
+    let program = doc
+        .ladder_programs()
+        .into_iter()
+        .next()
+        .expect("fixture has a ladder program")
+        .expect("ladder program decodes");
+    let il = program.to_il().expect("ladder converts to IL");
+
+    let expected = "Comment: 렁 설명문 1\
+\nLOAD M00000\
+\nAND NOT M00001\
+\nANDP M00002\
+\nANDP NOT M00003\
+\nANDN M00004\
+\nANDN NOT M00005\
+\nR_EDGE\
+\nF_EDGE\
+\nOUT P00020\
+\nLOAD P00000\
+\nOR P00001\
+\nNOT\
+\nOR P00002\
+\nOUT NOT P00021\
+\nLOAD M00010\
+\nSET M00020\
+\nRST M00021\
+\nOUTP M00100\
+\nLOAD M00011\
+\nRST M00020\
+\nSET M00021\
+\nOUTN M00101\
+\nLOAD F00091\
+\nMOV 0 D000000\
+\nLOAD P00005\
+\nXDST 1 1 7000 1000 100 0 0";
+
+    assert_eq!(il.program_name.as_deref(), Some("NewProgram"));
+    assert_eq!(il.steps.len(), 27);
+    assert_eq!(il.to_string(), expected);
+    assert_eq!(il.steps[0], IlStep::Comment("렁 설명문 1".to_owned()));
+    assert_eq!(
+        il.steps[7],
+        IlStep::Instruction {
+            mnemonic: "R_EDGE".to_owned(),
+            operands: Vec::new(),
+        }
+    );
+    assert_eq!(
+        il.steps[8],
+        IlStep::Instruction {
+            mnemonic: "F_EDGE".to_owned(),
+            operands: Vec::new(),
+        }
+    );
+}
+
+#[cfg(feature = "il")]
+#[test]
+fn formats_ld_to_il_with_unique_variable_names() {
+    let doc = XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture parses");
+    let mut variables = doc.variables().expect("variables decode");
+    let program = doc
+        .ladder_programs()
+        .into_iter()
+        .next()
+        .expect("fixture has a ladder program")
+        .expect("ladder program decodes");
+    let il = program
+        .to_il_with_variable_names(&variables)
+        .expect("ladder converts to named IL")
+        .to_string();
+
+    assert!(il.contains("LOAD _0000_IN00"));
+    assert!(il.contains("OUT _0001_OUT00"));
+    assert!(il.contains("OUT NOT _0001_OUT01"));
+    assert!(il.contains("LOAD M00010"));
+
+    let mut duplicate = variables
+        .iter()
+        .find(|variable| variable.address.as_deref() == Some("P00020"))
+        .expect("output variable exists")
+        .clone();
+    duplicate.name = Some("duplicate_output".to_owned());
+    variables.push(duplicate);
+    let duplicate_il = program
+        .to_il_with_variable_names(&variables)
+        .expect("duplicate symbols fall back to addresses")
+        .to_string();
+    assert!(duplicate_il.contains("OUT P00020"));
+    assert!(!duplicate_il.contains("OUT _0001_OUT00"));
+
+    let mut name_collision_variables = doc.variables().expect("variables decode again");
+    let mut name_collision = name_collision_variables
+        .iter()
+        .find(|variable| variable.address.as_deref() == Some("P00020"))
+        .expect("output variable exists")
+        .clone();
+    name_collision.address = Some("P99999".to_owned());
+    name_collision_variables.push(name_collision);
+    let name_collision_il = program
+        .to_il_with_variable_names(&name_collision_variables)
+        .expect("duplicate names fall back to addresses")
+        .to_string();
+    assert!(name_collision_il.contains("OUT P00020"));
+    assert!(!name_collision_il.contains("OUT _0001_OUT00"));
+}
+
+#[cfg(feature = "il")]
+#[test]
+fn converts_tracked_xgb_ladders_with_unconditional_end() {
+    let expected = "LOAD M0010\
+\nAND F0092\
+\nOUT M0110\
+\nLOAD M0022\
+\nAND F0092\
+\nOUT M0122\
+\nEND";
+
+    for path in ["fixtures/XGB_Enet01.xgwx", "fixtures/XGB_Enet02.xgwx"] {
+        let doc = XgwxDocument::from_path(path).expect("fixture parses");
+        let programs = doc.ladder_programs();
+        assert_eq!(programs.len(), 1, "{path}");
+        let il = programs
+            .into_iter()
+            .next()
+            .expect("program exists")
+            .expect("program decodes")
+            .to_il()
+            .expect("ladder converts to IL");
+
+        assert_eq!(il.steps.len(), 7, "{path}");
+        assert_eq!(il.to_string(), expected, "{path}");
+    }
+}
+
+#[cfg(feature = "il")]
+#[test]
+fn ld_to_il_rejects_unknown_positioned_records() {
+    let doc = XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture parses");
+    let mut program = doc
+        .ladder_programs()
+        .into_iter()
+        .next()
+        .expect("fixture has a ladder program")
+        .expect("ladder program decodes");
+    program.structure.unknown_records.push(LadderUnknownRecord {
+        offset: 42,
+        marker: [0xff, 0xaa],
+        raw_x: 7,
+        raw_y: 8,
+        bytes: vec![0xff, 0xaa],
+    });
+
+    assert_eq!(
+        program.to_il(),
+        Err(LdToIlError::UnknownRecord {
+            offset: 42,
+            marker: [0xff, 0xaa],
+            raw_x: 7,
+            raw_y: 8,
+        })
+    );
+}
+
 #[test]
 fn decodes_synthetic_hsc_parameter_counter_modes() {
     let mut payload = vec!['0'; 448];
