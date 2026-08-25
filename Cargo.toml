@@ -31,10 +31,16 @@ default = []
 gui = ["dep:eframe"]
 il = []
 wasm = ["dep:js-sys", "dep:serde", "dep:serde_json", "dep:wasm-bindgen"]
+write = []
 
 [[example]]
 name = "il"
 required-features = ["il"]
+
+[[example]]
+name = "write-module"
+path = "examples/write_module.rs"
+required-features = ["write"]
 
 [[example]]
 name = "gui"

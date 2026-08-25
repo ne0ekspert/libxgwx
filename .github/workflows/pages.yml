@@ -22,6 +22,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test
       - run: cargo test --features il
+      - run: cargo test --features write
       - run: cargo check --no-default-features
 
   deploy:

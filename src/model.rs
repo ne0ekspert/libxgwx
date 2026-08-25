@@ -206,7 +206,8 @@ pub enum ModuleInputFilter {
 }
 
 impl ModuleInputFilter {
-    pub(crate) fn from_raw(value: u8) -> Self {
+    /// Decode the byte stored at the start of the module `Details` payload.
+    pub const fn from_raw(value: u8) -> Self {
         match value {
             0 => Self::Default,
             1 => Self::Ms1,
@@ -231,6 +232,21 @@ impl ModuleInputFilter {
             Self::Ms20 => Some(20),
             Self::Ms70 => Some(70),
             Self::Ms100 => Some(100),
+        }
+    }
+
+    /// Return the byte stored at the start of the module `Details` payload.
+    pub const fn raw(self) -> u8 {
+        match self {
+            Self::Default => 0,
+            Self::Ms1 => 1,
+            Self::Ms3 => 3,
+            Self::Ms5 => 5,
+            Self::Ms10 => 10,
+            Self::Ms20 => 20,
+            Self::Ms70 => 70,
+            Self::Ms100 => 100,
+            Self::Unknown(value) => value,
         }
     }
 }
@@ -1923,9 +1939,10 @@ pub struct XgwxHeader {
     pub label_following_u32: Option<u32>,
     /// Little-endian size hint stored immediately before the gzip member.
     ///
-    /// In the sample this is three bytes larger than the compressed gzip member.
-    /// The exact semantics are not yet documented, so callers should treat it as
-    /// advisory metadata.
+    /// In the currently supported fixtures this is the complete byte length of
+    /// the main gzip member rounded up to a four-byte boundary. Writers validate
+    /// that relationship before updating the field, because other workspace
+    /// variants may use different semantics.
     pub compressed_size_hint: Option<u32>,
 }
 
@@ -1935,9 +1952,10 @@ impl XgwxHeader {
         let sig_len = raw.len().min(signature.len());
         signature[..sig_len].copy_from_slice(&raw[..sig_len]);
 
-        let (label, label_following_u32) = parse_header_label(raw);
-        let compressed_size_hint = raw
-            .get(raw.len().saturating_sub(4)..)
+        let (label, label_following_u32, label_fields_end) = parse_header_label(raw);
+        let compressed_size_hint = label_fields_end
+            .filter(|label_fields_end| raw.len() >= label_fields_end.saturating_add(4))
+            .and_then(|_| raw.get(raw.len().saturating_sub(4)..))
             .and_then(|bytes| bytes.try_into().ok())
             .map(u32::from_le_bytes);
 

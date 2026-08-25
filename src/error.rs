@@ -45,6 +45,24 @@ pub enum XgwxError {
         resource: &'static str,
         limit: usize,
     },
+    ModuleNotFound {
+        base: u32,
+        slot: u32,
+    },
+    AmbiguousModule {
+        base: u32,
+        slot: u32,
+    },
+    MissingModuleAttribute {
+        base: u32,
+        slot: u32,
+        attribute: &'static str,
+    },
+    InvalidModuleInputFilterTarget {
+        base: u32,
+        slot: u32,
+    },
+    AuthenticatedRewriteUnsupported,
 }
 
 impl fmt::Display for XgwxError {
@@ -94,6 +112,28 @@ impl fmt::Display for XgwxError {
             Self::ResourceLimitExceeded { resource, limit } => {
                 write!(f, "{resource} exceeds parser limit ({limit} bytes/items)")
             }
+            Self::ModuleNotFound { base, slot } => {
+                write!(f, "module at base {base}, slot {slot} was not found")
+            }
+            Self::AmbiguousModule { base, slot } => {
+                write!(f, "multiple modules match base {base}, slot {slot}")
+            }
+            Self::MissingModuleAttribute {
+                base,
+                slot,
+                attribute,
+            } => write!(
+                f,
+                "module at base {base}, slot {slot} is missing {attribute}"
+            ),
+            Self::InvalidModuleInputFilterTarget { base, slot } => write!(
+                f,
+                "module at base {base}, slot {slot} is not an XGI-D24A/B input module"
+            ),
+            Self::AuthenticatedRewriteUnsupported => write!(
+                f,
+                "cannot rewrite workspace: the container does not match the validated XG5000 header, alignment, or Security layout"
+            ),
         }
     }
 }

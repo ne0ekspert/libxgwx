@@ -12,6 +12,11 @@ pub struct XgwxDocument {
     pub header: XgwxHeader,
     /// Inflated XML project payload.
     pub xml: String,
+    /// Original compressed main XML member.
+    ///
+    /// Writers retain this so an unmodified document can be emitted byte for
+    /// byte without depending on a particular gzip encoder implementation.
+    pub main_gzip: Vec<u8>,
     /// XML payload parsed into a lightweight owned tree.
     pub root: XmlElement,
     /// Raw bytes after the main gzip XML member.
@@ -30,6 +35,7 @@ impl XgwxDocument {
         let gzip_offset = find_gzip_member(bytes, 0).ok_or(XgwxError::MissingMainPayload)?;
         let header = XgwxHeader::parse(&bytes[..gzip_offset], gzip_offset);
         let main_payload = parse_gzip_member(bytes, gzip_offset)?;
+        let main_gzip = bytes[gzip_offset..main_payload.end_offset].to_vec();
         let trailer = bytes[main_payload.end_offset..].to_vec();
         let xml = String::from_utf8(main_payload.data).map_err(XgwxError::Utf8)?;
         let root = parse_xml(&xml)?;
@@ -38,6 +44,7 @@ impl XgwxDocument {
         Ok(Self {
             header,
             xml,
+            main_gzip,
             root,
             trailer,
             trailer_gzip_members,

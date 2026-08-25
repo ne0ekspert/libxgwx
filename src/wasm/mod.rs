@@ -45,6 +45,45 @@ pub fn known_ladder_mnemonics_wasm() -> Result<JsValue, JsValue> {
     js_sys::JSON::parse(&json)
 }
 
+/// Apply supported module attribute changes and return rewritten `.xgwx` bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = update_xgwx_module)]
+pub fn update_xgwx_module_wasm(
+    bytes: &[u8],
+    base: u32,
+    slot: u32,
+    patch: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("module patch is not JSON-serializable"))?;
+    let patch = serde_json::from_str::<ModulePatch>(&json)
+        .map_err(|error| JsValue::from_str(&format!("invalid module patch: {error}")))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.update_module(base, slot, &patch)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Update an XGI-D24A/B input filter and return rewritten `.xgwx` bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = set_xgwx_module_input_filter)]
+pub fn set_xgwx_module_input_filter_wasm(
+    bytes: &[u8],
+    base: u32,
+    slot: u32,
+    raw_filter: u8,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.set_module_input_filter(base, slot, ModuleInputFilter::from_raw(raw_filter))
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmLadderMnemonicSummary {

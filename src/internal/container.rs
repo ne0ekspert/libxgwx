@@ -2,22 +2,22 @@ use super::*;
 
 use flate2::{Decompress, FlushDecompress, Status};
 
-pub(crate) fn parse_header_label(raw: &[u8]) -> (Option<String>, Option<u32>) {
+pub(crate) fn parse_header_label(raw: &[u8]) -> (Option<String>, Option<u32>, Option<usize>) {
     let Some(marker_offset) = raw
         .windows(3)
         .position(|window| window == [0xff, 0xfe, 0xff])
     else {
-        return (None, None);
+        return (None, None, None);
     };
 
     let Some(unit_count) = raw.get(marker_offset + 3).copied().map(usize::from) else {
-        return (None, None);
+        return (None, None, None);
     };
 
     let start = marker_offset + 4;
     let end = start + unit_count.saturating_mul(2);
     let Some(encoded) = raw.get(start..end) else {
-        return (None, None);
+        return (None, None, None);
     };
 
     let label = char::decode_utf16(
@@ -32,7 +32,7 @@ pub(crate) fn parse_header_label(raw: &[u8]) -> (Option<String>, Option<u32>) {
         .and_then(|bytes| bytes.try_into().ok())
         .map(u32::from_le_bytes);
 
-    (label, label_following_u32)
+    (label, label_following_u32, Some(end + 4))
 }
 
 pub(crate) fn find_gzip_member(bytes: &[u8], start: usize) -> Option<usize> {

@@ -61,6 +61,12 @@ for program in doc.programs() {
   LD structure to typed, one-step-per-line instruction list output. The related
   `to_il_with_variable_names(...)` method resolves unique exact address matches
   through the decoded symbol table.
+- With the opt-in `write` feature, `XgwxDocument::update_module(...)` applies
+  token-preserving in-memory changes to one module selected by base and slot.
+  The first patching scope is
+  limited to existing module `Id`, `SubType`, `Name`, `Comment`, and `Details`
+  attributes; `set_module_input_filter(...)` provides a typed XGI-D24A/B
+  helper. Other project sections remain read-only.
 - `ladder_mnemonic_info(...)` and `known_ladder_mnemonics()` expose category
   and description metadata for known ladder instruction mnemonics.
 - `XgwxDocument::project_options()`, `parameters()`, `hsc_parameters()`,
@@ -130,6 +136,48 @@ Print the IL generated for a workspace with the included example:
 
 ```bash
 cargo run --quiet --features il --example il -- fixtures/elements.xgwx
+```
+
+## Module Writing
+
+Enable the opt-in `write` feature to prepare attribute changes on an existing
+module. The module must be uniquely identified by its current base and slot:
+
+```rust,no_run
+use xgwx::{ModuleInputFilter, ModulePatch, XgwxDocument};
+
+let mut doc = XgwxDocument::from_path("project.xgwx")?;
+doc.update_module(
+    0,
+    2,
+    &ModulePatch {
+        comment: Some("Updated from an external editor".to_owned()),
+        ..ModulePatch::default()
+    },
+)?;
+doc.set_module_input_filter(0, 2, ModuleInputFilter::Ms5)?;
+
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The patcher replaces only requested XML attribute values and preserves unknown
+XML in memory. `to_bytes()` emits byte-identical data for an unchanged document.
+After an edit it recompresses the main XML, applies XG5000's four-byte alignment,
+updates the additive container checksum, validates the nested Security CRC64
+frames, and preserves the existing Security metadata byte-for-byte. Layouts
+outside the validated 138-byte XG5000 header format still fail closed with
+`AuthenticatedRewriteUnsupported`.
+
+When both `wasm` and `write` are enabled, the generated package also exposes
+`update_xgwx_module(bytes, base, slot, patch)` and
+`set_xgwx_module_input_filter(bytes, base, slot, rawFilter)`.
+
+The included example can be used as a serialization and XG5000 validation
+harness:
+
+```bash
+cargo run --features write --example write-module -- \
+  input.xgwx output.xgwx 0 2 5
 ```
 
 ## TUI PoC

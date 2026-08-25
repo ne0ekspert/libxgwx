@@ -111,6 +111,169 @@ fn maps_xgi_d24_input_filter_steps() {
     );
 }
 
+#[cfg(feature = "write")]
+#[test]
+fn preserves_unchanged_bytes_and_rewrites_supported_workspace() {
+    let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_aligned_len = usize::try_from(
+        doc.header
+            .compressed_size_hint
+            .expect("fixture has a size hint"),
+    )
+    .expect("size hint fits usize");
+    let original_padding_len = original_aligned_len - doc.main_gzip.len();
+    assert_eq!(original_padding_len, 3, "fixture exercises alignment");
+    assert!(
+        doc.trailer[..original_padding_len]
+            .iter()
+            .all(|byte| *byte == 0)
+    );
+    let original_payloads = doc
+        .decoded_payloads()
+        .into_iter()
+        .map(|payload| payload.expect("fixture payload decodes"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(doc.to_bytes().expect("unchanged document writes"), source);
+    assert_eq!(
+        doc.header.compressed_size_hint,
+        u32::try_from((doc.main_gzip.len() + 3) & !3).ok()
+    );
+
+    doc.update_module(
+        0,
+        0,
+        &ModulePatch {
+            comment: Some("VS Code & XG5000 <module> \"edit\"".to_owned()),
+            ..ModulePatch::default()
+        },
+    )
+    .expect("module comment updates");
+    doc.set_module_input_filter(0, 0, ModuleInputFilter::Ms5)
+        .expect("input filter updates");
+
+    let module = doc
+        .modules()
+        .into_iter()
+        .find(|module| module.base == Some(0) && module.slot == Some(0))
+        .expect("edited module exists");
+
+    assert_eq!(
+        module.comment.as_deref(),
+        Some("VS Code & XG5000 <module> \"edit\"")
+    );
+    assert_eq!(module.input_filter_raw, Some(5));
+    assert_eq!(module.input_filter, Some(ModuleInputFilter::Ms5));
+    let rewritten = doc.to_bytes().expect("edited document writes");
+    let rewritten_doc = XgwxDocument::parse(&rewritten).expect("rewritten document parses");
+    let rewritten_module = rewritten_doc
+        .modules()
+        .into_iter()
+        .find(|module| module.base == Some(0) && module.slot == Some(0))
+        .expect("rewritten module exists");
+    assert_eq!(
+        rewritten_module.comment.as_deref(),
+        Some("VS Code & XG5000 <module> \"edit\"")
+    );
+    assert_eq!(rewritten_module.input_filter_raw, Some(5));
+
+    let rewritten_aligned_len = usize::try_from(
+        rewritten_doc
+            .header
+            .compressed_size_hint
+            .expect("rewritten workspace has size hint"),
+    )
+    .expect("size hint fits usize");
+    let expected_checksum = rewritten[68..134]
+        .iter()
+        .chain(rewritten[138..138 + rewritten_aligned_len].iter())
+        .fold(
+            u32::try_from(rewritten_aligned_len).expect("aligned length fits u32"),
+            |sum, byte| sum.wrapping_add(u32::from(*byte)),
+        );
+    assert_eq!(
+        u32::from_le_bytes(rewritten[64..68].try_into().expect("checksum field")),
+        expected_checksum
+    );
+
+    let original_metadata = &source[138 + original_aligned_len..];
+    let rewritten_metadata = &rewritten[138 + rewritten_aligned_len..];
+    assert_eq!(rewritten_metadata, original_metadata);
+    assert_eq!(
+        rewritten_doc
+            .decoded_payloads()
+            .into_iter()
+            .map(|payload| payload.expect("rewritten payload decodes"))
+            .collect::<Vec<_>>(),
+        original_payloads
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn validates_recovered_xg_security_crc64() {
+    let doc = XgwxDocument::from_path("fixtures/elements-io-resaved-filter5.xgwx")
+        .expect("XG5000-resaved fixture parses");
+    let security = doc
+        .trailer_gzip_members
+        .iter()
+        .find(|member| member.data.starts_with(b"HEAD"))
+        .expect("security member exists");
+
+    assert!(crate::writer::validate_xg_frame(&security.data));
+    assert_eq!(
+        crate::writer::xg_crc64(&security.data[0x10..0x34]).to_le_bytes(),
+        security.data[0x34..0x3c]
+    );
+    assert_eq!(
+        crate::writer::xg_crc64(&security.data[8..0xc4]).to_le_bytes(),
+        security.data[0xc4..0xcc]
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn module_writer_rejects_invalid_or_unsafe_edits_without_mutating_xml() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_xml = doc.xml.clone();
+
+    let invalid_details = doc
+        .update_module(
+            0,
+            2,
+            &ModulePatch {
+                details: Some("not-hex".to_owned()),
+                ..ModulePatch::default()
+            },
+        )
+        .expect_err("invalid Details must fail");
+    assert!(matches!(
+        invalid_details,
+        XgwxError::InvalidHexPayload { .. }
+    ));
+    assert_eq!(doc.xml, original_xml);
+
+    let missing = doc
+        .update_module(99, 99, &ModulePatch::default())
+        .expect_err("missing module must fail");
+    assert!(matches!(
+        missing,
+        XgwxError::ModuleNotFound { base: 99, slot: 99 }
+    ));
+    assert_eq!(doc.xml, original_xml);
+
+    let wrong_filter_target = doc
+        .set_module_input_filter(0, 0, ModuleInputFilter::Ms5)
+        .expect_err("wrong module type must fail");
+    assert!(matches!(
+        wrong_filter_target,
+        XgwxError::InvalidModuleInputFilterTarget { base: 0, slot: 0 }
+    ));
+    assert_eq!(doc.xml, original_xml);
+}
+
 #[test]
 fn decodes_synthetic_ladder_records() {
     let data = synthetic_ladder_data();
