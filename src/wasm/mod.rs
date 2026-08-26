@@ -84,6 +84,66 @@ pub fn set_xgwx_module_input_filter_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Apply supported program metadata changes and return rewritten `.xgwx` bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = update_xgwx_program)]
+pub fn update_xgwx_program_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    patch: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("program patch is not JSON-serializable"))?;
+    let patch = serde_json::from_str::<ProgramPatch>(&json)
+        .map_err(|error| JsValue::from_str(&format!("invalid program patch: {error}")))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.update_program(program_index, &patch)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Apply supported changes to one global variable and return rewritten bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = update_xgwx_variable)]
+pub fn update_xgwx_variable_wasm(
+    bytes: &[u8],
+    variable_index: usize,
+    patch: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("variable patch is not JSON-serializable"))?;
+    let patch = serde_json::from_str::<VariablePatch>(&json)
+        .map_err(|error| JsValue::from_str(&format!("invalid variable patch: {error}")))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.update_variable(variable_index, &patch)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Replace one same-length ladder cell string and return rewritten bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = update_xgwx_ladder_cell)]
+pub fn update_xgwx_ladder_cell_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    offset: usize,
+    expected: &str,
+    replacement: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.update_ladder_cell_text(program_index, offset, expected, replacement)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmLadderMnemonicSummary {

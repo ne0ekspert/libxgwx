@@ -691,7 +691,7 @@ pub(crate) fn read_ladder_inline_utf16_string(
     None
 }
 
-fn decode_utf16_bytes(bytes: &[u8]) -> Option<String> {
+pub(crate) fn decode_utf16_bytes(bytes: &[u8]) -> Option<String> {
     char::decode_utf16(
         bytes
             .chunks_exact(2)

@@ -62,6 +62,41 @@ pub enum XgwxError {
         base: u32,
         slot: u32,
     },
+    ProgramNotFound {
+        index: usize,
+    },
+    MissingProgramAttribute {
+        index: usize,
+        attribute: &'static str,
+    },
+    MissingProgramName {
+        index: usize,
+    },
+    MissingSymbols,
+    VariableNotFound {
+        index: usize,
+    },
+    InvalidVariableRecord {
+        index: usize,
+    },
+    VariableFieldLengthChanged {
+        index: usize,
+        field: &'static str,
+        expected_utf16_units: usize,
+        actual_utf16_units: usize,
+    },
+    LadderCellNotFound {
+        program_index: usize,
+        offset: usize,
+    },
+    LadderCellChanged {
+        program_index: usize,
+        offset: usize,
+    },
+    LadderCellLengthChanged {
+        expected_utf16_units: usize,
+        actual_utf16_units: usize,
+    },
     AuthenticatedRewriteUnsupported,
 }
 
@@ -129,6 +164,55 @@ impl fmt::Display for XgwxError {
             Self::InvalidModuleInputFilterTarget { base, slot } => write!(
                 f,
                 "module at base {base}, slot {slot} is not an XGI-D24A/B input module"
+            ),
+            Self::ProgramNotFound { index } => {
+                write!(f, "program at index {index} was not found")
+            }
+            Self::MissingProgramAttribute { index, attribute } => {
+                write!(f, "program at index {index} is missing {attribute}")
+            }
+            Self::MissingProgramName { index } => {
+                write!(f, "program at index {index} is missing its name text")
+            }
+            Self::MissingSymbols => write!(f, "workspace is missing its Symbols payload"),
+            Self::VariableNotFound { index } => {
+                write!(f, "variable at index {index} was not found")
+            }
+            Self::InvalidVariableRecord { index } => {
+                write!(
+                    f,
+                    "variable at index {index} does not match the supported symbol record layout"
+                )
+            }
+            Self::VariableFieldLengthChanged {
+                index,
+                field,
+                expected_utf16_units,
+                actual_utf16_units,
+            } => write!(
+                f,
+                "variable {index} {field} must keep its encoded length at {expected_utf16_units} UTF-16 units (got {actual_utf16_units})"
+            ),
+            Self::LadderCellNotFound {
+                program_index,
+                offset,
+            } => write!(
+                f,
+                "ladder cell at byte offset {offset} was not found in program {program_index}"
+            ),
+            Self::LadderCellChanged {
+                program_index,
+                offset,
+            } => write!(
+                f,
+                "ladder cell at byte offset {offset} in program {program_index} no longer matches the expected text"
+            ),
+            Self::LadderCellLengthChanged {
+                expected_utf16_units,
+                actual_utf16_units,
+            } => write!(
+                f,
+                "ladder cell edits must keep the encoded length at {expected_utf16_units} UTF-16 units (got {actual_utf16_units})"
             ),
             Self::AuthenticatedRewriteUnsupported => write!(
                 f,

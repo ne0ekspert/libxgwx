@@ -5,7 +5,7 @@
 //! validates and decodes that container, parses the project XML into a compact
 //! tree, and keeps unknown binary sections available for callers that need them.
 //! Enable the optional `il` feature for typed LD-to-IL conversion.
-//! Enable the optional `write` feature for the currently supported module edits
+//! Enable the optional `write` feature for supported module and program edits
 //! and loss-preserving container serialization.
 //!
 //! # Example
@@ -59,7 +59,10 @@ pub use writer::*;
 #[cfg(feature = "wasm")]
 pub use wasm::parse_xgwx;
 #[cfg(all(feature = "wasm", feature = "write"))]
-pub use wasm::{set_xgwx_module_input_filter_wasm, update_xgwx_module_wasm};
+pub use wasm::{
+    set_xgwx_module_input_filter_wasm, update_xgwx_ladder_cell_wasm, update_xgwx_module_wasm,
+    update_xgwx_program_wasm, update_xgwx_variable_wasm,
+};
 
 pub(crate) use internal::*;
 

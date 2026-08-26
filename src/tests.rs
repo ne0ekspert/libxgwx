@@ -274,6 +274,155 @@ fn module_writer_rejects_invalid_or_unsafe_edits_without_mutating_xml() {
     assert_eq!(doc.xml, original_xml);
 }
 
+#[cfg(feature = "write")]
+#[test]
+fn writes_program_metadata_and_same_length_ladder_cell() {
+    let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_program = doc
+        .ladder_programs()
+        .into_iter()
+        .next()
+        .expect("fixture has a ladder program")
+        .expect("ladder program decodes");
+    let cell = original_program
+        .strings
+        .iter()
+        .find(|string| string.value == "M00000")
+        .expect("fixture has editable cell");
+
+    doc.update_program(
+        0,
+        &ProgramPatch {
+            name: Some("EditedProgram".to_owned()),
+            task: Some("Edited task".to_owned()),
+            comment: Some("VS Code & XG5000 <program>".to_owned()),
+            ..ProgramPatch::default()
+        },
+    )
+    .expect("program metadata updates");
+    doc.update_ladder_cell_text(0, cell.offset, "M00000", "M00042")
+        .expect("same-length ladder cell updates");
+
+    let rewritten = doc.to_bytes().expect("edited document writes");
+    let reparsed = XgwxDocument::parse(&rewritten).expect("rewritten document parses");
+    let metadata = reparsed
+        .programs()
+        .into_iter()
+        .next()
+        .expect("program exists");
+    assert_eq!(metadata.name.as_deref(), Some("EditedProgram"));
+    assert_eq!(metadata.task.as_deref(), Some("Edited task"));
+    assert_eq!(
+        metadata.comment.as_deref(),
+        Some("VS Code & XG5000 <program>")
+    );
+    let ladder = reparsed
+        .ladder_programs()
+        .into_iter()
+        .next()
+        .expect("program exists")
+        .expect("program decodes");
+    assert!(ladder.strings.iter().any(|string| string.value == "M00042"));
+    assert!(!ladder.strings.iter().any(|string| string.value == "M00000"));
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn rejects_unsafe_ladder_cell_edits_without_mutating_xml() {
+    let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_xml = doc.xml.clone();
+    let program = doc
+        .ladder_programs()
+        .into_iter()
+        .next()
+        .expect("fixture has a ladder program")
+        .expect("ladder program decodes");
+    let cell = program
+        .strings
+        .iter()
+        .find(|string| string.value == "M00000")
+        .expect("fixture has editable cell");
+
+    let length_error = doc
+        .update_ladder_cell_text(0, cell.offset, "M00000", "M000001")
+        .expect_err("length changes must fail");
+    assert!(matches!(
+        length_error,
+        XgwxError::LadderCellLengthChanged { .. }
+    ));
+    assert_eq!(doc.xml, original_xml);
+
+    let stale_error = doc
+        .update_ladder_cell_text(0, cell.offset, "M99999", "M00042")
+        .expect_err("stale text must fail");
+    assert!(matches!(stale_error, XgwxError::LadderCellChanged { .. }));
+    assert_eq!(doc.xml, original_xml);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn writes_same_length_variable_fields_and_numeric_address() {
+    let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+
+    doc.update_variable(
+        0,
+        &VariablePatch {
+            name: Some("_0000_DI00".to_owned()),
+            address_area: Some("M".to_owned()),
+            address_number: Some(42),
+            description: Some("수정 접점 00".to_owned()),
+            ..VariablePatch::default()
+        },
+    )
+    .expect("supported variable fields update");
+
+    let rewritten = doc.to_bytes().expect("edited document writes");
+    let reparsed = XgwxDocument::parse(&rewritten).expect("rewritten document parses");
+    let variables = reparsed.variables().expect("variables decode");
+    assert_eq!(variables.len(), 82);
+    assert_eq!(variables[0].name.as_deref(), Some("_0000_DI00"));
+    assert_eq!(variables[0].address_area.as_deref(), Some("M"));
+    assert_eq!(variables[0].address_number, Some(42));
+    assert_eq!(variables[0].address.as_deref(), Some("M0002A"));
+    assert_eq!(variables[0].description.as_deref(), Some("수정 접점 00"));
+    assert_eq!(variables[1].name.as_deref(), Some("_0000_IN01"));
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn rejects_unsafe_variable_edits_without_mutating_xml() {
+    let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_xml = doc.xml.clone();
+
+    let length_error = doc
+        .update_variable(
+            0,
+            &VariablePatch {
+                name: Some("length-changing-name".to_owned()),
+                ..VariablePatch::default()
+            },
+        )
+        .expect_err("length-changing strings must fail");
+    assert!(matches!(
+        length_error,
+        XgwxError::VariableFieldLengthChanged { .. }
+    ));
+    assert_eq!(doc.xml, original_xml);
+
+    let missing_error = doc
+        .update_variable(999, &VariablePatch::default())
+        .expect_err("missing variables must fail");
+    assert!(matches!(
+        missing_error,
+        XgwxError::VariableNotFound { index: 999 }
+    ));
+    assert_eq!(doc.xml, original_xml);
+}
+
 #[test]
 fn decodes_synthetic_ladder_records() {
     let data = synthetic_ladder_data();

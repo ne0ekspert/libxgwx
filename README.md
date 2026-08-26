@@ -63,10 +63,16 @@ for program in doc.programs() {
   through the decoded symbol table.
 - With the opt-in `write` feature, `XgwxDocument::update_module(...)` applies
   token-preserving in-memory changes to one module selected by base and slot.
-  The first patching scope is
-  limited to existing module `Id`, `SubType`, `Name`, `Comment`, and `Details`
-  attributes; `set_module_input_filter(...)` provides a typed XGI-D24A/B
-  helper. Other project sections remain read-only.
+  The first module patching scope is limited to existing `Id`, `SubType`,
+  `Name`, `Comment`, and `Details` attributes;
+  `set_module_input_filter(...)` provides a typed XGI-D24A/B helper.
+- The same `write` feature exposes `update_program(...)` for existing program
+  metadata and `update_ladder_cell_text(...)` for decoded ladder strings. A
+  ladder replacement must keep the same UTF-16 length so proprietary record
+  offsets and undecoded topology bytes remain unchanged.
+- `update_variable(...)` edits one decoded global symbol record by document
+  order. Name, address area, data type, and description replacements must keep
+  their UTF-16 length; the numeric address is updated in place.
 - `ladder_mnemonic_info(...)` and `known_ladder_mnemonics()` expose category
   and description metadata for known ladder instruction mnemonics.
 - `XgwxDocument::project_options()`, `parameters()`, `hsc_parameters()`,
@@ -170,7 +176,10 @@ outside the validated 138-byte XG5000 header format still fail closed with
 
 When both `wasm` and `write` are enabled, the generated package also exposes
 `update_xgwx_module(bytes, base, slot, patch)` and
-`set_xgwx_module_input_filter(bytes, base, slot, rawFilter)`.
+`set_xgwx_module_input_filter(bytes, base, slot, rawFilter)`, plus
+`update_xgwx_program(bytes, programIndex, patch)` and
+`update_xgwx_ladder_cell(bytes, programIndex, offset, expected, replacement)`,
+and `update_xgwx_variable(bytes, variableIndex, patch)`.
 
 The included example can be used as a serialization and XG5000 validation
 harness:

@@ -1,4 +1,7 @@
 use crate::*;
+use base64::Engine;
+use bzip2::Compression as Bzip2Compression;
+use bzip2::write::BzEncoder;
 use std::cmp::Reverse;
 use std::io::Write;
 use std::ops::Range;
@@ -33,6 +36,38 @@ pub struct ModulePatch {
     pub name: Option<String>,
     pub comment: Option<String>,
     pub details: Option<String>,
+}
+
+/// Changes to editable metadata on one `<Program>` record.
+///
+/// Programs are selected by their stable document order because their name is
+/// itself editable. A `None` field leaves the corresponding XML byte range
+/// untouched.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct ProgramPatch {
+    pub name: Option<String>,
+    pub task: Option<String>,
+    pub version: Option<u32>,
+    pub kind: Option<u32>,
+    pub instance_name: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// Changes to one decoded global variable symbol record.
+///
+/// Variables are selected by document order. String replacements must retain
+/// their existing UTF-16 length so opaque record offsets remain stable.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct VariablePatch {
+    pub name: Option<String>,
+    pub address_area: Option<String>,
+    pub address_number: Option<u32>,
+    pub data_type: Option<String>,
+    pub description: Option<String>,
 }
 
 impl XgwxDocument {
@@ -163,6 +198,261 @@ impl XgwxDocument {
                 ..ModulePatch::default()
             },
         )
+    }
+
+    /// Update editable XML metadata for one program selected by document order.
+    pub fn update_program(
+        &mut self,
+        program_index: usize,
+        patch: &ProgramPatch,
+    ) -> Result<(), XgwxError> {
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let program = document
+            .descendants()
+            .filter(|node| node.has_tag_name("Program"))
+            .nth(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })?;
+
+        let mut replacements = Vec::new();
+        push_program_string_replacement(
+            &mut replacements,
+            program,
+            program_index,
+            "Task",
+            patch.task.as_deref(),
+        )?;
+        push_program_u32_replacement(
+            &mut replacements,
+            program,
+            program_index,
+            "Version",
+            patch.version,
+        )?;
+        push_program_u32_replacement(
+            &mut replacements,
+            program,
+            program_index,
+            "Kind",
+            patch.kind,
+        )?;
+        push_program_string_replacement(
+            &mut replacements,
+            program,
+            program_index,
+            "InstanceName",
+            patch.instance_name.as_deref(),
+        )?;
+        push_program_string_replacement(
+            &mut replacements,
+            program,
+            program_index,
+            "Comment",
+            patch.comment.as_deref(),
+        )?;
+
+        if let Some(name) = &patch.name {
+            let name_node = program.children().find(|node| node.is_text()).ok_or(
+                XgwxError::MissingProgramName {
+                    index: program_index,
+                },
+            )?;
+            replacements.push((name_node.range(), escape_xml_text(name)));
+        }
+
+        self.apply_xml_replacements(replacements)
+    }
+
+    /// Update one global variable while preserving the binary symbol layout.
+    pub fn update_variable(
+        &mut self,
+        variable_index: usize,
+        patch: &VariablePatch,
+    ) -> Result<(), XgwxError> {
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let symbols = document
+            .descendants()
+            .find(|node| node.has_tag_name("Symbols"))
+            .ok_or(XgwxError::MissingSymbols)?;
+        let text_node = symbols
+            .children()
+            .find(|node| node.is_text())
+            .ok_or(XgwxError::MissingSymbols)?;
+        let original_text = text_node.text().unwrap_or_default();
+        let compressed = symbols
+            .attribute("Compressed")
+            .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"));
+        let mut payload = decode_base64_payload(original_text, compressed)?.data;
+        let strings = extract_utf16_marker_strings(&payload, false, true);
+        let starts = strings
+            .iter()
+            .enumerate()
+            .filter_map(|(index, string)| (string.value == "SV5.0").then_some(index))
+            .collect::<Vec<_>>();
+        let start = starts
+            .get(variable_index)
+            .copied()
+            .ok_or(XgwxError::VariableNotFound {
+                index: variable_index,
+            })?;
+        let end = starts
+            .get(variable_index + 1)
+            .copied()
+            .unwrap_or(strings.len());
+        let record = strings
+            .get(start..end)
+            .filter(|record| record.len() >= 7)
+            .ok_or(XgwxError::InvalidVariableRecord {
+                index: variable_index,
+            })?;
+
+        patch_variable_string(
+            &mut payload,
+            variable_index,
+            "name",
+            &record[1],
+            patch.name.as_deref(),
+        )?;
+        patch_variable_string(
+            &mut payload,
+            variable_index,
+            "address area",
+            &record[2],
+            patch.address_area.as_deref(),
+        )?;
+        patch_variable_string(
+            &mut payload,
+            variable_index,
+            "data type",
+            &record[3],
+            patch.data_type.as_deref(),
+        )?;
+        patch_variable_string(
+            &mut payload,
+            variable_index,
+            "description",
+            &record[4],
+            patch.description.as_deref(),
+        )?;
+
+        if let Some(address_number) = patch.address_number {
+            let range = record[2].end_offset..record[2].end_offset + 4;
+            let bytes = payload
+                .get_mut(range)
+                .ok_or(XgwxError::InvalidVariableRecord {
+                    index: variable_index,
+                })?;
+            bytes.copy_from_slice(&address_number.to_le_bytes());
+        }
+
+        let replacement_text = encode_payload_text(original_text, compressed, &payload)?;
+        self.apply_xml_replacements(vec![(text_node.range(), replacement_text)])
+    }
+
+    /// Replace one decoded ladder cell string while preserving binary layout.
+    ///
+    /// The replacement must contain exactly as many UTF-16 code units as the
+    /// original string. This keeps every proprietary record offset and all
+    /// undecoded topology bytes stable; only the string bytes and compression
+    /// envelopes are regenerated.
+    pub fn update_ladder_cell_text(
+        &mut self,
+        program_index: usize,
+        offset: usize,
+        expected: &str,
+        replacement: &str,
+    ) -> Result<(), XgwxError> {
+        let expected_units = expected.encode_utf16().count();
+        let replacement_units = replacement.encode_utf16().count();
+        if replacement_units != expected_units {
+            return Err(XgwxError::LadderCellLengthChanged {
+                expected_utf16_units: expected_units,
+                actual_utf16_units: replacement_units,
+            });
+        }
+
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let program = document
+            .descendants()
+            .filter(|node| node.has_tag_name("Program"))
+            .nth(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })?;
+        let program_data = program
+            .descendants()
+            .find(|node| node.has_tag_name("ProgramData"))
+            .ok_or(XgwxError::MissingProgramData)?;
+        let text_node = program_data
+            .children()
+            .find(|node| node.is_text())
+            .ok_or(XgwxError::MissingProgramData)?;
+        let original_text = text_node.text().unwrap_or_default();
+        let compressed = program_data
+            .attribute("Compressed")
+            .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"));
+        let mut payload = decode_base64_payload(original_text, compressed)?.data;
+
+        let Some(length_byte) = payload.get(offset + UTF16_MARKER.len()).copied() else {
+            return Err(XgwxError::LadderCellNotFound {
+                program_index,
+                offset,
+            });
+        };
+        if payload.get(offset..offset + UTF16_MARKER.len()) != Some(UTF16_MARKER)
+            || usize::from(length_byte) != expected_units
+        {
+            return Err(XgwxError::LadderCellNotFound {
+                program_index,
+                offset,
+            });
+        }
+
+        let text_start = offset + UTF16_MARKER.len() + 1;
+        let text_end = text_start + expected_units * 2;
+        let Some(encoded) = payload.get(text_start..text_end) else {
+            return Err(XgwxError::LadderCellNotFound {
+                program_index,
+                offset,
+            });
+        };
+        let actual = decode_utf16_bytes(encoded).ok_or(XgwxError::LadderCellNotFound {
+            program_index,
+            offset,
+        })?;
+        if actual != expected {
+            return Err(XgwxError::LadderCellChanged {
+                program_index,
+                offset,
+            });
+        }
+
+        for (chunk, unit) in payload[text_start..text_end]
+            .chunks_exact_mut(2)
+            .zip(replacement.encode_utf16())
+        {
+            chunk.copy_from_slice(&unit.to_le_bytes());
+        }
+
+        let replacement_text = encode_payload_text(original_text, compressed, &payload)?;
+        self.apply_xml_replacements(vec![(text_node.range(), replacement_text)])
+    }
+
+    fn apply_xml_replacements(
+        &mut self,
+        mut replacements: Vec<(Range<usize>, String)>,
+    ) -> Result<(), XgwxError> {
+        replacements.sort_by_key(|replacement| Reverse(replacement.0.start));
+        let mut xml = self.xml.clone();
+        for (range, value) in replacements {
+            xml.replace_range(range, &value);
+        }
+
+        let root = parse_xml(&xml)?;
+        self.xml = xml;
+        self.root = root;
+        Ok(())
     }
 
     /// Serialize the workspace after supported edits.
@@ -368,6 +658,63 @@ fn push_u32_replacement(
     Ok(())
 }
 
+fn push_program_u32_replacement(
+    replacements: &mut Vec<(Range<usize>, String)>,
+    program: roxmltree::Node<'_, '_>,
+    program_index: usize,
+    attribute: &'static str,
+    value: Option<u32>,
+) -> Result<(), XgwxError> {
+    if let Some(value) = value {
+        push_program_replacement(
+            replacements,
+            program,
+            program_index,
+            attribute,
+            value.to_string(),
+        )?;
+    }
+    Ok(())
+}
+
+fn push_program_string_replacement(
+    replacements: &mut Vec<(Range<usize>, String)>,
+    program: roxmltree::Node<'_, '_>,
+    program_index: usize,
+    attribute: &'static str,
+    value: Option<&str>,
+) -> Result<(), XgwxError> {
+    if let Some(value) = value {
+        push_program_replacement(
+            replacements,
+            program,
+            program_index,
+            attribute,
+            escape_xml_attribute(value),
+        )?;
+    }
+    Ok(())
+}
+
+fn push_program_replacement(
+    replacements: &mut Vec<(Range<usize>, String)>,
+    program: roxmltree::Node<'_, '_>,
+    program_index: usize,
+    attribute: &'static str,
+    value: String,
+) -> Result<(), XgwxError> {
+    let range = program
+        .attributes()
+        .find(|item| item.name() == attribute)
+        .map(|item| item.range_value())
+        .ok_or(XgwxError::MissingProgramAttribute {
+            index: program_index,
+            attribute,
+        })?;
+    replacements.push((range, value));
+    Ok(())
+}
+
 fn push_string_replacement(
     replacements: &mut Vec<(Range<usize>, String)>,
     module: roxmltree::Node<'_, '_>,
@@ -437,6 +784,110 @@ fn escape_xml_attribute(value: &str) -> String {
         }
     }
     escaped
+}
+
+fn escape_xml_text(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '\r' => escaped.push_str("&#xD;"),
+            character => escaped.push(character),
+        }
+    }
+    escaped
+}
+
+fn patch_variable_string(
+    payload: &mut [u8],
+    variable_index: usize,
+    field: &'static str,
+    original: &LadderString,
+    replacement: Option<&str>,
+) -> Result<(), XgwxError> {
+    let Some(replacement) = replacement else {
+        return Ok(());
+    };
+    let expected_units = original.value.encode_utf16().count();
+    let actual_units = replacement.encode_utf16().count();
+    if actual_units != expected_units {
+        return Err(XgwxError::VariableFieldLengthChanged {
+            index: variable_index,
+            field,
+            expected_utf16_units: expected_units,
+            actual_utf16_units: actual_units,
+        });
+    }
+
+    let text_start = original.offset + UTF16_MARKER.len() + 1;
+    let bytes = payload.get_mut(text_start..original.end_offset).ok_or(
+        XgwxError::InvalidVariableRecord {
+            index: variable_index,
+        },
+    )?;
+    for (chunk, unit) in bytes.chunks_exact_mut(2).zip(replacement.encode_utf16()) {
+        chunk.copy_from_slice(&unit.to_le_bytes());
+    }
+    Ok(())
+}
+
+fn encode_payload_text(
+    original_text: &str,
+    compressed: bool,
+    payload: &[u8],
+) -> Result<String, XgwxError> {
+    let raw = if compressed {
+        let mut encoder = BzEncoder::new(Vec::new(), Bzip2Compression::best());
+        encoder.write_all(payload).map_err(XgwxError::Bzip2)?;
+        encoder.finish().map_err(XgwxError::Bzip2)?
+    } else {
+        payload.to_vec()
+    };
+    let encoded = base64::engine::general_purpose::STANDARD.encode(raw);
+    Ok(format_base64_like(original_text, &encoded))
+}
+
+fn format_base64_like(original: &str, encoded: &str) -> String {
+    let prefix_len = original
+        .bytes()
+        .position(|byte| !byte.is_ascii_whitespace())
+        .unwrap_or(original.len());
+    let suffix_start = original
+        .bytes()
+        .rposition(|byte| !byte.is_ascii_whitespace())
+        .map_or(original.len(), |index| index + 1);
+    let prefix = &original[..prefix_len];
+    let suffix = &original[suffix_start..];
+
+    let newline = if original.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let continuation_indent = original
+        .split_inclusive(newline)
+        .nth(1)
+        .map(|line| line.trim_end_matches(['\r', '\n']))
+        .map(|line| {
+            line.chars()
+                .take_while(|character| character.is_whitespace())
+                .collect::<String>()
+        })
+        .unwrap_or_default();
+
+    let mut formatted = String::with_capacity(prefix.len() + encoded.len() + suffix.len());
+    formatted.push_str(prefix);
+    for (index, chunk) in encoded.as_bytes().chunks(76).enumerate() {
+        if index > 0 {
+            formatted.push_str(newline);
+            formatted.push_str(&continuation_indent);
+        }
+        formatted.push_str(std::str::from_utf8(chunk).expect("base64 is ASCII"));
+    }
+    formatted.push_str(suffix);
+    formatted
 }
 
 fn assemble_workspace(header: &[u8], main_gzip: &[u8], trailer: &[u8]) -> Vec<u8> {

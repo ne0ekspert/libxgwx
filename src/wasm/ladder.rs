@@ -54,7 +54,7 @@ impl WasmLadderProgramSummary {
                 .rungs
                 .iter()
                 .flat_map(|rung| rung.cells.iter())
-                .map(WasmLadderCellSummary::from_cell)
+                .map(|cell| WasmLadderCellSummary::from_cell(cell, program))
                 .collect(),
             vertical_lines: program
                 .structure
@@ -120,6 +120,7 @@ impl WasmLadderRungSummary {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderCellSummary {
+    pub(super) offset: usize,
     pub(super) raw_x: u8,
     pub(super) raw_y: u8,
     pub(super) kind: &'static str,
@@ -129,12 +130,14 @@ pub(super) struct WasmLadderCellSummary {
     pub(super) coil: Option<&'static str>,
     pub(super) mnemonic_category: Option<&'static str>,
     pub(super) mnemonic_description: Option<&'static str>,
+    pub(super) source_text: Option<String>,
 }
 
 impl WasmLadderCellSummary {
-    pub(super) fn from_cell(cell: &LadderCell) -> Self {
+    pub(super) fn from_cell(cell: &LadderCell, program: &LadderProgramData) -> Self {
         let mnemonic = ladder_mnemonic_info(&cell.value);
         Self {
+            offset: cell.offset,
             raw_x: cell.raw_x,
             raw_y: cell.raw_y,
             kind: wasm_ladder_kind_label(cell.kind),
@@ -144,6 +147,11 @@ impl WasmLadderCellSummary {
             coil: cell.coil.map(wasm_ladder_coil_label),
             mnemonic_category: mnemonic.map(|info| info.category.label()),
             mnemonic_description: mnemonic.map(|info| info.description),
+            source_text: program
+                .strings
+                .iter()
+                .find(|string| string.offset == cell.offset)
+                .map(|string| string.value.clone()),
         }
     }
 }
