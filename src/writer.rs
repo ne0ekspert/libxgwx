@@ -38,6 +38,16 @@ pub struct ModulePatch {
     pub details: Option<String>,
 }
 
+/// Current value of one verified module option at one module/channel/group index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
+pub struct ModuleOptionSelection {
+    pub key: &'static str,
+    pub index: u32,
+    pub value: u32,
+}
+
 /// Changes to editable metadata on one `<Program>` record.
 ///
 /// Programs are selected by their stable document order because their name is
@@ -71,6 +81,180 @@ pub struct VariablePatch {
 }
 
 impl XgwxDocument {
+    /// Select a module model from the embedded latest-stable XGK catalog.
+    ///
+    /// The target base, slot, and comment are preserved. `Id`, `SubType`,
+    /// `Name`, and `Details` are replaced atomically with the catalog defaults.
+    pub fn select_module(&mut self, base: u32, slot: u32, model: &str) -> Result<(), XgwxError> {
+        let entry = crate::catalog::find_xgk_module(model)?;
+        self.validate_module_placement(base, slot, entry.slot_span)?;
+        self.update_module(
+            base,
+            slot,
+            &ModulePatch {
+                id: Some(entry.id),
+                sub_type: Some(entry.sub_type),
+                name: Some(entry.name.to_owned()),
+                details: Some(entry.details.to_owned()),
+                ..ModulePatch::default()
+            },
+        )
+    }
+
+    fn validate_module_placement(
+        &self,
+        base: u32,
+        slot: u32,
+        slot_span: u32,
+    ) -> Result<(), XgwxError> {
+        match self
+            .modules()
+            .into_iter()
+            .filter(|module| module.base == Some(base) && module.slot == Some(slot))
+            .count()
+        {
+            0 => return Err(XgwxError::ModuleNotFound { base, slot }),
+            1 => {}
+            _ => return Err(XgwxError::AmbiguousModule { base, slot }),
+        }
+        let end = slot
+            .checked_add(slot_span)
+            .ok_or(XgwxError::ModulePlacementExceedsBase {
+                base,
+                slot,
+                slot_span,
+                slot_count: 0,
+            })?;
+        if let Some(slot_count) = self
+            .bases()
+            .into_iter()
+            .find(|item| item.base == Some(base))
+            .and_then(|item| item.slot_count)
+            && end > slot_count
+        {
+            return Err(XgwxError::ModulePlacementExceedsBase {
+                base,
+                slot,
+                slot_span,
+                slot_count,
+            });
+        }
+        if let Some(conflicting_slot) = self
+            .modules()
+            .into_iter()
+            .filter(|module| module.base == Some(base))
+            .filter_map(|module| module.slot)
+            .find(|other_slot| *other_slot > slot && *other_slot < end)
+        {
+            return Err(XgwxError::ModulePlacementConflict {
+                base,
+                slot,
+                slot_span,
+                conflicting_slot,
+            });
+        }
+        Ok(())
+    }
+
+    /// Return all currently selected values for the module's verified options.
+    pub fn module_option_values(
+        &self,
+        base: u32,
+        slot: u32,
+    ) -> Result<Vec<ModuleOptionSelection>, XgwxError> {
+        let (entry, details) = self.catalog_module_details(base, slot)?;
+        let bytes = decode_hex_ascii_payload(&details, "Module", "Details")?;
+        let mut selections = Vec::new();
+        for option in entry.options {
+            for index in 0..option.count {
+                selections.push(ModuleOptionSelection {
+                    key: option.key,
+                    index,
+                    value: read_module_option(&bytes, option, index)?,
+                });
+            }
+        }
+        Ok(selections)
+    }
+
+    /// Set one verified dropdown option in a module's `Details` payload.
+    ///
+    /// `index` is zero for module-wide options and selects the channel or group
+    /// for scoped options. Values not listed in the catalog are rejected.
+    pub fn set_module_option(
+        &mut self,
+        base: u32,
+        slot: u32,
+        key: &str,
+        index: u32,
+        value: u32,
+    ) -> Result<(), XgwxError> {
+        let (entry, details) = self.catalog_module_details(base, slot)?;
+        let option = crate::catalog::find_xgk_module_option(entry, key)?;
+        if index >= option.count {
+            return Err(XgwxError::ModuleOptionIndexOutOfRange {
+                key: key.to_owned(),
+                index,
+                count: option.count,
+            });
+        }
+        if !option.values.iter().any(|item| item.value == value) {
+            return Err(XgwxError::InvalidModuleOptionValue {
+                key: key.to_owned(),
+                value,
+            });
+        }
+
+        let mut bytes = decode_hex_ascii_payload(&details, "Module", "Details")?;
+        write_module_option(&mut bytes, option, index, value)?;
+        let details = bytes
+            .iter()
+            .map(|byte| format!("{byte:02X}"))
+            .collect::<String>();
+        self.update_module(
+            base,
+            slot,
+            &ModulePatch {
+                details: Some(details),
+                ..ModulePatch::default()
+            },
+        )
+    }
+
+    fn catalog_module_details(
+        &self,
+        base: u32,
+        slot: u32,
+    ) -> Result<(&'static ModuleCatalogEntry, String), XgwxError> {
+        let matches = self
+            .modules()
+            .into_iter()
+            .filter(|module| module.base == Some(base) && module.slot == Some(slot))
+            .collect::<Vec<_>>();
+        let module = match matches.as_slice() {
+            [] => return Err(XgwxError::ModuleNotFound { base, slot }),
+            [module] => module,
+            _ => return Err(XgwxError::AmbiguousModule { base, slot }),
+        };
+        let entries = crate::xgk_module_catalog()
+            .iter()
+            .filter(|entry| module.id == Some(entry.id) && module.sub_type == Some(entry.sub_type))
+            .collect::<Vec<_>>();
+        let entry = match entries.as_slice() {
+            [entry] => *entry,
+            _ => return Err(XgwxError::ModuleCatalogMismatch { base, slot }),
+        };
+        let details = module
+            .details
+            .clone()
+            .ok_or(XgwxError::MissingModuleAttribute {
+                base,
+                slot,
+                attribute: "Details",
+            })?;
+        Ok((entry, details))
+    }
+
     /// Update one module selected by its unique base and slot.
     ///
     /// Only the requested XML attribute values are replaced. Element order,
@@ -529,6 +713,90 @@ impl XgwxDocument {
             .get(padding_len..)
             .ok_or(XgwxError::AuthenticatedRewriteUnsupported)
     }
+}
+
+fn module_option_location(option: &ModuleOptionEntry, index: u32) -> (usize, u32, usize) {
+    let encoding = option.encoding;
+    match encoding.kind {
+        "scalar" => (encoding.offset as usize, 0, (encoding.bits / 8) as usize),
+        "bit" => (encoding.offset as usize, encoding.shift_base + index, 4),
+        "packed" => (
+            encoding.offset as usize,
+            encoding.shift_base + encoding.bits * index,
+            4,
+        ),
+        "per-channel" => ((encoding.offset + encoding.stride * index) as usize, 0, 4),
+        "banked-packed" => (
+            (encoding.offset + encoding.bank_stride * (index / encoding.channels_per_word))
+                as usize,
+            encoding.bits * (index % encoding.channels_per_word),
+            4,
+        ),
+        "split-packed" => (
+            if index < encoding.channels_per_word {
+                encoding.offset as usize
+            } else {
+                encoding.second_offset as usize
+            },
+            encoding.bits * (index % encoding.channels_per_word),
+            4,
+        ),
+        "packed-bytes" => (
+            (encoding.offset + encoding.bank_stride * (index / encoding.channels_per_word))
+                as usize,
+            encoding.bits * (index % encoding.channels_per_word),
+            1,
+        ),
+        _ => unreachable!("generated module option encoding is normalized"),
+    }
+}
+
+fn read_module_option(
+    details: &[u8],
+    option: &ModuleOptionEntry,
+    index: u32,
+) -> Result<u32, XgwxError> {
+    let (offset, shift, width) = module_option_location(option, index);
+    let range = details.get(offset..offset + width).ok_or_else(|| {
+        XgwxError::ModuleOptionDetailsTooShort {
+            key: option.key.to_owned(),
+        }
+    })?;
+    let mut encoded = [0u8; 4];
+    encoded[..width].copy_from_slice(range);
+    let word = u32::from_le_bytes(encoded);
+    let mask = if option.encoding.bits == 32 {
+        u32::MAX
+    } else {
+        (1u32 << option.encoding.bits) - 1
+    };
+    Ok((word >> shift) & mask)
+}
+
+fn write_module_option(
+    details: &mut [u8],
+    option: &ModuleOptionEntry,
+    index: u32,
+    value: u32,
+) -> Result<(), XgwxError> {
+    let (offset, shift, width) = module_option_location(option, index);
+    let range = details.get_mut(offset..offset + width).ok_or_else(|| {
+        XgwxError::ModuleOptionDetailsTooShort {
+            key: option.key.to_owned(),
+        }
+    })?;
+    let mut encoded = [0u8; 4];
+    encoded[..width].copy_from_slice(range);
+    let mut word = u32::from_le_bytes(encoded);
+    let value_mask = if option.encoding.bits == 32 {
+        u32::MAX
+    } else {
+        (1u32 << option.encoding.bits) - 1
+    };
+    let mask = value_mask << shift;
+    word = (word & !mask) | ((value & value_mask) << shift);
+    range.copy_from_slice(&word.to_le_bytes()[..width]);
+    Ok(())
 }
 
 fn gzip_xml(xml: &[u8]) -> Result<Vec<u8>, XgwxError> {

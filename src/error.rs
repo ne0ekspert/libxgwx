@@ -62,6 +62,41 @@ pub enum XgwxError {
         base: u32,
         slot: u32,
     },
+    UnknownModuleCatalogModel {
+        model: String,
+    },
+    UnknownModuleOption {
+        model: String,
+        key: String,
+    },
+    ModuleCatalogMismatch {
+        base: u32,
+        slot: u32,
+    },
+    ModuleOptionIndexOutOfRange {
+        key: String,
+        index: u32,
+        count: u32,
+    },
+    InvalidModuleOptionValue {
+        key: String,
+        value: u32,
+    },
+    ModuleOptionDetailsTooShort {
+        key: String,
+    },
+    ModulePlacementExceedsBase {
+        base: u32,
+        slot: u32,
+        slot_span: u32,
+        slot_count: u32,
+    },
+    ModulePlacementConflict {
+        base: u32,
+        slot: u32,
+        slot_span: u32,
+        conflicting_slot: u32,
+    },
     ProgramNotFound {
         index: usize,
     },
@@ -164,6 +199,43 @@ impl fmt::Display for XgwxError {
             Self::InvalidModuleInputFilterTarget { base, slot } => write!(
                 f,
                 "module at base {base}, slot {slot} is not an XGI-D24A/B input module"
+            ),
+            Self::UnknownModuleCatalogModel { model } => {
+                write!(f, "XGK module catalog does not contain {model}")
+            }
+            Self::UnknownModuleOption { model, key } => {
+                write!(f, "XGK module {model} has no writable option {key}")
+            }
+            Self::ModuleCatalogMismatch { base, slot } => write!(
+                f,
+                "module at base {base}, slot {slot} does not uniquely match the XGK module catalog"
+            ),
+            Self::ModuleOptionIndexOutOfRange { key, index, count } => {
+                write!(f, "module option {key} index {index} is outside 0..{count}")
+            }
+            Self::InvalidModuleOptionValue { key, value } => {
+                write!(f, "module option {key} does not allow value {value}")
+            }
+            Self::ModuleOptionDetailsTooShort { key } => {
+                write!(f, "module Details is too short for option {key}")
+            }
+            Self::ModulePlacementExceedsBase {
+                base,
+                slot,
+                slot_span,
+                slot_count,
+            } => write!(
+                f,
+                "module at base {base}, slot {slot} occupies {slot_span} slots but the base has only {slot_count} slots"
+            ),
+            Self::ModulePlacementConflict {
+                base,
+                slot,
+                slot_span,
+                conflicting_slot,
+            } => write!(
+                f,
+                "module at base {base}, slot {slot} occupies {slot_span} slots and overlaps the module at slot {conflicting_slot}"
             ),
             Self::ProgramNotFound { index } => {
                 write!(f, "program at index {index} was not found")

@@ -276,6 +276,388 @@ fn module_writer_rejects_invalid_or_unsafe_edits_without_mutating_xml() {
 
 #[cfg(feature = "write")]
 #[test]
+fn selects_module_from_embedded_xgk_catalog() {
+    let catalog = xgk_module_catalog();
+    assert_eq!(catalog.len(), 90);
+    assert_eq!(
+        catalog
+            .iter()
+            .map(|entry| entry.visible_options.len())
+            .sum::<usize>(),
+        391
+    );
+    let selected = catalog
+        .iter()
+        .find(|entry| entry.model == "XGF-RD8A")
+        .expect("RD8A is selectable");
+
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original = doc
+        .modules()
+        .into_iter()
+        .find(|module| module.base == Some(0) && module.slot == Some(2))
+        .expect("target module exists");
+
+    doc.select_module(0, 2, "xgf-rd8a")
+        .expect("model matching is ASCII-case-insensitive");
+    let module = doc
+        .modules()
+        .into_iter()
+        .find(|module| module.base == Some(0) && module.slot == Some(2))
+        .expect("selected module exists");
+
+    assert_eq!(module.base, original.base);
+    assert_eq!(module.slot, original.slot);
+    assert_eq!(module.comment, original.comment);
+    assert_eq!(module.id, Some(selected.id));
+    assert_eq!(module.sub_type, Some(selected.sub_type));
+    assert_eq!(module.name.as_deref(), Some(selected.name));
+    assert_eq!(module.details.as_deref(), Some(selected.details));
+
+    let rewritten = doc.to_bytes().expect("selected workspace writes");
+    let reparsed = XgwxDocument::parse(&rewritten).expect("selected workspace reparses");
+    let module = reparsed
+        .modules()
+        .into_iter()
+        .find(|module| module.base == Some(0) && module.slot == Some(2))
+        .expect("selected module survives serialization");
+    assert_eq!(module.id, Some(selected.id));
+    assert_eq!(module.details.as_deref(), Some(selected.details));
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn exposes_dl16a_nested_file_and_data_options() {
+    let entry = xgk_module_catalog()
+        .iter()
+        .find(|entry| entry.model == "XGF-DL16A")
+        .expect("DL16A is in the catalog");
+
+    for key in [
+        "fileConfiguration.fileEnabled",
+        "fileConfiguration.fileName",
+        "fileConfiguration.timeName",
+        "fileConfiguration.indexName",
+    ] {
+        let option = entry
+            .visible_options
+            .iter()
+            .find(|option| option.key == key)
+            .expect("per-file option is visible");
+        assert_eq!(option.scope, "file");
+        assert_eq!(option.count, 8);
+        assert_eq!(option.items_per_parent, 0);
+    }
+
+    for key in ["dataDefinitions.type", "dataDefinitions.name"] {
+        let option = entry
+            .visible_options
+            .iter()
+            .find(|option| option.key == key)
+            .expect("per-file data definition is visible");
+        assert_eq!(option.scope, "fileData");
+        assert_eq!(option.count, 8 * 32);
+        assert_eq!(option.items_per_parent, 32);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn exposes_all_catalog_channel_instances() {
+    let catalog = xgk_module_catalog();
+    for entry in catalog {
+        for writable in entry.options {
+            let visible = entry
+                .visible_options
+                .iter()
+                .find(|option| option.key == writable.key)
+                .expect("every writable option must also be visible");
+            assert!(
+                visible.count >= writable.count,
+                "{}:{} exposes {} rows but writes {}",
+                entry.model,
+                writable.key,
+                visible.count,
+                writable.count
+            );
+        }
+    }
+
+    for (model, key, channel_count) in [
+        ("XGF-AC4H", "processAlarmEnabled", 4),
+        ("XGF-AD4S", "inputRange", 4),
+        ("XGF-AH6A", "input.averageProcessing", 4),
+        ("XGF-AW4S", "outputDataType", 4),
+        ("XGF-DA4S", "abnormalStateOutput", 4),
+        ("XGF-DV4A", "powerLossOutput", 4),
+        ("XGF-DV4S", "powerLossOutput", 4),
+        ("XGF-HD2A", "counterMode", 2),
+        ("XGF-HO2A", "counterMode", 2),
+        ("XGF-RD4A", "sensorType", 4),
+        ("XGF-RD4S", "sensorType", 4),
+        ("XGF-RD8A", "sensorType", 8),
+        ("XGF-TC4S", "sensorType", 4),
+        ("XGF-TC4SB", "inputRange", 4),
+    ] {
+        let option = catalog
+            .iter()
+            .find(|entry| entry.model == model)
+            .and_then(|entry| {
+                entry
+                    .visible_options
+                    .iter()
+                    .find(|option| option.key == key)
+            })
+            .expect("audited channel option is visible");
+        assert_eq!(option.scope, "channel", "{model}:{key}");
+        assert_eq!(option.count, channel_count, "{model}:{key}");
+    }
+
+    for (model, key) in [
+        ("XGF-HD2A", "outputStateSetting"),
+        ("XGF-HO2A", "outputStateSetting"),
+        ("XGF-DA4S", "dssOutput"),
+        ("XGF-DA4S", "analogOutputRetention"),
+        ("XGF-TC4SB", "conversionSpeed"),
+    ] {
+        let option = catalog
+            .iter()
+            .find(|entry| entry.model == model)
+            .and_then(|entry| {
+                entry
+                    .visible_options
+                    .iter()
+                    .find(|option| option.key == key)
+            })
+            .expect("audited module-wide option is visible");
+        assert_eq!(option.scope, "module", "{model}:{key}");
+        assert_eq!(option.count, 1, "{model}:{key}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn exposes_and_writes_dt4a_emergency_output_groups() {
+    let entry = xgk_module_catalog()
+        .iter()
+        .find(|entry| entry.model == "XGH-DT4A")
+        .expect("DT4A is in the catalog");
+    assert!(
+        entry
+            .visible_options
+            .iter()
+            .any(|option| option.key == "emergencyOutput")
+    );
+    assert!(
+        entry
+            .options
+            .iter()
+            .any(|option| option.key == "emergencyOutput")
+    );
+
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    doc.select_module(0, 2, "XGH-DT4A").expect("DT4A selects");
+    doc.set_module_option(0, 2, "emergencyOutput", 0, 1)
+        .expect("first output group writes");
+    doc.set_module_option(0, 2, "emergencyOutput", 1, 1)
+        .expect("second output group writes");
+
+    let module = doc
+        .modules()
+        .into_iter()
+        .find(|module| module.base == Some(0) && module.slot == Some(2))
+        .expect("DT4A remains present");
+    assert_eq!(module.details.as_deref(), Some("00000C0000000000"));
+    let values = doc.module_option_values(0, 2).expect("DT4A options decode");
+    assert_eq!(
+        values
+            .iter()
+            .filter(|item| item.key == "emergencyOutput")
+            .map(|item| item.value)
+            .collect::<Vec<_>>(),
+        vec![1, 1]
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn exposes_and_writes_relay_emergency_output_groups() {
+    let catalog = xgk_module_catalog();
+    for (model, group_count) in [("XGQ-RY1A", 1), ("XGQ-RY2A/B", 2)] {
+        let entry = catalog
+            .iter()
+            .find(|entry| entry.model == model)
+            .expect("relay module is in the catalog");
+        let option = entry
+            .options
+            .iter()
+            .find(|option| option.key == "emergencyOutput")
+            .expect("relay emergency output is writable");
+        assert_eq!(option.count, group_count);
+        assert!(
+            entry
+                .visible_options
+                .iter()
+                .any(|option| option.key == "emergencyOutput")
+        );
+    }
+
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    doc.set_module_option(1, 0, "emergencyOutput", 0, 1)
+        .expect("RY1A output group writes");
+    doc.set_module_option(1, 1, "emergencyOutput", 0, 1)
+        .expect("RY2A/B first output group writes");
+    doc.set_module_option(1, 1, "emergencyOutput", 1, 1)
+        .expect("RY2A/B second output group writes");
+
+    let modules = doc.modules();
+    assert_eq!(
+        modules
+            .iter()
+            .find(|module| module.base == Some(1) && module.slot == Some(0))
+            .and_then(|module| module.details.as_deref()),
+        Some("0000010000000000")
+    );
+    assert_eq!(
+        modules
+            .iter()
+            .find(|module| module.base == Some(1) && module.slot == Some(1))
+            .and_then(|module| module.details.as_deref()),
+        Some("0000030000000000")
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn treats_tc4ud_as_a_two_slot_module() {
+    let entry = xgk_module_catalog()
+        .iter()
+        .find(|entry| entry.model == "XGF-TC4UD")
+        .expect("TC4UD is in the catalog");
+    assert_eq!(entry.slot_span, 2);
+    assert!(
+        xgk_module_catalog()
+            .iter()
+            .filter(|entry| entry.model != "XGF-TC4UD")
+            .all(|entry| entry.slot_span == 1)
+    );
+
+    let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    doc.select_module(0, 2, "XGF-TC4UD")
+        .expect("TC4UD fits in empty slots 2 and 3");
+    let selected = doc
+        .modules()
+        .into_iter()
+        .find(|module| module.base == Some(0) && module.slot == Some(2))
+        .expect("TC4UD remains anchored at its starting slot");
+    assert_eq!(selected.id, Some(entry.id));
+
+    let dense_source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut dense = XgwxDocument::parse(&dense_source).expect("fixture parses");
+    let original_xml = dense.xml.clone();
+    let error = dense
+        .select_module(0, 7, "XGF-TC4UD")
+        .expect_err("TC4UD must not overlap slot 8");
+    assert!(matches!(
+        error,
+        XgwxError::ModulePlacementConflict {
+            conflicting_slot: 8,
+            ..
+        }
+    ));
+    assert_eq!(dense.xml, original_xml);
+
+    let error = dense
+        .select_module(1, 11, "XGF-TC4UD")
+        .expect_err("TC4UD must not extend past a 12-slot base");
+    assert!(matches!(
+        error,
+        XgwxError::ModulePlacementExceedsBase { slot_count: 12, .. }
+    ));
+    assert_eq!(dense.xml, original_xml);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn rejects_unknown_catalog_module_without_mutating_xml() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_xml = doc.xml.clone();
+
+    let error = doc
+        .select_module(0, 2, "XGF-NOT-A-MODULE")
+        .expect_err("unknown model must fail");
+    assert!(matches!(error, XgwxError::UnknownModuleCatalogModel { .. }));
+    assert_eq!(doc.xml, original_xml);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn writes_verified_module_dropdown_options_and_round_trips() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    doc.select_module(0, 2, "XGF-AD8A")
+        .expect("catalog module selects");
+
+    doc.set_module_option(0, 2, "channelOperation", 3, 1)
+        .expect("channel operation writes");
+    doc.set_module_option(0, 2, "inputRange", 5, 6)
+        .expect("split packed range writes");
+    doc.set_module_option(0, 2, "samplingProcessing", 7, 2)
+        .expect("packed selection writes");
+
+    let values = doc
+        .module_option_values(0, 2)
+        .expect("module options decode");
+    let value = |key, index| {
+        values
+            .iter()
+            .find(|item| item.key == key && item.index == index)
+            .map(|item| item.value)
+    };
+    assert_eq!(value("channelOperation", 3), Some(1));
+    assert_eq!(value("inputRange", 5), Some(6));
+    assert_eq!(value("samplingProcessing", 7), Some(2));
+    assert_eq!(value("inputRange", 4), Some(0));
+
+    let rewritten = doc.to_bytes().expect("workspace writes");
+    let reparsed = XgwxDocument::parse(&rewritten).expect("workspace reparses");
+    assert_eq!(
+        reparsed
+            .module_option_values(0, 2)
+            .expect("options survive serialization"),
+        values
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn rejects_unverified_module_option_values_without_mutating_xml() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    doc.select_module(0, 2, "XGF-AD8A")
+        .expect("catalog module selects");
+    let original_xml = doc.xml.clone();
+
+    let error = doc
+        .set_module_option(0, 2, "inputRange", 0, 99)
+        .expect_err("unknown dropdown value must fail");
+    assert!(matches!(error, XgwxError::InvalidModuleOptionValue { .. }));
+    assert_eq!(doc.xml, original_xml);
+
+    let error = doc
+        .set_module_option(0, 2, "averageValue", 0, 100)
+        .expect_err("numeric fields are not exposed as dropdown options");
+    assert!(matches!(error, XgwxError::UnknownModuleOption { .. }));
+    assert_eq!(doc.xml, original_xml);
+}
+
+#[cfg(feature = "write")]
+#[test]
 fn writes_program_metadata_and_same_length_ladder_cell() {
     let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
     let mut doc = XgwxDocument::parse(&source).expect("fixture parses");

@@ -34,6 +34,8 @@
 //! }
 //! ```
 
+#[cfg(feature = "write")]
+mod catalog;
 mod document;
 mod error;
 #[cfg(feature = "il")]
@@ -47,6 +49,8 @@ mod writer;
 #[cfg(feature = "wasm")]
 mod wasm;
 
+#[cfg(feature = "write")]
+pub use catalog::*;
 pub use document::XgwxDocument;
 pub use error::XgwxError;
 #[cfg(feature = "il")]
@@ -60,8 +64,9 @@ pub use writer::*;
 pub use wasm::parse_xgwx;
 #[cfg(all(feature = "wasm", feature = "write"))]
 pub use wasm::{
-    set_xgwx_module_input_filter_wasm, update_xgwx_ladder_cell_wasm, update_xgwx_module_wasm,
-    update_xgwx_program_wasm, update_xgwx_variable_wasm,
+    select_xgwx_module_wasm, set_xgwx_module_input_filter_wasm, set_xgwx_module_option_wasm,
+    update_xgwx_ladder_cell_wasm, update_xgwx_module_wasm, update_xgwx_program_wasm,
+    update_xgwx_variable_wasm, xgk_module_catalog_wasm, xgwx_module_option_values_wasm,
 };
 
 pub(crate) use internal::*;

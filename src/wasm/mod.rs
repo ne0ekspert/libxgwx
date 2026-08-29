@@ -45,6 +45,73 @@ pub fn known_ladder_mnemonics_wasm() -> Result<JsValue, JsValue> {
     js_sys::JSON::parse(&json)
 }
 
+/// Return the embedded latest-stable XGK module selection catalog.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = xgk_module_catalog)]
+pub fn xgk_module_catalog_wasm() -> Result<JsValue, JsValue> {
+    let catalog = crate::xgk_module_catalog();
+    let json = serde_json::to_string(catalog).map_err(|error| {
+        JsValue::from_str(&format!("failed to serialize XGK module catalog: {error}"))
+    })?;
+    js_sys::JSON::parse(&json)
+}
+
+/// Select a catalog module and return rewritten `.xgwx` bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = select_xgwx_module)]
+pub fn select_xgwx_module_wasm(
+    bytes: &[u8],
+    base: u32,
+    slot: u32,
+    model: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.select_module(base, slot, model)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Return the current values of all verified options for one module.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = xgwx_module_option_values)]
+pub fn xgwx_module_option_values_wasm(
+    bytes: &[u8],
+    base: u32,
+    slot: u32,
+) -> Result<JsValue, JsValue> {
+    let doc = XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let values = doc
+        .module_option_values(base, slot)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let json = serde_json::to_string(&values).map_err(|error| {
+        JsValue::from_str(&format!(
+            "failed to serialize module option values: {error}"
+        ))
+    })?;
+    js_sys::JSON::parse(&json)
+}
+
+/// Set one verified module option and return rewritten `.xgwx` bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = set_xgwx_module_option)]
+pub fn set_xgwx_module_option_wasm(
+    bytes: &[u8],
+    base: u32,
+    slot: u32,
+    key: &str,
+    index: u32,
+    value: u32,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.set_module_option(base, slot, key, index, value)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Apply supported module attribute changes and return rewritten `.xgwx` bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = update_xgwx_module)]
