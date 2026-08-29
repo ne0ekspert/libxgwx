@@ -144,6 +144,8 @@ document.write_to("project-with-rd8a.xgwx")?;
 
 Selection validates physical placement. Multi-slot modules are rejected if
 they extend past the base or overlap a module in a following slot.
+`XgwxDocument::delete_module(base, slot)` removes one uniquely identified
+module while retaining the surrounding base and unrelated workspace data.
 
 Catalog entries expose every captured dialog row through `visible_options`.
 The writable `options` subset contains only fields whose `Details` byte mapping

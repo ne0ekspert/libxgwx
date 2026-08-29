@@ -73,6 +73,18 @@ pub fn select_xgwx_module_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Delete one module and return rewritten `.xgwx` bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_module)]
+pub fn delete_xgwx_module_wasm(bytes: &[u8], base: u32, slot: u32) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.delete_module(base, slot)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Return the current values of all verified options for one module.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = xgwx_module_option_values)]

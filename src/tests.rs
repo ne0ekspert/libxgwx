@@ -328,6 +328,42 @@ fn selects_module_from_embedded_xgk_catalog() {
 
 #[cfg(feature = "write")]
 #[test]
+fn deletes_one_module_and_round_trips() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_count = doc.modules().len();
+
+    doc.delete_module(0, 2).expect("target module deletes");
+    assert_eq!(doc.modules().len(), original_count - 1);
+    assert!(
+        !doc.modules()
+            .iter()
+            .any(|module| module.base == Some(0) && module.slot == Some(2))
+    );
+
+    let xml_after_delete = doc.xml.clone();
+    let missing = doc
+        .delete_module(0, 2)
+        .expect_err("deleting an absent module must fail");
+    assert!(matches!(
+        missing,
+        XgwxError::ModuleNotFound { base: 0, slot: 2 }
+    ));
+    assert_eq!(doc.xml, xml_after_delete);
+
+    let bytes = doc.to_bytes().expect("deleted workspace writes");
+    let reparsed = XgwxDocument::parse(&bytes).expect("deleted workspace reparses");
+    assert_eq!(reparsed.modules().len(), original_count - 1);
+    assert!(
+        !reparsed
+            .modules()
+            .iter()
+            .any(|module| module.base == Some(0) && module.slot == Some(2))
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
 fn exposes_dl16a_nested_file_and_data_options() {
     let entry = xgk_module_catalog()
         .iter()

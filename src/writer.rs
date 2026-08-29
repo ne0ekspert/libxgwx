@@ -81,6 +81,36 @@ pub struct VariablePatch {
 }
 
 impl XgwxDocument {
+    /// Delete one module selected by its unique base and slot.
+    ///
+    /// The containing base and every other XML node remain unchanged. The
+    /// operation fails without mutating the document when the target is absent
+    /// or ambiguous.
+    pub fn delete_module(&mut self, base: u32, slot: u32) -> Result<(), XgwxError> {
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let matches = document
+            .descendants()
+            .filter(|node| node.has_tag_name("Module"))
+            .filter(|node| {
+                node.attribute("Base").and_then(|value| value.parse().ok()) == Some(base)
+                    && node.attribute("Slot").and_then(|value| value.parse().ok()) == Some(slot)
+            })
+            .collect::<Vec<_>>();
+
+        let module = match matches.as_slice() {
+            [] => return Err(XgwxError::ModuleNotFound { base, slot }),
+            [module] => *module,
+            _ => return Err(XgwxError::AmbiguousModule { base, slot }),
+        };
+        let range = module.range();
+        let mut xml = self.xml.clone();
+        xml.replace_range(range, "");
+        let root = parse_xml(&xml)?;
+        self.xml = xml;
+        self.root = root;
+        Ok(())
+    }
+
     /// Select a module model from the embedded latest-stable XGK catalog.
     ///
     /// The target base, slot, and comment are preserved. `Id`, `SubType`,
