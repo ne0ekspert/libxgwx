@@ -81,6 +81,64 @@ pub struct VariablePatch {
 }
 
 impl XgwxDocument {
+    /// Insert a catalog module into an empty physical base slot.
+    ///
+    /// The module receives the latest-stable catalog defaults and an empty
+    /// comment. The operation fails without mutating the document when the
+    /// base is absent, the module does not fit, or any occupied slot overlaps.
+    pub fn insert_module(&mut self, base: u32, slot: u32, model: &str) -> Result<(), XgwxError> {
+        let entry = crate::catalog::find_xgk_module(model)?;
+        self.validate_empty_module_placement(base, slot, entry.slot_span)?;
+
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let container = document
+            .descendants()
+            .find(|node| {
+                node.has_tag_name("Parameter") && node.attribute("Type") == Some("IO PARAMETER")
+            })
+            .ok_or(XgwxError::MissingModuleContainer)?;
+        let anchor = container
+            .children()
+            .filter(|node| node.is_element() && node.has_tag_name("Module"))
+            .find(|node| {
+                let node_base = node.attribute("Base").and_then(|value| value.parse().ok());
+                let node_slot = node.attribute("Slot").and_then(|value| value.parse().ok());
+                node_base
+                    .zip(node_slot)
+                    .is_some_and(|position| position > (base, slot))
+            })
+            .or_else(|| {
+                container
+                    .children()
+                    .find(|node| node.is_element() && node.has_tag_name("BaseInfo"))
+            })
+            .ok_or(XgwxError::MissingModuleContainer)?;
+        let insertion_offset = anchor.range().start;
+        let indentation_start = self.xml[..insertion_offset]
+            .rfind('\n')
+            .map_or(insertion_offset, |offset| offset + 1);
+        let indentation = &self.xml[indentation_start..insertion_offset];
+        let newline = if self.xml[..insertion_offset].contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
+        let module = format!(
+            "<Module Base=\"{base}\" Slot=\"{slot}\" Id=\"{}\" SubType=\"{}\" Name=\"{}\" Comment=\"\" Details=\"{}\"></Module>{newline}{indentation}",
+            entry.id,
+            entry.sub_type,
+            escape_xml_attribute(entry.name),
+            entry.details,
+        );
+
+        let mut xml = self.xml.clone();
+        xml.insert_str(insertion_offset, &module);
+        let root = parse_xml(&xml)?;
+        self.xml = xml;
+        self.root = root;
+        Ok(())
+    }
+
     /// Delete one module selected by its unique base and slot.
     ///
     /// The containing base and every other XML node remain unchanged. The
@@ -175,6 +233,70 @@ impl XgwxDocument {
             .filter(|module| module.base == Some(base))
             .filter_map(|module| module.slot)
             .find(|other_slot| *other_slot > slot && *other_slot < end)
+        {
+            return Err(XgwxError::ModulePlacementConflict {
+                base,
+                slot,
+                slot_span,
+                conflicting_slot,
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_empty_module_placement(
+        &self,
+        base: u32,
+        slot: u32,
+        slot_span: u32,
+    ) -> Result<(), XgwxError> {
+        let slot_count = self
+            .bases()
+            .into_iter()
+            .find(|item| item.base == Some(base))
+            .ok_or(XgwxError::BaseNotFound { base })?
+            .slot_count
+            .ok_or(XgwxError::ModulePlacementExceedsBase {
+                base,
+                slot,
+                slot_span,
+                slot_count: 0,
+            })?;
+        let end = slot
+            .checked_add(slot_span)
+            .ok_or(XgwxError::ModulePlacementExceedsBase {
+                base,
+                slot,
+                slot_span,
+                slot_count,
+            })?;
+        if end > slot_count {
+            return Err(XgwxError::ModulePlacementExceedsBase {
+                base,
+                slot,
+                slot_span,
+                slot_count,
+            });
+        }
+
+        if let Some(conflicting_slot) = self
+            .modules()
+            .into_iter()
+            .filter(|module| module.base == Some(base))
+            .filter_map(|module| {
+                let other_slot = module.slot?;
+                let other_span = crate::xgk_module_catalog()
+                    .iter()
+                    .filter(|entry| {
+                        module.id == Some(entry.id) && module.sub_type == Some(entry.sub_type)
+                    })
+                    .map(|entry| entry.slot_span)
+                    .next()
+                    .unwrap_or(1);
+                let other_end = other_slot.saturating_add(other_span);
+                (slot < other_end && other_slot < end).then_some(other_slot)
+            })
+            .next()
         {
             return Err(XgwxError::ModulePlacementConflict {
                 base,

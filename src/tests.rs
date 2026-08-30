@@ -364,6 +364,73 @@ fn deletes_one_module_and_round_trips() {
 
 #[cfg(feature = "write")]
 #[test]
+fn inserts_a_catalog_module_into_an_empty_slot_and_round_trips() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_count = doc.modules().len();
+
+    doc.delete_module(0, 2).expect("slot becomes empty");
+    doc.insert_module(0, 2, "XGF-RD8A")
+        .expect("catalog module inserts into empty slot");
+    let inserted = doc
+        .modules()
+        .into_iter()
+        .find(|module| module.base == Some(0) && module.slot == Some(2))
+        .expect("inserted module exists");
+    let entry = xgk_module_catalog()
+        .iter()
+        .find(|entry| entry.model == "XGF-RD8A")
+        .expect("RD8A is in the catalog");
+    assert_eq!(inserted.id, Some(entry.id));
+    assert_eq!(inserted.sub_type, Some(entry.sub_type));
+    assert_eq!(inserted.name.as_deref(), Some(entry.name));
+    assert_eq!(inserted.comment.as_deref(), Some(""));
+    assert_eq!(inserted.details.as_deref(), Some(entry.details));
+    assert_eq!(doc.modules().len(), original_count);
+
+    let bytes = doc.to_bytes().expect("workspace with insertion writes");
+    let reparsed = XgwxDocument::parse(&bytes).expect("workspace with insertion reparses");
+    assert!(reparsed.modules().iter().any(|module| {
+        module.base == Some(0) && module.slot == Some(2) && module.id == Some(entry.id)
+    }));
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn rejects_module_insertion_conflicts_without_mutating_xml() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_xml = doc.xml.clone();
+
+    let occupied = doc
+        .insert_module(0, 2, "XGF-RD8A")
+        .expect_err("occupied slot rejects insertion");
+    assert!(matches!(
+        occupied,
+        XgwxError::ModulePlacementConflict {
+            conflicting_slot: 2,
+            ..
+        }
+    ));
+    assert_eq!(doc.xml, original_xml);
+
+    doc.delete_module(0, 7).expect("slot 7 becomes empty");
+    let xml_after_delete = doc.xml.clone();
+    let overlap = doc
+        .insert_module(0, 7, "XGF-TC4UD")
+        .expect_err("two-slot module cannot overlap occupied slot 8");
+    assert!(matches!(
+        overlap,
+        XgwxError::ModulePlacementConflict {
+            conflicting_slot: 8,
+            ..
+        }
+    ));
+    assert_eq!(doc.xml, xml_after_delete);
+}
+
+#[cfg(feature = "write")]
+#[test]
 fn exposes_dl16a_nested_file_and_data_options() {
     let entry = xgk_module_catalog()
         .iter()

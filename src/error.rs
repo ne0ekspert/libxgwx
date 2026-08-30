@@ -49,6 +49,10 @@ pub enum XgwxError {
         base: u32,
         slot: u32,
     },
+    BaseNotFound {
+        base: u32,
+    },
+    MissingModuleContainer,
     AmbiguousModule {
         base: u32,
         slot: u32,
@@ -184,6 +188,10 @@ impl fmt::Display for XgwxError {
             }
             Self::ModuleNotFound { base, slot } => {
                 write!(f, "module at base {base}, slot {slot} was not found")
+            }
+            Self::BaseNotFound { base } => write!(f, "hardware base {base} was not found"),
+            Self::MissingModuleContainer => {
+                write!(f, "workspace is missing the I/O module container")
             }
             Self::AmbiguousModule { base, slot } => {
                 write!(f, "multiple modules match base {base}, slot {slot}")
