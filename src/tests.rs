@@ -431,6 +431,162 @@ fn rejects_module_insertion_conflicts_without_mutating_xml() {
 
 #[cfg(feature = "write")]
 #[test]
+fn synchronizes_captured_network_module_configurations() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+
+    assert!(
+        doc.networks()
+            .iter()
+            .flat_map(|network| &network.modules)
+            .any(|module| {
+                module.base == Some(1) && module.slot == Some(11) && module.id == Some(23056)
+            })
+    );
+    assert!(doc.xml.contains("XGPD_CONFIG_INFO_DNET"));
+
+    doc.delete_module(1, 11)
+        .expect("network module and configuration delete");
+    assert!(
+        !doc.networks()
+            .iter()
+            .flat_map(|network| &network.modules)
+            .any(|module| { module.base == Some(1) && module.slot == Some(11) })
+    );
+    assert!(!doc.xml.contains("XGPD_CONFIG_INFO_DNET"));
+
+    doc.insert_module(1, 11, "XGL-DMEA/B")
+        .expect("network module inserts with configuration");
+    assert!(
+        doc.networks()
+            .iter()
+            .flat_map(|network| &network.modules)
+            .any(|module| {
+                module.base == Some(1)
+                    && module.slot == Some(11)
+                    && module.id == Some(23056)
+                    && module.option_type == Some(32771)
+            })
+    );
+    assert!(doc.xml.contains(
+        "<XGPD_CONFIG_INFO_DNET StationNo=\"0\" Type=\"23056\" Base=\"1\" Slot=\"11\" SubType=\"32771\"></XGPD_CONFIG_INFO_DNET>"
+    ));
+
+    doc.select_module(1, 11, "XGQ-RY1A")
+        .expect("ordinary module replaces network module");
+    assert!(
+        !doc.networks()
+            .iter()
+            .flat_map(|network| &network.modules)
+            .any(|module| { module.base == Some(1) && module.slot == Some(11) })
+    );
+    assert!(!doc.xml.contains("XGPD_CONFIG_INFO_DNET"));
+
+    doc.select_module(0, 2, "XGL-EDMF")
+        .expect("FDEnet module creates captured configuration");
+    assert!(doc.xml.contains(
+        "<XGPD_CONFIG_INFO_FDENET StationNo=\"0\" Type=\"23072\" Base=\"0\" Slot=\"2\" SubType=\"32770\" Media=\"6\" Master=\"0\"></XGPD_CONFIG_INFO_FDENET>"
+    ));
+    assert!(doc.xgpd_config_infos().iter().any(|config| {
+        config.kind == "XGPD_CONFIG_INFO_FDENET"
+            && config.type_code == Some(23072)
+            && config
+                .attributes
+                .iter()
+                .any(|attribute| attribute.name == "Media" && attribute.value == "6")
+    }));
+    let bytes = doc.to_bytes().expect("network configuration writes");
+    let reparsed = XgwxDocument::parse(&bytes).expect("network configuration reparses");
+    assert!(
+        reparsed
+            .networks()
+            .iter()
+            .flat_map(|network| &network.modules)
+            .any(|module| {
+                module.base == Some(0) && module.slot == Some(2) && module.id == Some(23072)
+            })
+    );
+
+    for (model, id) in [("XGL-EIPT", 23064), ("XGL-BIPT", 23152)] {
+        doc.select_module(0, 2, model)
+            .expect("network-capable module selects");
+        assert!(
+            doc.networks()
+                .iter()
+                .flat_map(|network| &network.modules)
+                .any(|module| {
+                    module.base == Some(0) && module.slot == Some(2) && module.id == Some(id)
+                })
+        );
+    }
+
+    doc.select_module(0, 2, "XGL-EFMT(B)")
+        .expect("FEnet module selects");
+    let fenet = doc
+        .fenet_config_infos()
+        .into_iter()
+        .find(|config| config.type_code == Some(23041))
+        .expect("FEnet configuration exists");
+    assert_eq!(
+        fenet
+            .ip_address
+            .as_ref()
+            .map(|value| value.address.as_str()),
+        Some("192.168.0.100")
+    );
+    assert_eq!(
+        fenet.gateway.as_ref().map(|value| value.address.as_str()),
+        Some("192.168.0.1")
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn writes_network_and_network_module_metadata() {
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    doc.select_module(0, 2, "XGL-EDMF")
+        .expect("FDEnet module creates a network module");
+
+    doc.update_network(
+        0,
+        &NetworkPatch {
+            name: Some("Field network".to_owned()),
+            type_name: Some("Ethernet".to_owned()),
+            network_type: Some("FEnet".to_owned()),
+        },
+    )
+    .expect("network metadata updates");
+    doc.update_network_module(
+        0,
+        2,
+        &NetworkModulePatch {
+            config_name: Some("PLC-1".to_owned()),
+            alias: Some("Uplink".to_owned()),
+            description: Some("Plant Ethernet".to_owned()),
+        },
+    )
+    .expect("network-module metadata updates");
+
+    let rewritten = doc.to_bytes().expect("network metadata writes");
+    let reparsed = XgwxDocument::parse(&rewritten).expect("rewritten document parses");
+    assert_eq!(
+        reparsed.networks()[0].name.as_deref(),
+        Some("Field network")
+    );
+    let module = reparsed
+        .networks()
+        .into_iter()
+        .flat_map(|network| network.modules)
+        .find(|module| module.base == Some(0) && module.slot == Some(2))
+        .expect("edited network module exists");
+    assert_eq!(module.config_name.as_deref(), Some("PLC-1"));
+    assert_eq!(module.alias.as_deref(), Some("Uplink"));
+    assert_eq!(module.description.as_deref(), Some("Plant Ethernet"));
+}
+
+#[cfg(feature = "write")]
+#[test]
 fn exposes_dl16a_nested_file_and_data_options() {
     let entry = xgk_module_catalog()
         .iter()

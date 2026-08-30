@@ -1492,9 +1492,10 @@ impl TrendMonitoringSummary {
     }
 }
 
-/// DeviceNet XGPD configuration record.
+/// Generic XGPD configuration record for a network module.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XgpdConfigInfoSummary {
+    pub kind: String,
     pub station_no: Option<u32>,
     pub type_code: Option<u32>,
     pub base: Option<u32>,
@@ -1506,6 +1507,7 @@ pub struct XgpdConfigInfoSummary {
 impl XgpdConfigInfoSummary {
     pub(crate) fn from_element(element: &XmlElement) -> Self {
         Self {
+            kind: element.name.clone(),
             station_no: attr_u32(element, "StationNo"),
             type_code: attr_u32(element, "Type"),
             base: attr_u32(element, "Base"),

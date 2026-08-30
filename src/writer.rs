@@ -80,6 +80,34 @@ pub struct VariablePatch {
     pub description: Option<String>,
 }
 
+/// Changes to the editable metadata on one `<Network>` record.
+///
+/// Networks are selected by document order because their name is editable.
+/// Protocol identity and member modules are deliberately outside this bounded
+/// writer API.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct NetworkPatch {
+    pub name: Option<String>,
+    pub type_name: Option<String>,
+    pub network_type: Option<String>,
+}
+
+/// Changes to user-facing metadata on one `<NetworkModule>` record.
+///
+/// The linked hardware module, base/slot, type, and option type are immutable
+/// identity fields. `ConfigName`, `Alias`, and `Description` are the fields
+/// XG5000 exposes as editable metadata for a configured network module.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct NetworkModulePatch {
+    pub config_name: Option<String>,
+    pub alias: Option<String>,
+    pub description: Option<String>,
+}
+
 impl XgwxDocument {
     /// Insert a catalog module into an empty physical base slot.
     ///
@@ -88,9 +116,10 @@ impl XgwxDocument {
     /// base is absent, the module does not fit, or any occupied slot overlaps.
     pub fn insert_module(&mut self, base: u32, slot: u32, model: &str) -> Result<(), XgwxError> {
         let entry = crate::catalog::find_xgk_module(model)?;
-        self.validate_empty_module_placement(base, slot, entry.slot_span)?;
-
-        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let mut changed = self.clone();
+        changed.validate_empty_module_placement(base, slot, entry.slot_span)?;
+        let configuration_name = changed.primary_configuration_name();
+        let document = roxmltree::Document::parse(&changed.xml).map_err(XgwxError::Xml)?;
         let container = document
             .descendants()
             .find(|node| {
@@ -114,15 +143,11 @@ impl XgwxDocument {
             })
             .ok_or(XgwxError::MissingModuleContainer)?;
         let insertion_offset = anchor.range().start;
-        let indentation_start = self.xml[..insertion_offset]
+        let indentation_start = changed.xml[..insertion_offset]
             .rfind('\n')
             .map_or(insertion_offset, |offset| offset + 1);
-        let indentation = &self.xml[indentation_start..insertion_offset];
-        let newline = if self.xml[..insertion_offset].contains("\r\n") {
-            "\r\n"
-        } else {
-            "\n"
-        };
+        let indentation = &changed.xml[indentation_start..insertion_offset];
+        let newline = xml_newline(&changed.xml);
         let module = format!(
             "<Module Base=\"{base}\" Slot=\"{slot}\" Id=\"{}\" SubType=\"{}\" Name=\"{}\" Comment=\"\" Details=\"{}\"></Module>{newline}{indentation}",
             entry.id,
@@ -130,12 +155,18 @@ impl XgwxDocument {
             escape_xml_attribute(entry.name),
             entry.details,
         );
-
-        let mut xml = self.xml.clone();
-        xml.insert_str(insertion_offset, &module);
-        let root = parse_xml(&xml)?;
-        self.xml = xml;
-        self.root = root;
+        let mut replacements = vec![(insertion_offset..insertion_offset, module)];
+        push_network_configuration_additions(
+            &mut replacements,
+            &changed.xml,
+            &document,
+            &configuration_name,
+            base,
+            slot,
+            entry,
+        )?;
+        changed.apply_xml_replacements(replacements)?;
+        *self = changed;
         Ok(())
     }
 
@@ -145,7 +176,8 @@ impl XgwxDocument {
     /// operation fails without mutating the document when the target is absent
     /// or ambiguous.
     pub fn delete_module(&mut self, base: u32, slot: u32) -> Result<(), XgwxError> {
-        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let mut changed = self.clone();
+        let document = roxmltree::Document::parse(&changed.xml).map_err(XgwxError::Xml)?;
         let matches = document
             .descendants()
             .filter(|node| node.has_tag_name("Module"))
@@ -160,12 +192,10 @@ impl XgwxDocument {
             [module] => *module,
             _ => return Err(XgwxError::AmbiguousModule { base, slot }),
         };
-        let range = module.range();
-        let mut xml = self.xml.clone();
-        xml.replace_range(range, "");
-        let root = parse_xml(&xml)?;
-        self.xml = xml;
-        self.root = root;
+        let mut replacements = vec![(module.range(), String::new())];
+        push_network_configuration_removals(&mut replacements, &document, base, slot);
+        changed.apply_xml_replacements(replacements)?;
+        *self = changed;
         Ok(())
     }
 
@@ -173,20 +203,74 @@ impl XgwxDocument {
     ///
     /// The target base, slot, and comment are preserved. `Id`, `SubType`,
     /// `Name`, and `Details` are replaced atomically with the catalog defaults.
+    /// Captured network-module companion records are synchronized at the same
+    /// time for supported communication models.
     pub fn select_module(&mut self, base: u32, slot: u32, model: &str) -> Result<(), XgwxError> {
         let entry = crate::catalog::find_xgk_module(model)?;
-        self.validate_module_placement(base, slot, entry.slot_span)?;
-        self.update_module(
+        let mut changed = self.clone();
+        changed.validate_module_placement(base, slot, entry.slot_span)?;
+        let configuration_name = changed.primary_configuration_name();
+        let document = roxmltree::Document::parse(&changed.xml).map_err(XgwxError::Xml)?;
+        let matches = document
+            .descendants()
+            .filter(|node| node.has_tag_name("Module"))
+            .filter(|node| {
+                node.attribute("Base").and_then(|value| value.parse().ok()) == Some(base)
+                    && node.attribute("Slot").and_then(|value| value.parse().ok()) == Some(slot)
+            })
+            .collect::<Vec<_>>();
+        let module = match matches.as_slice() {
+            [] => return Err(XgwxError::ModuleNotFound { base, slot }),
+            [module] => *module,
+            _ => return Err(XgwxError::AmbiguousModule { base, slot }),
+        };
+        let mut replacements = Vec::new();
+        push_u32_replacement(&mut replacements, module, base, slot, "Id", Some(entry.id))?;
+        push_u32_replacement(
+            &mut replacements,
+            module,
             base,
             slot,
-            &ModulePatch {
-                id: Some(entry.id),
-                sub_type: Some(entry.sub_type),
-                name: Some(entry.name.to_owned()),
-                details: Some(entry.details.to_owned()),
-                ..ModulePatch::default()
-            },
-        )
+            "SubType",
+            Some(entry.sub_type),
+        )?;
+        push_string_replacement(
+            &mut replacements,
+            module,
+            base,
+            slot,
+            "Name",
+            Some(entry.name),
+        )?;
+        push_string_replacement(
+            &mut replacements,
+            module,
+            base,
+            slot,
+            "Details",
+            Some(entry.details),
+        )?;
+        push_network_configuration_removals(&mut replacements, &document, base, slot);
+        push_network_configuration_additions(
+            &mut replacements,
+            &changed.xml,
+            &document,
+            &configuration_name,
+            base,
+            slot,
+            entry,
+        )?;
+        changed.apply_xml_replacements(replacements)?;
+        *self = changed;
+        Ok(())
+    }
+
+    fn primary_configuration_name(&self) -> String {
+        self.configurations()
+            .into_iter()
+            .next()
+            .and_then(|configuration| configuration.name)
+            .unwrap_or_else(|| "PLC".to_owned())
     }
 
     fn validate_module_placement(
@@ -597,6 +681,95 @@ impl XgwxDocument {
             replacements.push((name_node.range(), escape_xml_text(name)));
         }
 
+        self.apply_xml_replacements(replacements)
+    }
+
+    /// Update editable metadata for one network selected by document order.
+    pub fn update_network(
+        &mut self,
+        network_index: usize,
+        patch: &NetworkPatch,
+    ) -> Result<(), XgwxError> {
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let network = document
+            .descendants()
+            .filter(|node| node.has_tag_name("Network"))
+            .nth(network_index)
+            .ok_or(XgwxError::NetworkNotFound {
+                index: network_index,
+            })?;
+        let mut replacements = Vec::new();
+        push_network_string_replacement(
+            &mut replacements,
+            network,
+            network_index,
+            "Name",
+            patch.name.as_deref(),
+        )?;
+        push_network_string_replacement(
+            &mut replacements,
+            network,
+            network_index,
+            "Type",
+            patch.type_name.as_deref(),
+        )?;
+        push_network_string_replacement(
+            &mut replacements,
+            network,
+            network_index,
+            "NetworkType",
+            patch.network_type.as_deref(),
+        )?;
+        self.apply_xml_replacements(replacements)
+    }
+
+    /// Update user-facing metadata for the unique network module at a base and
+    /// slot. Hardware identity and network protocol fields remain unchanged.
+    pub fn update_network_module(
+        &mut self,
+        base: u32,
+        slot: u32,
+        patch: &NetworkModulePatch,
+    ) -> Result<(), XgwxError> {
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let matches = document
+            .descendants()
+            .filter(|node| node.has_tag_name("NetworkModule"))
+            .filter(|node| {
+                node.attribute("Base").and_then(|value| value.parse().ok()) == Some(base)
+                    && node.attribute("Slot").and_then(|value| value.parse().ok()) == Some(slot)
+            })
+            .collect::<Vec<_>>();
+        let module = match matches.as_slice() {
+            [] => return Err(XgwxError::NetworkModuleNotFound { base, slot }),
+            [module] => *module,
+            _ => return Err(XgwxError::AmbiguousNetworkModule { base, slot }),
+        };
+        let mut replacements = Vec::new();
+        push_network_module_string_replacement(
+            &mut replacements,
+            module,
+            base,
+            slot,
+            "ConfigName",
+            patch.config_name.as_deref(),
+        )?;
+        push_network_module_string_replacement(
+            &mut replacements,
+            module,
+            base,
+            slot,
+            "Alias",
+            patch.alias.as_deref(),
+        )?;
+        push_network_module_string_replacement(
+            &mut replacements,
+            module,
+            base,
+            slot,
+            "Description",
+            patch.description.as_deref(),
+        )?;
         self.apply_xml_replacements(replacements)
     }
 
@@ -1135,6 +1308,50 @@ fn push_program_replacement(
     Ok(())
 }
 
+fn push_network_string_replacement(
+    replacements: &mut Vec<(Range<usize>, String)>,
+    network: roxmltree::Node<'_, '_>,
+    network_index: usize,
+    attribute: &'static str,
+    value: Option<&str>,
+) -> Result<(), XgwxError> {
+    if let Some(value) = value {
+        let range = network
+            .attributes()
+            .find(|item| item.name() == attribute)
+            .map(|item| item.range_value())
+            .ok_or(XgwxError::MissingNetworkAttribute {
+                index: network_index,
+                attribute,
+            })?;
+        replacements.push((range, escape_xml_attribute(value)));
+    }
+    Ok(())
+}
+
+fn push_network_module_string_replacement(
+    replacements: &mut Vec<(Range<usize>, String)>,
+    module: roxmltree::Node<'_, '_>,
+    base: u32,
+    slot: u32,
+    attribute: &'static str,
+    value: Option<&str>,
+) -> Result<(), XgwxError> {
+    if let Some(value) = value {
+        let range = module
+            .attributes()
+            .find(|item| item.name() == attribute)
+            .map(|item| item.range_value())
+            .ok_or(XgwxError::MissingNetworkModuleAttribute {
+                base,
+                slot,
+                attribute,
+            })?;
+        replacements.push((range, escape_xml_attribute(value)));
+    }
+    Ok(())
+}
+
 fn push_string_replacement(
     replacements: &mut Vec<(Range<usize>, String)>,
     module: roxmltree::Node<'_, '_>,
@@ -1186,6 +1403,130 @@ fn validate_module_details(details: &str) -> Result<(), XgwxError> {
             attribute: "Details".to_owned(),
         })
     }
+}
+
+fn push_network_configuration_removals(
+    replacements: &mut Vec<(Range<usize>, String)>,
+    document: &roxmltree::Document<'_>,
+    base: u32,
+    slot: u32,
+) {
+    replacements.extend(
+        document
+            .descendants()
+            .filter(|node| {
+                (node.has_tag_name("NetworkModule")
+                    || node.tag_name().name().starts_with("XGPD_CONFIG_INFO_"))
+                    && node.attribute("Base").and_then(|value| value.parse().ok()) == Some(base)
+                    && node.attribute("Slot").and_then(|value| value.parse().ok()) == Some(slot)
+            })
+            .map(|node| (node.range(), String::new())),
+    );
+}
+
+fn push_network_configuration_additions(
+    replacements: &mut Vec<(Range<usize>, String)>,
+    xml: &str,
+    document: &roxmltree::Document<'_>,
+    configuration_name: &str,
+    base: u32,
+    slot: u32,
+    entry: &ModuleCatalogEntry,
+) -> Result<(), XgwxError> {
+    let Some(profile) = network_profile(entry.model) else {
+        return Ok(());
+    };
+    let network = document
+        .descendants()
+        .find(|node| node.has_tag_name("Network"))
+        .ok_or(XgwxError::MissingNetworkContainer)?;
+    let network_offset = closing_tag_offset(xml, network, "Network")?;
+    let network_indentation = line_indentation(xml, network_offset);
+    let newline = xml_newline(xml);
+    let network_module = format!(
+        "<NetworkModule ConfigName=\"{}\" ConfigType=\"1\" Type=\"NETWORK MODULE\" Name=\"{}@0x0\" Base=\"{base}\" Slot=\"{slot}\" Id=\"{}\" ChannelType=\"0\" OptionType=\"{}\" Alias=\"\" Description=\"\"></NetworkModule>{newline}{network_indentation}",
+        escape_xml_attribute(configuration_name),
+        entry.model,
+        entry.id,
+        entry.sub_type,
+    );
+    replacements.push((network_offset..network_offset, network_module));
+
+    if let Some(tag) = profile.xgpd_tag {
+        let group = document
+            .descendants()
+            .find(|node| node.has_tag_name("XGPD_CONFIG_INFO_GROUP"))
+            .ok_or(XgwxError::MissingNetworkConfigurationGroup)?;
+        let group_offset = closing_tag_offset(xml, group, "XGPD_CONFIG_INFO_GROUP")?;
+        let group_indentation = line_indentation(xml, group_offset);
+        let config = format!(
+            "<XGPD_CONFIG_INFO_{tag} StationNo=\"0\" Type=\"{}\" Base=\"{base}\" Slot=\"{slot}\" SubType=\"{}\"{}></XGPD_CONFIG_INFO_{tag}>{newline}{group_indentation}",
+            entry.id, entry.sub_type, profile.attributes,
+        );
+        replacements.push((group_offset..group_offset, config));
+    }
+    Ok(())
+}
+
+struct NetworkProfile {
+    xgpd_tag: Option<&'static str>,
+    attributes: &'static str,
+}
+
+fn network_profile(model: &str) -> Option<NetworkProfile> {
+    match model {
+        "XGL-EDMT" => Some(NetworkProfile {
+            xgpd_tag: Some("FDENET"),
+            attributes: " Media=\"0\" Master=\"0\"",
+        }),
+        "XGL-EDMF" => Some(NetworkProfile {
+            xgpd_tag: Some("FDENET"),
+            attributes: " Media=\"6\" Master=\"0\"",
+        }),
+        "XGL-DMEA/B" => Some(NetworkProfile {
+            xgpd_tag: Some("DNET"),
+            attributes: "",
+        }),
+        "XGL-RMEA/B" => Some(NetworkProfile {
+            xgpd_tag: Some("RNET"),
+            attributes: "",
+        }),
+        // Captured from an XG5000 FEnet configuration with stable type code
+        // 23041. The module model may differ by platform, but XG5000 joins the
+        // configuration to NetworkModule through this type code.
+        "XGL-EFMT(B)" => Some(NetworkProfile {
+            xgpd_tag: Some("FENET"),
+            attributes: " Media=\"0\" MediaB=\"0\" Media1=\"0\" Media1_2=\"0\" IpAddr_0=\"192\" IpAddr_1=\"168\" IpAddr_2=\"0\" IpAddr_3=\"100\" Subnet_0=\"255\" Subnet_1=\"255\" Subnet_2=\"255\" Subnet_3=\"0\" Gateway_0=\"192\" Gateway_1=\"168\" Gateway_2=\"0\" Gateway_3=\"1\" Dns_0=\"0\" Dns_1=\"0\" Dns_2=\"0\" Dns_3=\"0\" Dhcp=\"0\" Relay=\"0\" RapienetProtocol=\"0\" DriverType=\"2\" RcvWaitTime=\"100\" ClientWaitTime=\"60\" GlofaSocketCnt=\"3\" HsNo2=\"0\" Media2=\"0\" Media2_2=\"0\" IpAddr2_0=\"0\" IpAddr2_1=\"0\" IpAddr2_2=\"0\" IpAddr2_3=\"0\" Subnet2_0=\"0\" Subnet2_1=\"0\" Subnet2_2=\"0\" Subnet2_3=\"0\" Gateway2_0=\"0\" Gateway2_1=\"0\" Gateway2_2=\"0\" Gateway2_3=\"0\" Dns2_0=\"0\" Dns2_1=\"0\" Dns2_2=\"0\" Dns2_3=\"0\" Dhcp2=\"0\" OneIPSolution=\"0\" DI_DeviceType=\"80\" DI_DataType=\"88\" DI_Size=\"0\" DI_Addr=\"0\" DO_DeviceType=\"80\" DO_DataType=\"88\" DO_Size=\"0\" DO_Addr=\"200\" AI_DeviceType=\"68\" AI_DataType=\"87\" AI_Size=\"0\" AI_Addr=\"0\" AO_DeviceType=\"68\" AO_DataType=\"87\" AO_Size=\"0\" AO_Addr=\"100\" EnableHostTable=\"0\" arHostIp_Count=\"0\" ExtendEnableHostTable=\"0\" SecurityConfigItemCount=\"0\" ServerPortEnable=\"0\" ServerPortIndividualType_0=\"0\" ServerPortIndividualStartPortNo_0=\"0\" ServerPortIndividualPortCount_0=\"0\" ServerPortIndividualType_1=\"0\" ServerPortIndividualStartPortNo_1=\"0\" ServerPortIndividualPortCount_1=\"0\" ServerPortIndividualType_2=\"0\" ServerPortIndividualStartPortNo_2=\"0\" ServerPortIndividualPortCount_2=\"0\" ServerPortIndividualType_3=\"0\" ServerPortIndividualStartPortNo_3=\"0\" ServerPortIndividualPortCount_3=\"0\" ServerPortIndividualType_4=\"0\" ServerPortIndividualStartPortNo_4=\"0\" ServerPortIndividualPortCount_4=\"0\" ServerPortIndividualType_5=\"0\" ServerPortIndividualStartPortNo_5=\"0\" ServerPortIndividualPortCount_5=\"0\" ServerPortIndividualType_6=\"0\" ServerPortIndividualStartPortNo_6=\"0\" ServerPortIndividualPortCount_6=\"0\" ServerPortIndividualType_7=\"0\" ServerPortIndividualStartPortNo_7=\"0\" ServerPortIndividualPortCount_7=\"0\" Used_OPCUA=\"0\" AutoNegotiationSpeedLimit=\"0\"",
+        }),
+        "XGL-BIPT" | "XGL-EIPT" | "XGL-C22A/B" | "XGL-C42A/B" | "XGL-CH2A/B" | "XGL-EFMF(B)"
+        | "XGL-EFMHB" => Some(NetworkProfile {
+            xgpd_tag: None,
+            attributes: "",
+        }),
+        _ => None,
+    }
+}
+
+fn closing_tag_offset(
+    xml: &str,
+    node: roxmltree::Node<'_, '_>,
+    tag: &str,
+) -> Result<usize, XgwxError> {
+    let range = node.range();
+    let closing_tag = format!("</{tag}>");
+    xml[range.clone()]
+        .rfind(&closing_tag)
+        .map(|offset| range.start + offset)
+        .ok_or(XgwxError::MissingNetworkContainer)
+}
+
+fn line_indentation(xml: &str, offset: usize) -> &str {
+    let start = xml[..offset].rfind('\n').map_or(offset, |index| index + 1);
+    &xml[start..offset]
+}
+
+fn xml_newline(xml: &str) -> &'static str {
+    if xml.contains("\r\n") { "\r\n" } else { "\n" }
 }
 
 fn escape_xml_attribute(value: &str) -> String {

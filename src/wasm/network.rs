@@ -28,6 +28,7 @@ impl WasmNetworkSummary {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmNetworkModuleSummary {
+    pub(super) config_name: Option<String>,
     pub(super) name: Option<String>,
     pub(super) type_name: Option<String>,
     pub(super) id: Option<u32>,
@@ -40,6 +41,7 @@ pub(super) struct WasmNetworkModuleSummary {
 impl WasmNetworkModuleSummary {
     pub(super) fn from_module(module: NetworkModuleSummary) -> Self {
         Self {
+            config_name: module.config_name,
             name: module.name,
             type_name: module.type_name,
             id: module.id,
@@ -47,6 +49,52 @@ impl WasmNetworkModuleSummary {
             slot: module.slot,
             alias: module.alias,
             description: module.description,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WasmXgpdSummary {
+    pub(super) kind: String,
+    pub(super) station_no: Option<u32>,
+    pub(super) type_code: Option<u32>,
+    pub(super) base: Option<u32>,
+    pub(super) slot: Option<u32>,
+    pub(super) sub_type: Option<u32>,
+    pub(super) attributes: Vec<WasmNetworkAttribute>,
+}
+
+impl WasmXgpdSummary {
+    pub(super) fn from_xgpd(config: XgpdConfigInfoSummary) -> Self {
+        Self {
+            kind: config.kind,
+            station_no: config.station_no,
+            type_code: config.type_code,
+            base: config.base,
+            slot: config.slot,
+            sub_type: config.sub_type,
+            attributes: config
+                .attributes
+                .into_iter()
+                .map(WasmNetworkAttribute::from)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WasmNetworkAttribute {
+    pub(super) name: String,
+    pub(super) value: String,
+}
+
+impl From<XmlAttribute> for WasmNetworkAttribute {
+    fn from(attribute: XmlAttribute) -> Self {
+        Self {
+            name: attribute.name,
+            value: attribute.value,
         }
     }
 }

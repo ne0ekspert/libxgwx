@@ -222,6 +222,49 @@ pub fn update_xgwx_variable_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Apply supported changes to one network and return rewritten bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = update_xgwx_network)]
+pub fn update_xgwx_network_wasm(
+    bytes: &[u8],
+    network_index: usize,
+    patch: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("network patch is not JSON-serializable"))?;
+    let patch = serde_json::from_str::<NetworkPatch>(&json)
+        .map_err(|error| JsValue::from_str(&format!("invalid network patch: {error}")))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.update_network(network_index, &patch)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Apply supported changes to one network-module metadata record.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = update_xgwx_network_module)]
+pub fn update_xgwx_network_module_wasm(
+    bytes: &[u8],
+    base: u32,
+    slot: u32,
+    patch: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("network-module patch is not JSON-serializable"))?;
+    let patch = serde_json::from_str::<NetworkModulePatch>(&json)
+        .map_err(|error| JsValue::from_str(&format!("invalid network-module patch: {error}")))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.update_network_module(base, slot, &patch)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Replace one same-length ladder cell string and return rewritten bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = update_xgwx_ladder_cell)]
@@ -269,6 +312,7 @@ struct WasmDocumentSummary {
     hardware: WasmHardwareSummary,
     ladder: Vec<WasmLadderProgramSummary>,
     networks: Vec<WasmNetworkSummary>,
+    xgpd: Vec<WasmXgpdSummary>,
     cnet: Vec<WasmCnetSummary>,
     fenet: Vec<WasmFenetSummary>,
     parameters: Vec<WasmParameterSummary>,
@@ -342,6 +386,7 @@ impl WasmDocumentSummary {
         let pid_tune = doc.pid_tune_parameters();
         let cnet_configs = doc.cnet_config_infos();
         let fenet_configs = doc.fenet_config_infos();
+        let xgpd_configs = doc.xgpd_config_infos();
 
         Self {
             header: WasmHeaderSummary::from_header(&doc.header, doc.trailer.len()),
@@ -385,6 +430,10 @@ impl WasmDocumentSummary {
             networks: networks
                 .into_iter()
                 .map(WasmNetworkSummary::from_network)
+                .collect(),
+            xgpd: xgpd_configs
+                .into_iter()
+                .map(WasmXgpdSummary::from_xgpd)
                 .collect(),
             cnet: cnet_configs
                 .iter()

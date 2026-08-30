@@ -148,6 +148,10 @@ they extend past the base or overlap a module in a following slot.
 module while retaining the surrounding base and unrelated workspace data.
 `XgwxDocument::insert_module(base, slot, model)` adds a catalog-default module
 to an empty physical slot and applies the same base-capacity and overlap checks.
+Insertion, replacement, and deletion keep the companion network entries in
+sync for captured XGK communication modules, including Cnet, FEnet,
+EtherNet/IP, BACnet, FDEnet, Dnet, and Rnet. Captured XGPD defaults are also
+written for `XGL-EDMT`, `XGL-EDMF`, `XGL-DMEA/B`, and `XGL-RMEA/B`.
 
 Catalog entries expose every captured dialog row through `visible_options`.
 The writable `options` subset contains only fields whose `Details` byte mapping
@@ -234,6 +238,10 @@ When both `wasm` and `write` are enabled, the generated package also exposes
 `update_xgwx_program(bytes, programIndex, patch)` and
 `update_xgwx_ladder_cell(bytes, programIndex, offset, expected, replacement)`,
 and `update_xgwx_variable(bytes, variableIndex, patch)`.
+Network metadata is available through `update_xgwx_network(bytes, networkIndex,
+patch)` and `update_xgwx_network_module(bytes, base, slot, patch)`. The latter
+only changes the user-facing `ConfigName`, `Alias`, and `Description` fields;
+hardware and protocol identity fields stay immutable.
 
 The included example can be used as a serialization and XG5000 validation
 harness:

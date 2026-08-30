@@ -53,6 +53,28 @@ pub enum XgwxError {
         base: u32,
     },
     MissingModuleContainer,
+    MissingNetworkContainer,
+    MissingNetworkConfigurationGroup,
+    NetworkNotFound {
+        index: usize,
+    },
+    MissingNetworkAttribute {
+        index: usize,
+        attribute: &'static str,
+    },
+    NetworkModuleNotFound {
+        base: u32,
+        slot: u32,
+    },
+    AmbiguousNetworkModule {
+        base: u32,
+        slot: u32,
+    },
+    MissingNetworkModuleAttribute {
+        base: u32,
+        slot: u32,
+        attribute: &'static str,
+    },
     AmbiguousModule {
         base: u32,
         slot: u32,
@@ -193,6 +215,33 @@ impl fmt::Display for XgwxError {
             Self::MissingModuleContainer => {
                 write!(f, "workspace is missing the I/O module container")
             }
+            Self::MissingNetworkContainer => {
+                write!(f, "workspace is missing a network container")
+            }
+            Self::MissingNetworkConfigurationGroup => {
+                write!(f, "workspace is missing the network configuration group")
+            }
+            Self::NetworkNotFound { index } => write!(f, "network at index {index} was not found"),
+            Self::MissingNetworkAttribute { index, attribute } => {
+                write!(f, "network at index {index} is missing {attribute}")
+            }
+            Self::NetworkModuleNotFound { base, slot } => {
+                write!(
+                    f,
+                    "network module at base {base}, slot {slot} was not found"
+                )
+            }
+            Self::AmbiguousNetworkModule { base, slot } => {
+                write!(f, "multiple network modules match base {base}, slot {slot}")
+            }
+            Self::MissingNetworkModuleAttribute {
+                base,
+                slot,
+                attribute,
+            } => write!(
+                f,
+                "network module at base {base}, slot {slot} is missing {attribute}"
+            ),
             Self::AmbiguousModule { base, slot } => {
                 write!(f, "multiple modules match base {base}, slot {slot}")
             }

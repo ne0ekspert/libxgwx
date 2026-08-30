@@ -240,12 +240,22 @@ impl XgwxDocument {
             .map(TrendMonitoringSummary::from_element)
     }
 
-    /// Return DeviceNet XGPD configuration records.
+    /// Return generic XGPD configuration records for DeviceNet, FDEnet, and
+    /// Rnet modules. The tag name in `kind` identifies the protocol.
     pub fn xgpd_config_infos(&self) -> Vec<XgpdConfigInfoSummary> {
-        self.root
-            .descendants_named("XGPD_CONFIG_INFO_DNET")
-            .map(XgpdConfigInfoSummary::from_element)
-            .collect()
+        let mut configurations = Vec::new();
+        for tag in [
+            "XGPD_CONFIG_INFO_DNET",
+            "XGPD_CONFIG_INFO_FDENET",
+            "XGPD_CONFIG_INFO_RNET",
+        ] {
+            configurations.extend(
+                self.root
+                    .descendants_named(tag)
+                    .map(XgpdConfigInfoSummary::from_element),
+            );
+        }
+        configurations
     }
 
     /// Return Cnet XGPD configuration records, including serial port settings.
