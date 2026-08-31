@@ -45,6 +45,26 @@ pub fn known_ladder_mnemonics_wasm() -> Result<JsValue, JsValue> {
     js_sys::JSON::parse(&json)
 }
 
+/// Return the XGK and XGB CPU models available to project configurations.
+#[wasm_bindgen(js_name = cpu_catalog)]
+pub fn cpu_catalog_wasm() -> Result<JsValue, JsValue> {
+    let json = serde_json::to_string(crate::cpu_catalog())
+        .map_err(|error| JsValue::from_str(&format!("failed to serialize CPU catalog: {error}")))?;
+    js_sys::JSON::parse(&json)
+}
+
+/// Select the primary project configuration's CPU and return rewritten bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = select_xgwx_cpu)]
+pub fn select_xgwx_cpu_wasm(bytes: &[u8], model: &str) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.select_cpu(model)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Return the embedded latest-stable XGK module selection catalog.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = xgk_module_catalog)]
@@ -306,6 +326,7 @@ impl WasmLadderMnemonicSummary {
 struct WasmDocumentSummary {
     header: WasmHeaderSummary,
     project: WasmProjectSummary,
+    cpu: Option<WasmCpuSummary>,
     counts: WasmCounts,
     programs: Vec<WasmProgramSummary>,
     variables: Vec<WasmVariableSummary>,
@@ -323,11 +344,29 @@ struct WasmDocumentSummary {
     warnings: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmCpuSummary {
+    configuration_name: Option<String>,
+    type_code: Option<u32>,
+    model: Option<&'static str>,
+    family: Option<&'static str>,
+}
+
 impl WasmDocumentSummary {
     fn from_document(doc: &XgwxDocument) -> Self {
         let mut warnings = Vec::new();
         let project = doc.project_info();
         let configurations = doc.configurations();
+        let cpu = configurations.first().map(|configuration| {
+            let entry = configuration.type_code.and_then(crate::cpu::cpu_for_type);
+            WasmCpuSummary {
+                configuration_name: configuration.name.clone(),
+                type_code: configuration.type_code,
+                model: entry.map(|entry| entry.model),
+                family: entry.map(|entry| entry.family),
+            }
+        });
         let networks = doc.networks();
         let bases = doc.bases();
         let modules = doc.modules();
@@ -397,6 +436,7 @@ impl WasmDocumentSummary {
                 guid: project.guid,
                 file_last_write_time: project.file_last_write_time,
             },
+            cpu,
             counts: WasmCounts {
                 configurations: configurations.len(),
                 networks: networks.len(),

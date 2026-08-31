@@ -36,6 +36,7 @@
 
 #[cfg(feature = "write")]
 mod catalog;
+mod cpu;
 mod document;
 mod error;
 #[cfg(feature = "il")]
@@ -51,6 +52,7 @@ mod wasm;
 
 #[cfg(feature = "write")]
 pub use catalog::*;
+pub use cpu::*;
 pub use document::XgwxDocument;
 pub use error::XgwxError;
 #[cfg(feature = "il")]
@@ -61,14 +63,14 @@ pub use model::*;
 pub use writer::*;
 
 #[cfg(feature = "wasm")]
-pub use wasm::parse_xgwx;
+pub use wasm::{cpu_catalog_wasm, parse_xgwx};
 #[cfg(all(feature = "wasm", feature = "write"))]
 pub use wasm::{
-    delete_xgwx_module_wasm, insert_xgwx_module_wasm, select_xgwx_module_wasm,
-    set_xgwx_module_input_filter_wasm, set_xgwx_module_option_wasm, update_xgwx_ladder_cell_wasm,
-    update_xgwx_module_wasm, update_xgwx_network_module_wasm, update_xgwx_network_wasm,
-    update_xgwx_program_wasm, update_xgwx_variable_wasm, xgk_module_catalog_wasm,
-    xgwx_module_option_values_wasm,
+    delete_xgwx_module_wasm, insert_xgwx_module_wasm, select_xgwx_cpu_wasm,
+    select_xgwx_module_wasm, set_xgwx_module_input_filter_wasm, set_xgwx_module_option_wasm,
+    update_xgwx_ladder_cell_wasm, update_xgwx_module_wasm, update_xgwx_network_module_wasm,
+    update_xgwx_network_wasm, update_xgwx_program_wasm, update_xgwx_variable_wasm,
+    xgk_module_catalog_wasm, xgwx_module_option_values_wasm,
 };
 
 pub(crate) use internal::*;

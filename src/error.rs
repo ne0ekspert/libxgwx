@@ -91,6 +91,13 @@ pub enum XgwxError {
     UnknownModuleCatalogModel {
         model: String,
     },
+    UnknownCpuModel {
+        model: String,
+    },
+    MissingConfiguration,
+    MissingConfigurationAttribute {
+        attribute: &'static str,
+    },
     UnknownModuleOption {
         model: String,
         key: String,
@@ -259,6 +266,13 @@ impl fmt::Display for XgwxError {
             ),
             Self::UnknownModuleCatalogModel { model } => {
                 write!(f, "XGK module catalog does not contain {model}")
+            }
+            Self::UnknownCpuModel { model } => {
+                write!(f, "CPU catalog does not contain {model}")
+            }
+            Self::MissingConfiguration => write!(f, "workspace is missing a Configuration"),
+            Self::MissingConfigurationAttribute { attribute } => {
+                write!(f, "workspace Configuration is missing {attribute}")
             }
             Self::UnknownModuleOption { model, key } => {
                 write!(f, "XGK module {model} has no writable option {key}")

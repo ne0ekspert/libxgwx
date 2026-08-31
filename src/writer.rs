@@ -109,6 +109,30 @@ pub struct NetworkModulePatch {
 }
 
 impl XgwxDocument {
+    /// Select the CPU model stored by the primary project configuration.
+    ///
+    /// This updates the authoritative `<Configuration Type>` value while
+    /// preserving the existing basic parameters, programs, hardware, and
+    /// network configuration. Callers changing CPU families should review
+    /// those retained settings for compatibility in XG5000.
+    pub fn select_cpu(&mut self, model: &str) -> Result<(), XgwxError> {
+        let entry = crate::cpu::find_cpu(model)?;
+        let mut changed = self.clone();
+        let document = roxmltree::Document::parse(&changed.xml).map_err(XgwxError::Xml)?;
+        let configuration = document
+            .descendants()
+            .find(|node| node.has_tag_name("Configuration"))
+            .ok_or(XgwxError::MissingConfiguration)?;
+        let range = configuration
+            .attributes()
+            .find(|attribute| attribute.name() == "Type")
+            .map(|attribute| attribute.range_value())
+            .ok_or(XgwxError::MissingConfigurationAttribute { attribute: "Type" })?;
+        changed.apply_xml_replacements(vec![(range, entry.type_code.to_string())])?;
+        *self = changed;
+        Ok(())
+    }
+
     /// Insert a catalog module into an empty physical base slot.
     ///
     /// The module receives the latest-stable catalog defaults and an empty

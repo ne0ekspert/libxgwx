@@ -274,6 +274,48 @@ fn module_writer_rejects_invalid_or_unsafe_edits_without_mutating_xml() {
     assert_eq!(doc.xml, original_xml);
 }
 
+#[test]
+fn cpu_catalog_maps_fixture_configuration_types() {
+    assert_eq!(cpu_for_type(17).map(|entry| entry.model), Some("XGK-CPUSN"));
+    assert_eq!(cpu_for_type(2).map(|entry| entry.model), Some("XGB-XBMS"));
+    assert!(cpu_catalog().iter().any(|entry| entry.model == "XGB-XBMH2"));
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn selects_cpu_type_and_preserves_other_configuration_attributes() {
+    let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let before = doc.configurations().remove(0);
+
+    doc.select_cpu("xgb-xbms")
+        .expect("CPU matching is ASCII-case-insensitive");
+    let after = doc.configurations().remove(0);
+    assert_eq!(after.type_code, Some(2));
+    assert_eq!(after.name, before.name);
+    assert_eq!(after.attribute, before.attribute);
+    assert_eq!(after.guid, before.guid);
+    assert_eq!(after.write_signature, before.write_signature);
+
+    let rewritten = doc.to_bytes().expect("selected workspace writes");
+    let reparsed = XgwxDocument::parse(&rewritten).expect("selected workspace reparses");
+    assert_eq!(reparsed.configurations()[0].type_code, Some(2));
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn cpu_writer_rejects_unknown_models_without_mutating_xml() {
+    let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_xml = doc.xml.clone();
+
+    let error = doc
+        .select_cpu("XGK-NOT-A-CPU")
+        .expect_err("unknown CPU must fail");
+    assert!(matches!(error, XgwxError::UnknownCpuModel { .. }));
+    assert_eq!(doc.xml, original_xml);
+}
+
 #[cfg(feature = "write")]
 #[test]
 fn selects_module_from_embedded_xgk_catalog() {
