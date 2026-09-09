@@ -460,6 +460,7 @@ impl WasmDocumentSummary {
                 .collect(),
             variables: variables_for_output,
             hardware: WasmHardwareSummary {
+                cpu_profile: doc.cpu_hardware_profile(),
                 bases: bases.into_iter().map(WasmBaseSummary::from_base).collect(),
                 modules: modules
                     .into_iter()
@@ -625,5 +626,17 @@ mod tests {
         let json = serde_json::to_value(&summary).expect("summary should serialize");
         assert!(json.pointer("/ladder/0/cells/0/rawX").is_some());
         assert!(json.pointer("/ladder/0/cells/0/rawY").is_some());
+    }
+    #[test]
+    fn browser_summary_exposes_only_recognized_compact_profile() {
+        let doc = XgwxDocument::from_path("fixtures/XGB_Enet01.xgwx").unwrap();
+        let json = serde_json::to_value(WasmDocumentSummary::from_document(&doc)).unwrap();
+        assert_eq!(
+            json.pointer("/hardware/cpuProfile/variant").unwrap(),
+            "XBM-DR16S"
+        );
+        let doc = XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+        let json = serde_json::to_value(WasmDocumentSummary::from_document(&doc)).unwrap();
+        assert!(json.pointer("/hardware/cpuProfile").unwrap().is_null());
     }
 }

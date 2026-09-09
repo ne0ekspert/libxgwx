@@ -113,10 +113,50 @@ impl XgwxDocument {
     ///
     /// This updates the authoritative `<Configuration Type>` value while
     /// preserving the existing basic parameters, programs, hardware, and
-    /// network configuration. Callers changing CPU families should review
-    /// those retained settings for compatibility in XG5000.
+    /// network configuration. Only changes between XGK models are supported;
+    /// retained hardware must fit the target CPU. Other model changes require
+    /// a migration and are rejected. Selecting the current type is a no-op.
     pub fn select_cpu(&mut self, model: &str) -> Result<(), XgwxError> {
         let entry = crate::cpu::find_cpu(model)?;
+        let current = self.hardware_cpu()?;
+        if current.type_code == entry.type_code {
+            return Ok(());
+        }
+        if current.family != "XGK" || entry.family != "XGK" {
+            return Err(XgwxError::UnsupportedCpuChange {
+                from: current.model.into(),
+                to: entry.model.into(),
+            });
+        }
+        for base in self.bases() {
+            let number = base.base.ok_or(XgwxError::UnsupportedCpuHardware {
+                type_code: current.type_code,
+            })?;
+            let count = base.slot_count.ok_or(XgwxError::UnsupportedCpuHardware {
+                type_code: current.type_code,
+            })?;
+            if number >= entry.max_base || count > entry.max_slot {
+                return Err(XgwxError::CpuHardwareLimit {
+                    model: entry.model.into(),
+                    base: number,
+                    slot: count.saturating_sub(1),
+                });
+            }
+        }
+        for module in self.modules() {
+            let base = module.base.ok_or(XgwxError::UnsupportedCpuHardware {
+                type_code: current.type_code,
+            })?;
+            let slot = module.slot.ok_or(XgwxError::UnsupportedCpuHardware {
+                type_code: current.type_code,
+            })?;
+            let span = crate::xgk_module_catalog()
+                .iter()
+                .find(|item| module.id == Some(item.id) && module.sub_type == Some(item.sub_type))
+                .ok_or(XgwxError::ModuleCatalogMismatch { base, slot })?
+                .slot_span;
+            Self::validate_cpu_position(entry, base, slot, span)?;
+        }
         let mut changed = self.clone();
         let document = roxmltree::Document::parse(&changed.xml).map_err(XgwxError::Xml)?;
         let configuration = document
@@ -139,6 +179,7 @@ impl XgwxDocument {
     /// comment. The operation fails without mutating the document when the
     /// base is absent, the module does not fit, or any occupied slot overlaps.
     pub fn insert_module(&mut self, base: u32, slot: u32, model: &str) -> Result<(), XgwxError> {
+        self.require_xgk_hardware()?;
         let entry = crate::catalog::find_xgk_module(model)?;
         let mut changed = self.clone();
         changed.validate_empty_module_placement(base, slot, entry.slot_span)?;
@@ -200,6 +241,7 @@ impl XgwxDocument {
     /// operation fails without mutating the document when the target is absent
     /// or ambiguous.
     pub fn delete_module(&mut self, base: u32, slot: u32) -> Result<(), XgwxError> {
+        self.validate_hardware_identity_edit(base, slot)?;
         let mut changed = self.clone();
         let document = roxmltree::Document::parse(&changed.xml).map_err(XgwxError::Xml)?;
         let matches = document
@@ -230,6 +272,7 @@ impl XgwxDocument {
     /// Captured network-module companion records are synchronized at the same
     /// time for supported communication models.
     pub fn select_module(&mut self, base: u32, slot: u32, model: &str) -> Result<(), XgwxError> {
+        self.require_xgk_hardware()?;
         let entry = crate::catalog::find_xgk_module(model)?;
         let mut changed = self.clone();
         changed.validate_module_placement(base, slot, entry.slot_span)?;
@@ -297,6 +340,55 @@ impl XgwxDocument {
             .unwrap_or_else(|| "PLC".to_owned())
     }
 
+    fn hardware_cpu(&self) -> Result<&'static CpuCatalogEntry, XgwxError> {
+        let configurations = self.configurations();
+        let configuration = match configurations.as_slice() {
+            [] => return Err(XgwxError::MissingConfiguration),
+            [configuration] => configuration,
+            _ => return Err(XgwxError::AmbiguousConfiguration),
+        };
+        let type_code = configuration
+            .type_code
+            .ok_or(XgwxError::MissingConfigurationAttribute { attribute: "Type" })?;
+        crate::cpu::cpu_for_type(type_code).ok_or(XgwxError::UnsupportedCpuHardware { type_code })
+    }
+
+    fn require_xgk_hardware(&self) -> Result<&'static CpuCatalogEntry, XgwxError> {
+        let cpu = self.hardware_cpu()?;
+        if cpu.family != "XGK" {
+            return Err(XgwxError::UnsupportedCpuHardware {
+                type_code: cpu.type_code,
+            });
+        }
+        Ok(cpu)
+    }
+
+    fn validate_hardware_identity_edit(&self, base: u32, slot: u32) -> Result<(), XgwxError> {
+        if self.cpu_hardware_profile().is_some_and(|profile| {
+            base == profile.builtin_io_base && slot == profile.builtin_io_slot
+        }) {
+            return Err(XgwxError::FixedCpuModule { base, slot });
+        }
+        self.require_xgk_hardware()?;
+        Ok(())
+    }
+
+    fn validate_cpu_position(
+        cpu: &CpuCatalogEntry,
+        base: u32,
+        slot: u32,
+        span: u32,
+    ) -> Result<(), XgwxError> {
+        if base >= cpu.max_base || slot.checked_add(span).is_none_or(|end| end > cpu.max_slot) {
+            return Err(XgwxError::CpuHardwareLimit {
+                model: cpu.model.into(),
+                base,
+                slot,
+            });
+        }
+        Ok(())
+    }
+
     fn validate_module_placement(
         &self,
         base: u32,
@@ -349,6 +441,7 @@ impl XgwxDocument {
                 conflicting_slot,
             });
         }
+        Self::validate_cpu_position(self.require_xgk_hardware()?, base, slot, slot_span)?;
         Ok(())
     }
 
@@ -413,6 +506,7 @@ impl XgwxDocument {
                 conflicting_slot,
             });
         }
+        Self::validate_cpu_position(self.require_xgk_hardware()?, base, slot, slot_span)?;
         Ok(())
     }
 
@@ -486,6 +580,7 @@ impl XgwxDocument {
         base: u32,
         slot: u32,
     ) -> Result<(&'static ModuleCatalogEntry, String), XgwxError> {
+        self.require_xgk_hardware()?;
         let matches = self
             .modules()
             .into_iter()
@@ -526,6 +621,12 @@ impl XgwxDocument {
         slot: u32,
         patch: &ModulePatch,
     ) -> Result<(), XgwxError> {
+        if patch.id.is_some() || patch.sub_type.is_some() || patch.name.is_some() {
+            self.validate_hardware_identity_edit(base, slot)?;
+        }
+        if patch.details.is_some() {
+            self.require_xgk_hardware()?;
+        }
         if let Some(details) = &patch.details {
             validate_module_details(details)?;
         }
@@ -545,6 +646,20 @@ impl XgwxDocument {
             [module] => *module,
             _ => return Err(XgwxError::AmbiguousModule { base, slot }),
         };
+
+        if patch.id.is_some() || patch.sub_type.is_some() {
+            let id = patch
+                .id
+                .or_else(|| module.attribute("Id").and_then(|v| v.parse().ok()));
+            let sub_type = patch
+                .sub_type
+                .or_else(|| module.attribute("SubType").and_then(|v| v.parse().ok()));
+            let entry = crate::xgk_module_catalog()
+                .iter()
+                .find(|entry| id == Some(entry.id) && sub_type == Some(entry.sub_type))
+                .ok_or(XgwxError::ModuleCatalogMismatch { base, slot })?;
+            self.validate_module_placement(base, slot, entry.slot_span)?;
+        }
 
         let mut replacements = Vec::new();
         push_u32_replacement(&mut replacements, module, base, slot, "Id", patch.id)?;
@@ -600,6 +715,7 @@ impl XgwxDocument {
         slot: u32,
         filter: ModuleInputFilter,
     ) -> Result<(), XgwxError> {
+        self.require_xgk_hardware()?;
         let matches = self
             .modules()
             .into_iter()

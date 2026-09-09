@@ -288,10 +288,10 @@ fn selects_cpu_type_and_preserves_other_configuration_attributes() {
     let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
     let before = doc.configurations().remove(0);
 
-    doc.select_cpu("xgb-xbms")
+    doc.select_cpu("xgk-cpuhn")
         .expect("CPU matching is ASCII-case-insensitive");
     let after = doc.configurations().remove(0);
-    assert_eq!(after.type_code, Some(2));
+    assert_eq!(after.type_code, Some(16));
     assert_eq!(after.name, before.name);
     assert_eq!(after.attribute, before.attribute);
     assert_eq!(after.guid, before.guid);
@@ -299,7 +299,7 @@ fn selects_cpu_type_and_preserves_other_configuration_attributes() {
 
     let rewritten = doc.to_bytes().expect("selected workspace writes");
     let reparsed = XgwxDocument::parse(&rewritten).expect("selected workspace reparses");
-    assert_eq!(reparsed.configurations()[0].type_code, Some(2));
+    assert_eq!(reparsed.configurations()[0].type_code, Some(16));
 }
 
 #[cfg(feature = "write")]
@@ -2471,4 +2471,153 @@ fn append_ladder_string(data: &mut Vec<u8>, value: &str) {
     for unit in units {
         data.extend_from_slice(&unit.to_le_bytes());
     }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn compact_cpu_guards_preserve_document_and_allow_comments() {
+    let source = std::fs::read("fixtures/XGB_Enet01.xgwx").unwrap();
+    let mut doc = XgwxDocument::parse(&source).unwrap();
+    assert_eq!(doc.cpu_hardware_profile().unwrap().variant, "XBM-DR16S");
+    let before = doc.to_bytes().unwrap();
+    assert!(matches!(
+        doc.delete_module(0, 0),
+        Err(XgwxError::FixedCpuModule { .. })
+    ));
+    assert!(doc.select_module(0, 0, "XGI-D24A/B").is_err());
+    assert!(doc.insert_module(0, 2, "XGI-D24A/B").is_err());
+    assert!(doc.delete_module(0, 1).is_err());
+    assert!(doc.module_option_values(0, 0).is_err());
+    assert!(
+        doc.set_module_option(0, 0, "emergencyOutput", 0, 1)
+            .is_err()
+    );
+    assert!(
+        doc.set_module_input_filter(0, 0, ModuleInputFilter::Ms5)
+            .is_err()
+    );
+    for patch in [
+        ModulePatch {
+            id: Some(42242),
+            ..Default::default()
+        },
+        ModulePatch {
+            sub_type: Some(3),
+            ..Default::default()
+        },
+        ModulePatch {
+            name: Some("XGI-D24A/B".into()),
+            ..Default::default()
+        },
+        ModulePatch {
+            details: Some("00".into()),
+            ..Default::default()
+        },
+    ] {
+        assert!(doc.update_module(0, 0, &patch).is_err());
+    }
+    assert!(doc.select_cpu("XGK-CPUSN").is_err());
+    assert!(doc.select_cpu("XGB-XBCH").is_err());
+    doc.select_cpu("XGB-XBMS").unwrap();
+    assert_eq!(doc.to_bytes().unwrap(), before);
+    let original_networks = doc.network_modules();
+    doc.update_module(
+        0,
+        0,
+        &ModulePatch {
+            comment: Some("CompactAcceptance".into()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let reparsed = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
+    assert_eq!(
+        reparsed.modules()[0].comment.as_deref(),
+        Some("CompactAcceptance")
+    );
+    assert_eq!(reparsed.network_modules(), original_networks);
+    assert_eq!(reparsed.cpu_hardware_profile(), doc.cpu_hardware_profile());
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn cpu_changes_reject_migration_and_hardware_limit_violations_atomically() {
+    let mut doc = XgwxDocument::from_path("fixtures/elements-io.xgwx").unwrap();
+    let before = doc.to_bytes().unwrap();
+    assert!(matches!(
+        doc.select_cpu("XGB-XBMS"),
+        Err(XgwxError::UnsupportedCpuChange { .. })
+    ));
+    assert!(matches!(
+        doc.select_cpu("XGK-CPUE"),
+        Err(XgwxError::CpuHardwareLimit { .. })
+    ));
+    assert_eq!(doc.to_bytes().unwrap(), before);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn unverified_cpu_cannot_borrow_xgk_module_identity_or_options() {
+    let source = XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+    // Retain an exact XGK module ID/name/options under another CPU, reproducing
+    // the ID collision failure without using the now-guarded CPU writer.
+    for type_code in [2, 7, 999] {
+        let xml = source
+            .xml
+            .replace("Type=\"17\"", &format!("Type=\"{type_code}\""));
+        let mut doc = source.clone();
+        doc.root = parse_xml(&xml).unwrap();
+        doc.xml = xml;
+        let before = doc.xml.clone();
+        assert!(doc.cpu_hardware_profile().is_none());
+        assert!(doc.select_module(0, 0, "XGI-D24A/B").is_err());
+        assert!(doc.module_option_values(0, 0).is_err());
+        assert!(
+            doc.set_module_input_filter(0, 0, ModuleInputFilter::Ms5)
+                .is_err()
+        );
+        assert!(doc.delete_module(0, 0).is_err());
+        assert_eq!(doc.xml, before);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn raw_module_identity_patch_obeys_slot_span() {
+    let mut doc = XgwxDocument::from_path("fixtures/elements-io.xgwx").unwrap();
+    let before = doc.to_bytes().unwrap();
+    let entry = xgk_module_catalog()
+        .iter()
+        .find(|m| m.model == "XGF-TC4UD")
+        .unwrap();
+    assert!(matches!(
+        doc.update_module(
+            0,
+            7,
+            &ModulePatch {
+                id: Some(entry.id),
+                sub_type: Some(entry.sub_type),
+                ..Default::default()
+            }
+        ),
+        Err(XgwxError::ModulePlacementConflict { .. })
+    ));
+    assert_eq!(doc.to_bytes().unwrap(), before);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn native_compact_subtype_remains_protected_after_save_as() {
+    let mut doc = XgwxDocument::from_path("fixtures/XGB_Enet01.xgwx").unwrap();
+    let xml = doc
+        .xml
+        .replace("Id=\"42249\" SubType=\"1\"", "Id=\"42249\" SubType=\"0\"");
+    assert_ne!(xml, doc.xml);
+    doc.root = parse_xml(&xml).unwrap();
+    doc.xml = xml;
+    assert_eq!(doc.cpu_hardware_profile().unwrap().variant, "XBM-DR16S");
+    assert!(matches!(
+        doc.delete_module(0, 0),
+        Err(XgwxError::FixedCpuModule { .. })
+    ));
 }

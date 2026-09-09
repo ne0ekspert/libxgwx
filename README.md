@@ -204,6 +204,11 @@ cargo run --quiet --features il --example il -- fixtures/elements.xgwx
 
 ## Module Writing
 
+For controlled XG5000 open/inspect/Save As checks, see the
+[acceptance procedure and results](docs/xg5000-acceptance.md). The included
+`xg5000-acceptance` example generates independent writer cases and verifies
+their edited sections after an external save.
+
 Enable the opt-in `write` feature to prepare attribute changes on an existing
 module. The module must be uniquely identified by its current base and slot:
 
@@ -341,3 +346,11 @@ outside the commit and pass it with an environment variable:
 ```sh
 LIBXGWX_FIXTURE=path/to/project.xgwx cargo test parses_real_fixture_from_env -- --ignored
 ```
+
+CPU and hardware writes are CPU-aware: XGK model changes check retained base
+and slot limits; cross-family and compact-model conversions are rejected.
+The XGK module catalog cannot edit compact hardware. The captured XBM-DR16S
+profile protects built-in I/O identity while allowing comments, and is exposed
+through `cpu_hardware_profile()` and WASM `hardware.cpuProfile`.
+See [CPU hardware validation](docs/cpu-hardware-validation.md) for the verified
+scope and native acceptance evidence.

@@ -240,3 +240,60 @@ pub(crate) fn cpu_for_type(type_code: u32) -> Option<&'static CpuCatalogEntry> {
         .iter()
         .find(|entry| entry.type_code == type_code)
 }
+
+/// Hardware layout captured from a native XG5000 project. This is deliberately
+/// variant-specific: a CPU type alone does not identify compact built-in I/O.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
+pub struct CpuHardwareProfile {
+    pub cpu_model: &'static str,
+    pub variant: &'static str,
+    pub builtin_io_base: u32,
+    pub builtin_io_slot: u32,
+    pub builtin_io_id: u32,
+    /// Source fixture and native Save As encodings, respectively.
+    pub builtin_io_sub_types: &'static [u32],
+    pub builtin_network_id: u32,
+    pub builtin_network_option_type: u32,
+    /// Expansion model selection is not yet supported by the XGK catalog.
+    pub expansion_catalog_supported: bool,
+}
+
+const XBM_DR16S: CpuHardwareProfile = CpuHardwareProfile {
+    cpu_model: "XGB-XBMS",
+    variant: "XBM-DR16S",
+    builtin_io_base: 0,
+    builtin_io_slot: 0,
+    builtin_io_id: 42249,
+    builtin_io_sub_types: &[1, 0],
+    builtin_network_id: 23104,
+    builtin_network_option_type: 32773,
+    expansion_catalog_supported: false,
+};
+
+impl crate::XgwxDocument {
+    /// Recognize the captured compact variant by CPU type and built-in module
+    /// identity. `None` means unverified, not that the CPU has no fixed hardware.
+    pub fn cpu_hardware_profile(&self) -> Option<&'static CpuHardwareProfile> {
+        let configurations = self.configurations();
+        if configurations.len() != 1 || configurations[0].type_code != Some(2) {
+            return None;
+        }
+        let modules = self.modules();
+        let mut builtin = modules
+            .iter()
+            .filter(|m| m.base == Some(0) && m.slot == Some(0));
+        let module = builtin.next()?;
+        if builtin.next().is_some()
+            || module.id != Some(XBM_DR16S.builtin_io_id)
+            || !module
+                .sub_type
+                .is_some_and(|value| XBM_DR16S.builtin_io_sub_types.contains(&value))
+            || !module.name.as_deref()?.contains("XBM-DR16S")
+        {
+            return None;
+        }
+        Some(&XBM_DR16S)
+    }
+}

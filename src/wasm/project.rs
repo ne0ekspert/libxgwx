@@ -114,6 +114,7 @@ impl WasmVariableSummary {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmHardwareSummary {
+    pub(super) cpu_profile: Option<&'static CpuHardwareProfile>,
     pub(super) bases: Vec<WasmBaseSummary>,
     pub(super) modules: Vec<WasmModuleSummary>,
 }

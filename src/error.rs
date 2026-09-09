@@ -94,6 +94,23 @@ pub enum XgwxError {
     UnknownCpuModel {
         model: String,
     },
+    UnsupportedCpuHardware {
+        type_code: u32,
+    },
+    UnsupportedCpuChange {
+        from: String,
+        to: String,
+    },
+    FixedCpuModule {
+        base: u32,
+        slot: u32,
+    },
+    CpuHardwareLimit {
+        model: String,
+        base: u32,
+        slot: u32,
+    },
+    AmbiguousConfiguration,
     MissingConfiguration,
     MissingConfigurationAttribute {
         attribute: &'static str,
@@ -269,6 +286,25 @@ impl fmt::Display for XgwxError {
             }
             Self::UnknownCpuModel { model } => {
                 write!(f, "CPU catalog does not contain {model}")
+            }
+            Self::UnsupportedCpuHardware { type_code } => write!(
+                f,
+                "hardware editing is not verified for CPU type {type_code}"
+            ),
+            Self::UnsupportedCpuChange { from, to } => write!(
+                f,
+                "CPU change from {from} to {to} requires an unsupported hardware/program migration"
+            ),
+            Self::FixedCpuModule { base, slot } => write!(
+                f,
+                "CPU built-in module at base {base}, slot {slot} cannot be removed or replaced"
+            ),
+            Self::CpuHardwareLimit { model, base, slot } => write!(
+                f,
+                "hardware at base {base}, slot {slot} exceeds {model} limits"
+            ),
+            Self::AmbiguousConfiguration => {
+                write!(f, "hardware editing requires exactly one Configuration")
             }
             Self::MissingConfiguration => write!(f, "workspace is missing a Configuration"),
             Self::MissingConfigurationAttribute { attribute } => {
