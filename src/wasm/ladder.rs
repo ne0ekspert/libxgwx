@@ -9,6 +9,7 @@ pub(super) struct WasmLadderProgramSummary {
     pub(super) version: Option<String>,
     pub(super) decoded_len: usize,
     pub(super) structural_editing: bool,
+    pub(super) instruction_choices: &'static [LadderInstructionSpec],
     pub(super) branch_connections: Vec<WasmLadderVerticalLineSummary>,
     pub(super) rungs: Vec<WasmLadderRungSummary>,
     pub(super) cells: Vec<WasmLadderCellSummary>,
@@ -57,6 +58,7 @@ impl WasmLadderProgramSummary {
                     false
                 }
             },
+            instruction_choices: crate::ladder_instruction_catalog(),
             branch_connections: {
                 #[cfg(feature = "write")]
                 {
@@ -191,6 +193,7 @@ pub(super) struct WasmLadderCellSummary {
     pub(super) mnemonic_category: Option<&'static str>,
     pub(super) mnemonic_description: Option<&'static str>,
     pub(super) source_text: Option<String>,
+    pub(super) instruction_text_editing: bool,
 }
 
 impl WasmLadderCellSummary {
@@ -207,6 +210,32 @@ impl WasmLadderCellSummary {
             coil: cell.coil.map(wasm_ladder_coil_label),
             mnemonic_category: mnemonic.map(|info| info.category.label()),
             mnemonic_description: mnemonic.map(|info| info.description),
+            instruction_text_editing: {
+                #[cfg(feature = "write")]
+                {
+                    program.version.as_deref() == Some("LD VER 1.1")
+                        && program.project_type == Some(1)
+                        && program
+                            .strings
+                            .iter()
+                            .find(|s| s.offset == cell.offset)
+                            .is_some_and(|s| {
+                                matches!(
+                                    crate::ladder_write::update_instruction_text(
+                                        &program.data,
+                                        cell.offset,
+                                        &s.value,
+                                        &s.value,
+                                    ),
+                                    Ok(Some(_))
+                                )
+                            })
+                }
+                #[cfg(not(feature = "write"))]
+                {
+                    false
+                }
+            },
             source_text: program
                 .strings
                 .iter()

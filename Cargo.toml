@@ -60,3 +60,8 @@ required-features = ["write"]
 name = "branch-acceptance"
 path = "examples/branch_acceptance.rs"
 required-features = ["write"]
+
+[[example]]
+name = "instruction-acceptance"
+path = "examples/instruction_acceptance.rs"
+required-features = ["write"]

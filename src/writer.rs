@@ -999,12 +999,10 @@ impl XgwxDocument {
         self.apply_xml_replacements(vec![(text_node.range(), replacement_text)])
     }
 
-    /// Replace one decoded ladder cell string while preserving binary layout.
-    ///
-    /// The replacement must contain exactly as many UTF-16 code units as the
-    /// original string. This keeps every proprietary record offset and all
-    /// undecoded topology bytes stable; only the string bytes and compression
-    /// envelopes are regenerated.
+    /// Replace decoded ladder text. Recognized application instructions allow
+    /// variable-length operands and catalog-backed mnemonic changes, synchronizing
+    /// opcodes, decomposed strings, occupied cells and wires. Other records retain the
+    /// same-length restriction to preserve their undecoded binary layout.
     pub fn update_ladder_cell_text(
         &mut self,
         program_index: usize,
@@ -1014,12 +1012,6 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         let expected_units = expected.encode_utf16().count();
         let replacement_units = replacement.encode_utf16().count();
-        if replacement_units != expected_units {
-            return Err(XgwxError::LadderCellLengthChanged {
-                expected_utf16_units: expected_units,
-                actual_utf16_units: replacement_units,
-            });
-        }
 
         let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
         let program = document
@@ -1074,6 +1066,26 @@ impl XgwxDocument {
             return Err(XgwxError::LadderCellChanged {
                 program_index,
                 offset,
+            });
+        }
+
+        if program_data.attribute("Version") == Some("LD VER 1.1")
+            && program_data.attribute("ProjectType") == Some("1")
+            && let Some(updated) = crate::ladder_write::update_instruction_text(
+                &payload,
+                offset,
+                expected,
+                replacement,
+            )?
+        {
+            let replacement_text = encode_payload_text(original_text, compressed, &updated)?;
+            return self.apply_xml_replacements(vec![(text_node.range(), replacement_text)]);
+        }
+
+        if replacement_units != expected_units {
+            return Err(XgwxError::LadderCellLengthChanged {
+                expected_utf16_units: expected_units,
+                actual_utf16_units: replacement_units,
             });
         }
 

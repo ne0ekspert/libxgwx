@@ -41,6 +41,7 @@ mod document;
 mod error;
 #[cfg(feature = "il")]
 mod il;
+mod instruction_catalog;
 mod internal;
 mod ladder_records;
 #[cfg(feature = "write")]
@@ -60,6 +61,7 @@ pub use document::XgwxDocument;
 pub use error::XgwxError;
 #[cfg(feature = "il")]
 pub use il::*;
+pub use instruction_catalog::{LadderInstructionSpec, ladder_instruction_catalog};
 #[cfg(feature = "write")]
 pub use ladder_records::{LadderEditElement, LadderEditKind};
 #[cfg(feature = "write")]

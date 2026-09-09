@@ -2,14 +2,16 @@
 
 The opt-in `write` feature adds `XgwxDocument::edit_ladder_cell` and the WASM
 `edit_xgwx_ladder_cell` export. These insert, replace or remove actual element
-records. The older `update_ladder_cell_text` API remains available for bounded,
-same-length text changes.
+records. The `update_ladder_cell_text` API also supports variable-length operands in
+recognized application instructions; other text records retain bounded,
+same-length editing.
 
 Supported programs use the captured `LD VER 1.1`, `ProjectType=1` layout:
 linear and branched rows containing normally open/closed contacts, output/set/reset
 coils, horizontal wires and preserved END instructions. Recognized comments,
 application instructions and pulse elements are preserved, allowing contact/coil
-edits elsewhere in the same program. Their records remain protected. The entire
+edits elsewhere in the same program. Instruction operand text is editable as
+described below; instruction insertion and deletion remain protected. The entire
 program is validated before editing; unknown record layouts and malformed or
 truncated records reject the structural operation.
 
@@ -172,3 +174,93 @@ Reproduce branch inputs with:
 ```sh
 cargo run --features write --example branch-acceptance -- /tmp/new-branch-cases
 ```
+
+
+## Variable-length function-block operands
+
+`update_ladder_cell_text` and the existing WASM `update_xgwx_ladder_cell` export
+accept different-length operands for recognized application instructions in
+supported LD layouts. For example, `MOV,0,D000000` can become `MOV,1,D1` or
+`MOV,12345,D000042`. The editor's Source text field exposes this without requiring
+padding to the original length.
+
+Instruction records contain both a combined string and decomposed mnemonic and
+operand strings. The writer updates both representations and their length bytes,
+preserving unrelated records. Operand-only edits retain opcode, coordinates,
+flags and companion references. Mnemonic changes update the opcode, rebuild
+operand companions and adjust preceding wires while keeping the right edge fixed.
+Expansion into another element or branch is rejected. This also corrects same-length edits that previously updated
+only the combined string. After an edit, use freshly decoded offsets for any
+following cell; the old offset may have moved.
+
+The mnemonic may change to an entry in `ladder_instruction_catalog()`; the operand
+count must match its definition. Operands must be nonempty printable ASCII tokens,
+separated by commas; whitespace around commas is trimmed. The combined instruction
+text may contain at most 255 UTF-16 units, the captured record's length limit.
+Unsupported layouts retain the older same-length text restriction. CPU-specific
+operand validity is checked by XG5000, not by this serialization API.
+
+The WASM cell summary exposes `instructionTextEditing` when this operation is
+supported; `instructionChoices` exposes the replacement catalog. Stale selections,
+unknown mnemonics, incorrect operand counts, malformed
+records, and direct edits to internal operand copies are rejected without mutation.
+
+```sh
+cargo run --features write --example instruction-acceptance -- /tmp/new-instruction-cases
+```
+
+
+Native acceptance in offline XG5000 4.82.1.0 on Windows 10:
+
+| Case | Replacement | Check Program | Save As |
+| --- | --- | --- | --- |
+| F01 | `MOV,1,D1` | 0 errors, 0 warnings | Entire ProgramData identical |
+| F02 | `MOV,12345,D000042` | 0 errors, 0 warnings | Entire ProgramData identical |
+| F03 | `MOV,12345,D1` | 0 errors, 0 warnings | Entire ProgramData identical |
+| F04 | `XDST,1,1,700,100,10,0,0` | 0 errors, 0 warnings | Entire ProgramData identical |
+
+These edit `fixtures/elements.xgwx`. Rust tests additionally cover unchanged
+surrounding records, byte-exact restoration, equal-total-length edits with
+different operand lengths, stale selections, internal operand-copy protection,
+and invalid mnemonic/count/text/length rejection. WASM tests edit a following
+instruction using its new offset and reject its stale offset.
+
+Playwright exercised longer and shorter MOV operands, invalid mnemonic/count
+controls, and a following XDST edit at 1440×1000 and 900×800 with no console
+errors. The real extension JavaScript and WASM were used with a mocked VS Code
+messaging bridge. Native VS Code Save/Undo and PLC execution were not tested.
+Full local evidence is retained under
+`target/xg5000-instruction-acceptance-20260909` (ignored by Git).
+
+
+### Instruction replacement catalog
+
+The Instruction selector exposes 859 fixed-arity LD application instructions.
+For example, `MOV,0,D000000` can become `ADD,1,2,D000000` and then
+`TON,T0000,100`. Edit operands before applying; selector defaults are placeholders.
+The catalog is not filtered by CPU or OS version. Use XG5000 Check Program for
+instruction availability and operand validity. Basic/control-flow categories and
+zero-operand instructions are excluded from replacement.
+
+`scripts/generate-instruction-catalog.py` reproduces the factual mnemonic,
+`nIndex` opcode and `bySize` operand count mappings from an XGTCodeDB TSV export
+of installed XG5000 4.82.1.0 `l.kor/CMDDB.mdb`. The database is not redistributed.
+Export SHA-256: `75eded4ca287e08334d8789e742e3c4305835bf76a586ec858b2539032b2f957`.
+
+Native edits captured in `fixtures/ladder-edit/instructions/R70.bin` (MOV to ADD)
+and `R71.bin` (ADD to TON) verify growth and shrinkage. The first comparison
+normalizes display heights recalculated by native editing on unrelated rows;
+all remaining bytes match. ADD to TON matches byte for byte. All 859 catalog
+entries pass serialization, opcode, and byte-exact restoration tests. These are
+structural checks, not native execution of every instruction.
+
+
+Generated F05 (`ADD,1,2,D000000`) and F06 (`TON,T0000,100`) also passed native
+XG5000 Check Program with 0 errors and 0 warnings. Separate Save As results R75
+and R76 retain their entire ProgramData byte for byte (2370 and 2341 bytes).
+Playwright verified the selector sequence MOV → ADD → TON → SUB → MOV, operand
+edits after resizing, invalid mnemonic/count rejection and a following XDST edit.
+The real JS/WASM ran with a mocked VS Code bridge at 1440×1000 and 900×800;
+no browser console errors occurred. PLC execution and CPU-specific validation of
+the complete catalog were not performed. Evidence:
+`target/xg5000-instruction-types-20260909` (ignored by Git).

@@ -13,6 +13,224 @@ pub struct LadderCellEdit {
     pub replacement: Option<LadderEditElement>,
 }
 
+/// Replace a recognized instruction's combined text and all decomposed tokens.
+/// Returns None for a target outside an instruction in a supported program.
+/// Unknown layouts retain the older bounded text API.
+pub(crate) fn update_instruction_text(
+    bytes: &[u8],
+    offset: usize,
+    expected: &str,
+    replacement: &str,
+) -> Result<Option<Vec<u8>>, XgwxError> {
+    let Ok(mut program) = EditableProgram::parse(bytes) else {
+        return Ok(None);
+    };
+    let mut position = program.header.len();
+    let mut target = None;
+    for (row_index, row) in program.rows.iter().enumerate() {
+        if let Some((_, header)) = program
+            .group_headers
+            .iter()
+            .find(|(first, _)| *first == row_index)
+        {
+            position += header.len();
+        }
+        position += row.prefix.len();
+        for (record_index, record) in row.records.iter().enumerate() {
+            if record.bytes.starts_with(&[0, 34])
+                && (position..position + record.bytes.len()).contains(&offset)
+            {
+                if offset != position + 19 {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "edit the complete instruction, not an internal operand copy",
+                    });
+                }
+                target = Some((row_index, record_index));
+            }
+            position += record.bytes.len();
+        }
+    }
+    let Some((row, record)) = target else {
+        return Ok(None);
+    };
+    let record_index = record;
+    let record = program.rows[row].records[record_index].clone();
+    let (original, end) = string_at(&record.bytes, 19)?;
+    let count = u16_at(&record.bytes, end)?;
+    let original_parts: Vec<_> = original.split(',').collect();
+    if original != expected || original_parts.len() != count {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "instruction text does not match its stored operands",
+        });
+    }
+    let parts: Vec<_> = replacement.split(',').map(str::trim).collect();
+    let type_changed = parts.first() != original_parts.first();
+    if count < 2 {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "terminal instructions cannot be replaced",
+        });
+    }
+    let opcode = if type_changed {
+        let definition = crate::ladder_instruction_catalog()
+            .iter()
+            .find(|spec| spec.mnemonic == parts[0])
+            .ok_or(XgwxError::InvalidLadderEdit {
+                reason: "instruction replacement requires a supported instruction mnemonic",
+            })?;
+        if parts.len() != definition.operand_count + 1 {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "operand count does not match the selected instruction",
+            });
+        }
+        definition.opcode
+    } else {
+        if parts.len() != count {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "operand count does not match the existing instruction",
+            });
+        }
+        u32::from_le_bytes(record.bytes[15..19].try_into().unwrap())
+    };
+    if parts
+        .iter()
+        .any(|part| part.is_empty() || !part.chars().all(|c| c.is_ascii_graphic()))
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "instruction operands must be nonempty printable ASCII tokens separated by commas",
+        });
+    }
+    let text = parts.join(",");
+    if text.encode_utf16().count() > 255 {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "instruction text exceeds the 255 UTF-16 unit record limit",
+        });
+    }
+    // Validate every redundant original token before rebuilding either copy.
+    let mut next = end + 2;
+    let mut argument_headers = Vec::new();
+    for part in &original_parts {
+        let (stored, stop) = string_at(&record.bytes, next + 10)?;
+        if stored != *part {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "instruction text does not match its stored operands",
+            });
+        }
+        argument_headers.push(record.bytes[next..next + 10].to_vec());
+        next = stop;
+    }
+    let right = usize::from(record.x) + (count - 1) * 3;
+    let new_x = right
+        .checked_sub((parts.len() - 1) * 3)
+        .filter(|x| *x >= 1)
+        .ok_or(XgwxError::InvalidLadderEdit {
+            reason: "not enough space for the replacement instruction",
+        })? as u8;
+    if type_changed
+        && argument_headers
+            .iter()
+            .enumerate()
+            .any(|(i, h)| h[4..] != [u8::from(i == 0), 0, 32, 0, 0, 0])
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "instruction has unsupported operand flags",
+        });
+    }
+    let mut updated = record.bytes[..19].to_vec();
+    updated[5] = new_x;
+    updated[15..19].copy_from_slice(&opcode.to_le_bytes());
+    append_string(&mut updated, &text);
+    updated.extend_from_slice(&(parts.len() as u16).to_le_bytes());
+    for (index, part) in parts.iter().enumerate() {
+        let header = if type_changed {
+            vec![
+                new_x + index as u8 * 3,
+                program.rows[row].y,
+                0,
+                0,
+                u8::from(index == 0),
+                0,
+                32,
+                0,
+                0,
+                0,
+            ]
+        } else {
+            argument_headers[index].clone()
+        };
+        updated.extend(header);
+        append_string(&mut updated, part);
+    }
+    if !type_changed {
+        program.rows[row].records[record_index].bytes = updated;
+    } else {
+        let row = &mut program.rows[row];
+        let mut rebuilt = Vec::new();
+        for (index, other) in row.records.iter().enumerate() {
+            if (record_index..record_index + count).contains(&index) {
+                continue;
+            }
+            if new_x < record.x && other.x < record.x {
+                if let Some(end) = other.wire_end {
+                    if end >= new_x {
+                        if other.x < new_x {
+                            rebuilt.push(wire(other.x, new_x - 3, row.y));
+                        }
+                        continue;
+                    }
+                } else if other.x >= new_x {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "replacement instruction would overlap an element or branch connection",
+                    });
+                }
+            }
+            rebuilt.push(other.clone());
+        }
+        if new_x > record.x {
+            rebuilt.push(wire(record.x, new_x - 3, row.y));
+        }
+        rebuilt.push(Record {
+            bytes: updated,
+            x: new_x,
+            wire_end: None,
+            element: None,
+        });
+        for index in 1..parts.len() {
+            rebuilt.push(Record {
+                bytes: vec![
+                    index as u8,
+                    if index == parts.len() - 1 { 0x24 } else { 0x23 },
+                    0,
+                    0,
+                    0,
+                    new_x,
+                    row.y,
+                    0,
+                    0,
+                ],
+                x: new_x,
+                wire_end: None,
+                element: None,
+            });
+        }
+        rebuilt.sort_by_key(|r| r.x);
+        row.records = rebuilt;
+        merge_wires(row);
+        if row.prefix[21] == record.x {
+            row.prefix[21] = new_x;
+        }
+    }
+    let output = program.encode();
+    EditableProgram::parse(&output)?;
+    Ok(Some(output))
+}
+
+fn append_string(bytes: &mut Vec<u8>, value: &str) {
+    bytes.extend([255, 254, 255, value.encode_utf16().count() as u8]);
+    for unit in value.encode_utf16() {
+        bytes.extend(unit.to_le_bytes());
+    }
+}
+
 fn wire(x: u8, end: u8, y: u8) -> Record {
     let mut bytes = vec![255, 2, 0, 0, 0, x, y, 0, 0, 0, 0, 0, 0, 0, 0];
     bytes.extend([end, y, 0, 0]);
@@ -561,6 +779,193 @@ mod tests {
             operand: operand.into(),
         })
     }
+    #[test]
+    fn instruction_edits_synchronize_tokens_and_preserve_other_records() {
+        let original = crate::XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+        let data = original.ladder_programs().remove(0).unwrap();
+        let before = EditableProgram::parse(&data.data).unwrap();
+        let old = "MOV,0,D000000";
+        let offset = data.strings.iter().find(|s| s.value == old).unwrap().offset;
+        for replacement in [
+            "MOV,1,D1",
+            "MOV,12345,D000042",
+            "MOV,12345,D1",
+            "MOV,12345,D42",
+            "MOV,1,D000042",
+        ] {
+            let mut doc = original.clone();
+            doc.update_ladder_cell_text(0, offset, old, replacement)
+                .unwrap();
+            let doc = crate::XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
+            let edited = doc.ladder_programs().remove(0).unwrap();
+            let after = EditableProgram::parse(&edited.data).unwrap();
+            assert_eq!(before.header, after.header);
+            assert_eq!(before.group_headers, after.group_headers);
+            let mut changed = 0;
+            for (a, b) in before.rows.iter().zip(&after.rows) {
+                assert_eq!(a.prefix, b.prefix);
+                assert_eq!(a.records.len(), b.records.len());
+                for (a, b) in a.records.iter().zip(&b.records) {
+                    if a.bytes == b.bytes {
+                        continue;
+                    }
+                    changed += 1;
+                    assert_eq!(&a.bytes[..19], &b.bytes[..19]);
+                    let (combined, end) = string_at(&b.bytes, 19).unwrap();
+                    assert_eq!(combined, replacement);
+                    let mut next = end + 2;
+                    for part in replacement.split(',') {
+                        let (stored, end) = string_at(&b.bytes, next + 10).unwrap();
+                        assert_eq!(stored, part);
+                        next = end;
+                    }
+                    assert_eq!(next, b.bytes.len());
+                }
+            }
+            assert_eq!(changed, 1);
+            let new_offset = edited
+                .strings
+                .iter()
+                .find(|s| s.value == replacement)
+                .unwrap()
+                .offset;
+            let mut restored = doc;
+            restored
+                .update_ladder_cell_text(0, new_offset, replacement, old)
+                .unwrap();
+            assert_eq!(
+                restored.ladder_programs().remove(0).unwrap().data,
+                data.data
+            );
+        }
+    }
+
+    #[test]
+    fn native_mov_to_add_instruction_replacement_matches() {
+        let mut doc = crate::XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+        let data = doc.ladder_programs().remove(0).unwrap();
+        let original = "MOV,0,D000000";
+        let offset = data
+            .strings
+            .iter()
+            .find(|s| s.value == original)
+            .unwrap()
+            .offset;
+        doc.update_ladder_cell_text(0, offset, original, "ADD,1,2,D000000")
+            .unwrap();
+        let actual = doc.ladder_programs().remove(0).unwrap().data;
+        let source = EditableProgram::parse(&data.data).unwrap();
+        let mut native = EditableProgram::parse(include_bytes!(
+            "../fixtures/ladder-edit/instructions/R70.bin"
+        ))
+        .unwrap();
+        // Native interactive editing recalculates display heights for all rows.
+        // The writer deliberately preserves those unrelated presentation values.
+        for (row, original) in native.rows.iter_mut().zip(&source.rows) {
+            row.prefix[17..21].copy_from_slice(&original.prefix[17..21]);
+        }
+        assert_eq!(actual, native.encode());
+    }
+
+    #[test]
+    fn instruction_catalog_replacements_resize_and_restore() {
+        let doc = crate::XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+        let data = doc.ladder_programs().remove(0).unwrap();
+        let old = "MOV,0,D000000";
+        let offset = data.strings.iter().find(|s| s.value == old).unwrap().offset;
+        let catalog = crate::ladder_instruction_catalog();
+        assert!(catalog.len() > 800);
+        for spec in catalog {
+            let text = format!(
+                "{},{}",
+                spec.mnemonic,
+                vec!["0"; spec.operand_count].join(",")
+            );
+            let edited = update_instruction_text(&data.data, offset, old, &text)
+                .unwrap_or_else(|e| panic!("{}: {e}", spec.mnemonic))
+                .unwrap();
+            let parsed = EditableProgram::parse(&edited).unwrap();
+            let record = parsed
+                .rows
+                .iter()
+                .flat_map(|r| &r.records)
+                .find(|r| {
+                    r.bytes.starts_with(&[0, 34]) && string_at(&r.bytes, 19).unwrap().0 == text
+                })
+                .unwrap();
+            assert_eq!(
+                u32::from_le_bytes(record.bytes[15..19].try_into().unwrap()),
+                spec.opcode
+            );
+            let new_offset = edited
+                .windows(19)
+                .position(|w| w == &record.bytes[..19])
+                .unwrap()
+                + 19;
+            let restored = update_instruction_text(&edited, new_offset, &text, old)
+                .unwrap()
+                .unwrap();
+            assert_eq!(restored, data.data, "{}", spec.mnemonic);
+        }
+    }
+
+    #[test]
+    fn native_add_to_ton_instruction_replacement_matches() {
+        let source = include_bytes!("../fixtures/ladder-edit/instructions/R70.bin");
+        let old = "ADD,1,2,D000000";
+        let mut encoded = Vec::new();
+        append_string(&mut encoded, old);
+        let offset = source
+            .windows(encoded.len())
+            .position(|w| w == encoded)
+            .unwrap();
+        let actual = update_instruction_text(source, offset, old, "TON,T0000,100")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            actual,
+            include_bytes!("../fixtures/ladder-edit/instructions/R71.bin")
+        );
+    }
+
+    #[test]
+    fn invalid_instruction_edits_are_atomic() {
+        let mut doc = crate::XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+        let original = doc.to_bytes().unwrap();
+        let data = doc.ladder_programs().remove(0).unwrap();
+        let old = "MOV,0,D000000";
+        let offset = data.strings.iter().find(|s| s.value == old).unwrap().offset;
+        for text in [
+            "ADD,0,D000000",
+            "MOV,0",
+            "MOV,0,D1,D2",
+            "MOV,,D1",
+            "MOV,0,D 1",
+            "MOV,0,한글",
+            &format!("MOV,0,{}", "D".repeat(250)),
+        ] {
+            assert!(
+                doc.update_ladder_cell_text(0, offset, old, text).is_err(),
+                "{text}"
+            );
+            assert_eq!(doc.to_bytes().unwrap(), original);
+        }
+        assert!(
+            doc.update_ladder_cell_text(0, offset, "MOV,9,D000000", "MOV,1,D1")
+                .is_err()
+        );
+        let inner = data
+            .strings
+            .iter()
+            .find(|s| s.offset > offset && s.value == "D000000")
+            .unwrap();
+        assert!(
+            doc.update_ladder_cell_text(0, inner.offset, &inner.value, "D000042")
+                .is_err()
+        );
+        assert_eq!(doc.to_bytes().unwrap(), original);
+    }
+
     #[test]
     fn structural_edits_match_native_xg5000_records() {
         let empty = include_bytes!("../fixtures/ladder-edit/R10.bin");
