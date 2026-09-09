@@ -173,6 +173,63 @@ impl XgwxDocument {
         Ok(())
     }
 
+    /// Change an existing XGK base's physical slot count without removing modules.
+    /// Native XG5000 choices are 4, 6, 8, 10 and 12. CPU limits, ambiguous
+    /// bases and modules extending beyond the requested size are rejected.
+    pub fn set_base_slot_count(&mut self, base: u32, slot_count: u32) -> Result<(), XgwxError> {
+        let cpu = self.require_xgk_hardware()?;
+        if ![4, 6, 8, 10, 12].contains(&slot_count) {
+            return Err(XgwxError::InvalidBaseSlotCount { base, slot_count });
+        }
+        Self::validate_cpu_position(cpu, base, slot_count - 1, 1)?;
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let mut bases = document.descendants().filter(|node| {
+            node.has_tag_name("Base")
+                && node.attribute("Base").and_then(|v| v.parse::<u32>().ok()) == Some(base)
+                && node.parent().is_some_and(|p| p.has_tag_name("BaseInfo"))
+                && node.ancestors().any(|p| {
+                    p.has_tag_name("Parameter") && p.attribute("Type") == Some("IO PARAMETER")
+                })
+        });
+        let target = bases.next().ok_or(XgwxError::BaseNotFound { base })?;
+        if bases.next().is_some() {
+            return Err(XgwxError::AmbiguousBase { base });
+        }
+        let attribute = target
+            .attributes()
+            .find(|a| a.name() == "SlotCount")
+            .ok_or(XgwxError::MissingBaseSlotCount { base })?;
+        for module in self.modules().into_iter().filter(|m| m.base == Some(base)) {
+            let slot = module.slot.ok_or(XgwxError::UnsupportedCpuHardware {
+                type_code: cpu.type_code,
+            })?;
+            let mut entries = crate::xgk_module_catalog()
+                .iter()
+                .filter(|e| module.id == Some(e.id) && module.sub_type == Some(e.sub_type));
+            let entry = entries
+                .next()
+                .ok_or(XgwxError::ModuleCatalogMismatch { base, slot })?;
+            if entries.any(|e| e.slot_span != entry.slot_span) {
+                return Err(XgwxError::ModuleCatalogMismatch { base, slot });
+            }
+            if slot
+                .checked_add(entry.slot_span)
+                .is_none_or(|end| end > slot_count)
+            {
+                return Err(XgwxError::ModulePlacementExceedsBase {
+                    base,
+                    slot,
+                    slot_span: entry.slot_span,
+                    slot_count,
+                });
+            }
+        }
+        if attribute.value().parse::<u32>().ok() == Some(slot_count) {
+            return Ok(());
+        }
+        self.apply_xml_replacements(vec![(attribute.range_value(), slot_count.to_string())])
+    }
+
     /// Insert a catalog module into an empty physical base slot.
     ///
     /// The module receives the latest-stable catalog defaults and an empty

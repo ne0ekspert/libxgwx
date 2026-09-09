@@ -49,6 +49,16 @@ pub enum XgwxError {
         base: u32,
         slot: u32,
     },
+    InvalidBaseSlotCount {
+        base: u32,
+        slot_count: u32,
+    },
+    AmbiguousBase {
+        base: u32,
+    },
+    MissingBaseSlotCount {
+        base: u32,
+    },
     BaseNotFound {
         base: u32,
     },
@@ -238,6 +248,14 @@ impl fmt::Display for XgwxError {
             }
             Self::ModuleNotFound { base, slot } => {
                 write!(f, "module at base {base}, slot {slot} was not found")
+            }
+            Self::InvalidBaseSlotCount { base, slot_count } => write!(
+                f,
+                "base {base} does not support {slot_count} slots; choose 4, 6, 8, 10 or 12"
+            ),
+            Self::AmbiguousBase { base } => write!(f, "hardware base {base} is ambiguous"),
+            Self::MissingBaseSlotCount { base } => {
+                write!(f, "hardware base {base} is missing SlotCount")
             }
             Self::BaseNotFound { base } => write!(f, "hardware base {base} was not found"),
             Self::MissingModuleContainer => {

@@ -2652,3 +2652,86 @@ fn structural_ladder_edits_round_trip_and_reject_protected_cells() {
     ));
     assert_eq!(complex.to_bytes().unwrap(), before);
 }
+
+#[cfg(feature = "write")]
+#[test]
+fn base_slot_counts_round_trip_and_preserve_other_configuration() {
+    let source = XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+    for base in 0..4 {
+        for count in [4, 6, 8, 10, 12] {
+            let mut doc = source.clone();
+            let old = doc
+                .bases()
+                .into_iter()
+                .find(|b| b.base == Some(base))
+                .unwrap()
+                .slot_count
+                .unwrap();
+            doc.set_base_slot_count(base, count).unwrap();
+            assert_eq!(
+                doc.xml,
+                source.xml.replace(
+                    &format!("Base=\"{base}\" SlotCount=\"{old}\""),
+                    &format!("Base=\"{base}\" SlotCount=\"{count}\"")
+                )
+            );
+            let mut saved = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
+            assert_eq!(
+                saved
+                    .bases()
+                    .into_iter()
+                    .find(|b| b.base == Some(base))
+                    .unwrap()
+                    .slot_count,
+                Some(count)
+            );
+            saved.set_base_slot_count(base, old).unwrap();
+            assert_eq!(saved.xml, source.xml);
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn base_slot_count_rejections_are_atomic_and_respect_module_width() {
+    let mut doc = XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+    doc.set_base_slot_count(1, 6).unwrap();
+    doc.insert_module(1, 3, "XGF-TC4UD").unwrap();
+    let before = doc.to_bytes().unwrap();
+    assert!(matches!(
+        doc.set_base_slot_count(1, 4),
+        Err(XgwxError::ModulePlacementExceedsBase {
+            slot: 3,
+            slot_span: 2,
+            ..
+        })
+    ));
+    for (base, count) in [(0, 0), (0, 3), (0, 5), (0, 13), (0, u32::MAX), (4, 12)] {
+        assert!(doc.set_base_slot_count(base, count).is_err());
+    }
+    assert_eq!(doc.to_bytes().unwrap(), before);
+    doc.delete_module(1, 3).unwrap();
+    doc.set_base_slot_count(1, 4).unwrap();
+    assert!(doc.insert_module(1, 4, "XGI-D24A").is_err());
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn base_slot_counts_reject_ambiguous_missing_and_compact_hardware() {
+    for (bases, type_code) in [
+        (
+            "<Base Base=\"0\" SlotCount=\"4\"/><Base Base=\"0\" SlotCount=\"4\"/>",
+            17,
+        ),
+        ("<Base Base=\"0\"/>", 17),
+        ("<Base Base=\"1\" SlotCount=\"4\"/>", 17),
+        ("<Base Base=\"0\" SlotCount=\"4\"/>", 2),
+    ] {
+        let xml = format!(
+            "<Project><Configuration Type=\"{type_code}\"><Parameter Type=\"IO PARAMETER\"><BaseInfo>{bases}</BaseInfo></Parameter></Configuration></Project>"
+        );
+        let mut doc = XgwxDocument::parse(&synthetic_xgwx_bytes(&xml)).unwrap();
+        assert!(doc.set_base_slot_count(0, 6).is_err());
+        assert_eq!(doc.xml, xml);
+    }
+}

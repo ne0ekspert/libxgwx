@@ -65,6 +65,21 @@ pub fn select_xgwx_cpu_wasm(bytes: &[u8], model: &str) -> Result<Vec<u8>, JsValu
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Set the physical slot count for an existing XGK base.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = set_xgwx_base_slot_count)]
+pub fn set_xgwx_base_slot_count_wasm(
+    bytes: &[u8],
+    base: u32,
+    slot_count: u32,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.set_base_slot_count(base, slot_count)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Structurally edit a supported LD contact or coil at a physical cell.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_ladder_cell)]
