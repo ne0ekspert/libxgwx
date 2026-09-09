@@ -1088,6 +1088,73 @@ impl XgwxDocument {
         self.apply_xml_replacements(vec![(text_node.range(), replacement_text)])
     }
 
+    /// Insert, replace, or delete a contact/coil record in the captured
+    /// LD format. Unlike text clearing, deletion removes the actual record.
+    /// Unsupported topology is rejected without changing the document.
+    pub fn edit_ladder_cell(
+        &mut self,
+        program_index: usize,
+        edit: &LadderCellEdit,
+    ) -> Result<(), XgwxError> {
+        self.edit_ladder_payload(program_index, |payload| {
+            crate::ladder_write::edit_ladder_cell(payload, edit)
+        })
+    }
+
+    /// Add or remove a supported vertical connection between adjacent rows.
+    pub fn edit_ladder_branch(
+        &mut self,
+        program_index: usize,
+        edit: &LadderBranchEdit,
+    ) -> Result<(), XgwxError> {
+        self.edit_ladder_payload(program_index, |payload| {
+            crate::ladder_write::edit_ladder_branch(payload, edit)
+        })
+    }
+
+    /// Insert a physical blank row before the selected row, as native Ctrl+L.
+    pub fn insert_ladder_row(&mut self, program_index: usize, raw_y: u8) -> Result<(), XgwxError> {
+        self.edit_ladder_payload(program_index, |payload| {
+            crate::ladder_write::insert_ladder_row(payload, raw_y)
+        })
+    }
+
+    fn edit_ladder_payload(
+        &mut self,
+        program_index: usize,
+        update: impl FnOnce(&[u8]) -> Result<Vec<u8>, XgwxError>,
+    ) -> Result<(), XgwxError> {
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let program = document
+            .descendants()
+            .filter(|node| node.has_tag_name("Program"))
+            .nth(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })?;
+        let data = program
+            .descendants()
+            .find(|node| node.has_tag_name("ProgramData"))
+            .ok_or(XgwxError::MissingProgramData)?;
+        if data.attribute("Version") != Some("LD VER 1.1")
+            || data.attribute("ProjectType") != Some("1")
+        {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        let text = data
+            .children()
+            .find(|node| node.is_text())
+            .ok_or(XgwxError::MissingProgramData)?;
+        let original = text.text().unwrap_or_default();
+        let compressed = data
+            .attribute("Compressed")
+            .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"));
+        let payload = decode_base64_payload(original, compressed)?.data;
+        let updated = update(&payload)?;
+        let replacement = encode_payload_text(original, compressed, &updated)?;
+        self.apply_xml_replacements(vec![(text.range(), replacement)])
+    }
+
     fn apply_xml_replacements(
         &mut self,
         mut replacements: Vec<(Range<usize>, String)>,

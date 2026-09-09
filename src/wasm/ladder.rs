@@ -8,6 +8,8 @@ pub(super) struct WasmLadderProgramSummary {
     pub(super) program_name: Option<String>,
     pub(super) version: Option<String>,
     pub(super) decoded_len: usize,
+    pub(super) structural_editing: bool,
+    pub(super) branch_connections: Vec<WasmLadderVerticalLineSummary>,
     pub(super) rungs: Vec<WasmLadderRungSummary>,
     pub(super) cells: Vec<WasmLadderCellSummary>,
     pub(super) vertical_lines: Vec<WasmLadderVerticalLineSummary>,
@@ -43,12 +45,70 @@ impl WasmLadderProgramSummary {
             program_name: program.program_name.clone(),
             version: program.version.clone(),
             decoded_len: program.decoded_len,
-            rungs: program
-                .structure
-                .rungs
-                .iter()
-                .map(WasmLadderRungSummary::from_rung)
-                .collect(),
+            structural_editing: {
+                #[cfg(feature = "write")]
+                {
+                    program.version.as_deref() == Some("LD VER 1.1")
+                        && program.project_type == Some(1)
+                        && crate::ladder_write::editable_ladder_supported(&program.data)
+                }
+                #[cfg(not(feature = "write"))]
+                {
+                    false
+                }
+            },
+            branch_connections: {
+                #[cfg(feature = "write")]
+                {
+                    crate::ladder_write::ladder_connections(&program.data)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(
+                            |(raw_x, raw_y_start, raw_y_end)| WasmLadderVerticalLineSummary {
+                                raw_x,
+                                raw_y_start,
+                                raw_y_end,
+                            },
+                        )
+                        .collect()
+                }
+                #[cfg(not(feature = "write"))]
+                {
+                    Vec::new()
+                }
+            },
+            rungs: {
+                let decoded = || {
+                    program
+                        .structure
+                        .rungs
+                        .iter()
+                        .map(WasmLadderRungSummary::from_rung)
+                        .collect()
+                };
+                #[cfg(feature = "write")]
+                {
+                    match crate::ladder_write::editable_ladder_rows(&program.data) {
+                        Ok(rows) => rows
+                            .into_iter()
+                            .map(|raw_y| WasmLadderRungSummary {
+                                raw_y,
+                                cell_count: program
+                                    .structure
+                                    .rungs
+                                    .iter()
+                                    .find(|row| row.raw_y == raw_y)
+                                    .map_or(0, |row| row.cells.len()),
+                            })
+                            .collect(),
+                        Err(_) => decoded(),
+                    }
+                }
+                #[cfg(not(feature = "write"))]
+                {
+                    decoded()
+                }
+            },
             cells: program
                 .structure
                 .rungs

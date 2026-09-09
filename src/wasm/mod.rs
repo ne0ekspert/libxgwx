@@ -65,6 +65,66 @@ pub fn select_xgwx_cpu_wasm(bytes: &[u8], model: &str) -> Result<Vec<u8>, JsValu
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Structurally edit a supported LD contact or coil at a physical cell.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_ladder_cell)]
+pub fn edit_xgwx_ladder_cell_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    edit: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let edit: LadderCellEdit = serde_json::from_str(
+        &js_sys::JSON::stringify(&edit)?
+            .as_string()
+            .ok_or_else(|| JsValue::from_str("invalid ladder edit"))?,
+    )
+    .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.edit_ladder_cell(program_index, &edit)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Add or remove a supported vertical branch connection.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_ladder_branch)]
+pub fn edit_xgwx_ladder_branch_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    edit: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let edit: LadderBranchEdit = serde_json::from_str(
+        &js_sys::JSON::stringify(&edit)?
+            .as_string()
+            .ok_or_else(|| JsValue::from_str("invalid branch edit"))?,
+    )
+    .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.edit_ladder_branch(program_index, &edit)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Insert a physical blank row before the selected row.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = insert_xgwx_ladder_row)]
+pub fn insert_xgwx_ladder_row_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    raw_y: u8,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.insert_ladder_row(program_index, raw_y)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Return the embedded latest-stable XGK module selection catalog.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = xgk_module_catalog)]

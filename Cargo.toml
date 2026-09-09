@@ -50,3 +50,13 @@ required-features = ["write"]
 [[example]]
 name = "gui"
 required-features = ["gui"]
+
+[[example]]
+name = "ladder-acceptance"
+path = "examples/ladder_acceptance.rs"
+required-features = ["write"]
+
+[[example]]
+name = "branch-acceptance"
+path = "examples/branch_acceptance.rs"
+required-features = ["write"]

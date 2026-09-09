@@ -182,6 +182,10 @@ pub enum XgwxError {
         expected_utf16_units: usize,
         actual_utf16_units: usize,
     },
+    UnsupportedLadderLayout,
+    InvalidLadderEdit {
+        reason: &'static str,
+    },
     AuthenticatedRewriteUnsupported,
 }
 
@@ -393,6 +397,10 @@ impl fmt::Display for XgwxError {
                 f,
                 "ladder cell edits must keep the encoded length at {expected_utf16_units} UTF-16 units (got {actual_utf16_units})"
             ),
+            Self::UnsupportedLadderLayout => {
+                write!(f, "structural editing requires a verified LD record layout")
+            }
+            Self::InvalidLadderEdit { reason } => write!(f, "cannot edit ladder cell: {reason}"),
             Self::AuthenticatedRewriteUnsupported => write!(
                 f,
                 "cannot rewrite workspace: the container does not match the validated XG5000 header, alignment, or Security layout"

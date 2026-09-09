@@ -1645,31 +1645,24 @@ fn decodes_elements_fixture_pulse_contacts_and_coils() {
     assert_marker_only_ladder_contact(&program, 0x04, 0x08, LadderContact::Inverse);
     assert_marker_only_ladder_contact(&program, 0x13, 0x04, LadderContact::RisingPulse);
     assert_marker_only_ladder_contact(&program, 0x16, 0x04, LadderContact::FallingPulse);
-    assert!(!program.structure.horizontal_lines.iter().any(|line| (
-        line.raw_y,
-        line.raw_x_start,
-        line.raw_x_end
-    ) == (0x08, 0x01, 0x03)));
+    // Only stored wires are unconditional connections; contact footprints are rendered separately.
+    assert!(
+        !program
+            .structure
+            .horizontal_lines
+            .iter()
+            .any(|line| line.raw_y == 0x0c)
+    );
     assert!(program.structure.horizontal_lines.iter().any(|line| (
         line.raw_y,
         line.raw_x_start,
         line.raw_x_end
-    ) == (0x08, 0x01, 0x06)));
+    ) == (0x08, 0x07, 0x5d)));
     assert!(program.structure.horizontal_lines.iter().any(|line| (
         line.raw_y,
         line.raw_x_start,
         line.raw_x_end
-    ) == (0x0c, 0x01, 0x03)));
-    assert!(!program.structure.horizontal_lines.iter().any(|line| (
-        line.raw_y,
-        line.raw_x_start,
-        line.raw_x_end
-    ) == (0x0c, 0x01, 0x06)));
-    assert!(program.structure.horizontal_lines.iter().any(|line| (
-        line.raw_y,
-        line.raw_x_start,
-        line.raw_x_end
-    ) == (0x10, 0x01, 0x06)));
+    ) == (0x10, 0x04, 0x06)));
     assert_eq!(
         program.structure.output_comments,
         vec![LadderOutputComment {
@@ -2620,4 +2613,42 @@ fn native_compact_subtype_remains_protected_after_save_as() {
         doc.delete_module(0, 0),
         Err(XgwxError::FixedCpuModule { .. })
     ));
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn structural_ladder_edits_round_trip_and_reject_protected_cells() {
+    let mut doc = XgwxDocument::from_path("fixtures/XGB_Enet01.xgwx").unwrap();
+    let original = doc.to_bytes().unwrap();
+    let edit = LadderCellEdit {
+        raw_y: 0,
+        column: 0,
+        expected: Some(LadderEditElement {
+            kind: LadderEditKind::NormallyOpen,
+            operand: "M0010".into(),
+        }),
+        replacement: Some(LadderEditElement {
+            kind: LadderEditKind::NormallyClosed,
+            operand: "M00042".into(),
+        }),
+    };
+    doc.edit_ladder_cell(0, &edit).unwrap();
+    let reparsed = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
+    let ladder = reparsed.ladder_programs().remove(0).unwrap();
+    assert_eq!(ladder.structure.rungs[0].cells[0].value, "M00042");
+    assert_eq!(
+        ladder.structure.rungs[0].cells[0].contact,
+        Some(LadderContact::NormallyClosed)
+    );
+    let before = doc.to_bytes().unwrap();
+    assert!(doc.edit_ladder_cell(0, &edit).is_err());
+    assert_eq!(doc.to_bytes().unwrap(), before);
+    assert_ne!(original, before);
+    let mut complex = XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+    let before = complex.to_bytes().unwrap();
+    assert!(matches!(
+        complex.edit_ladder_cell(0, &edit),
+        Err(XgwxError::InvalidLadderEdit { .. })
+    ));
+    assert_eq!(complex.to_bytes().unwrap(), before);
 }

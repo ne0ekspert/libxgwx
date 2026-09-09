@@ -124,6 +124,10 @@ pub(crate) fn extract_ladder_structure(data: &[u8], elements: &[LadderElement]) 
 }
 
 pub(crate) fn extract_ladder_vertical_lines(data: &[u8]) -> Vec<LadderVerticalLine> {
+    if let Some((_, mut lines)) = crate::ladder_records::exact_geometry(data) {
+        merge_ladder_vertical_lines(&mut lines);
+        return lines;
+    }
     let mut lines = Vec::new();
     let mut offset = 0;
 
@@ -366,6 +370,9 @@ pub(crate) fn extract_ladder_horizontal_lines(
     data: &[u8],
     cells: &[LadderCell],
 ) -> Vec<LadderHorizontalLine> {
+    if let Some((lines, _)) = crate::ladder_records::exact_geometry(data) {
+        return lines;
+    }
     let mut lines = Vec::new();
     let mut offset = 0;
 

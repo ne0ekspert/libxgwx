@@ -657,7 +657,7 @@ fn row_connects_from_left(structure: &LadderStructure, raw_y: u8, to_x: u8) -> b
 fn horizontal_connects(line: &LadderHorizontalLine, from_x: u8, to_x: u8) -> bool {
     let start = line.raw_x_start.min(line.raw_x_end);
     let end = line.raw_x_start.max(line.raw_x_end);
-    start <= from_x.saturating_add(1) && end >= to_x
+    start <= from_x.saturating_add(1) && end.saturating_add(1) >= to_x
 }
 
 fn line_contains_y(line: &LadderVerticalLine, raw_y: u8) -> bool {
@@ -708,6 +708,15 @@ fn or_expressions(expressions: Vec<Expr>) -> Expr {
             expression => flattened.push(expression),
         }
     }
+    // A wire can split and rejoin without introducing a new condition.
+    // Preserve stateful evaluations, but collapse identical boolean inputs.
+    let mut unique = Vec::new();
+    for expression in flattened {
+        if expression_is_stateful(&expression) || !unique.contains(&expression) {
+            unique.push(expression);
+        }
+    }
+    let mut flattened = unique;
     if flattened.len() == 1 {
         flattened.pop().expect("one expression remains")
     } else {

@@ -42,6 +42,9 @@ mod error;
 #[cfg(feature = "il")]
 mod il;
 mod internal;
+mod ladder_records;
+#[cfg(feature = "write")]
+mod ladder_write;
 mod mnemonic;
 mod model;
 #[cfg(feature = "write")]
@@ -57,6 +60,10 @@ pub use document::XgwxDocument;
 pub use error::XgwxError;
 #[cfg(feature = "il")]
 pub use il::*;
+#[cfg(feature = "write")]
+pub use ladder_records::{LadderEditElement, LadderEditKind};
+#[cfg(feature = "write")]
+pub use ladder_write::{LadderBranchEdit, LadderCellEdit};
 pub use mnemonic::*;
 pub use model::*;
 #[cfg(feature = "write")]
@@ -66,7 +73,8 @@ pub use writer::*;
 pub use wasm::{cpu_catalog_wasm, parse_xgwx};
 #[cfg(all(feature = "wasm", feature = "write"))]
 pub use wasm::{
-    delete_xgwx_module_wasm, insert_xgwx_module_wasm, select_xgwx_cpu_wasm,
+    delete_xgwx_module_wasm, edit_xgwx_ladder_branch_wasm, edit_xgwx_ladder_cell_wasm,
+    insert_xgwx_ladder_row_wasm, insert_xgwx_module_wasm, select_xgwx_cpu_wasm,
     select_xgwx_module_wasm, set_xgwx_module_input_filter_wasm, set_xgwx_module_option_wasm,
     update_xgwx_ladder_cell_wasm, update_xgwx_module_wasm, update_xgwx_network_module_wasm,
     update_xgwx_network_wasm, update_xgwx_program_wasm, update_xgwx_variable_wasm,
