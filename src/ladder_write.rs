@@ -258,13 +258,12 @@ fn element_record(x: u8, y: u8, element: &LadderEditElement) -> Record {
         0,
         0,
         0,
-        255,
-        254,
-        255,
-        element.operand.encode_utf16().count() as u8,
     ];
-    for unit in element.operand.encode_utf16() {
-        bytes.extend(unit.to_le_bytes());
+    if element.kind.has_operand() {
+        bytes.extend([255, 254, 255, element.operand.encode_utf16().count() as u8]);
+        for unit in element.operand.encode_utf16() {
+            bytes.extend(unit.to_le_bytes());
+        }
     }
     Record {
         bytes,
@@ -312,14 +311,20 @@ pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Ve
         });
     }
     if let Some(element) = &edit.replacement {
-        let address = element.operand.as_bytes();
-        if address.len() < 2
-            || address.len() > 32
-            || !matches!(address[0], b'P' | b'M' | b'K' | b'F' | b'L' | b'T' | b'C')
-            || !address[1..].iter().all(u8::is_ascii_digit)
-        {
+        if element.kind.has_operand() {
+            let address = element.operand.as_bytes();
+            if address.len() < 2
+                || address.len() > 32
+                || !matches!(address[0], b'P' | b'M' | b'K' | b'F' | b'L' | b'T' | b'C')
+                || !address[1..].iter().all(u8::is_ascii_digit)
+            {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "use an uppercase P/M/K/F/L/T/C device address",
+                });
+            }
+        } else if !element.operand.is_empty() {
             return Err(XgwxError::InvalidLadderEdit {
-                reason: "use an uppercase P/M/K/F/L/T/C device address",
+                reason: "this operation does not accept a device address",
             });
         }
         if element.kind.is_coil() != (edit.column == 9) {
@@ -1023,6 +1028,65 @@ mod tests {
                 )
                 .unwrap(),
                 target
+            );
+        }
+    }
+
+    #[test]
+    fn every_decoded_structural_kind_round_trips_its_native_record() {
+        let doc = crate::XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+        let data = doc.ladder_programs().remove(0).unwrap().data;
+        let parsed = EditableProgram::parse(&data).unwrap();
+        let elements = parsed
+            .rows
+            .iter()
+            .flat_map(|row| {
+                row.records.iter().filter_map(move |record| {
+                    record.element.clone().map(|element| {
+                        let column = if element.kind.is_coil() {
+                            9
+                        } else {
+                            (record.x - 1) / 3
+                        };
+                        (row.y, column, element)
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for kind in [
+            LadderEditKind::NormallyOpen,
+            LadderEditKind::NormallyClosed,
+            LadderEditKind::AddressedRisingPulse,
+            LadderEditKind::AddressedFallingPulse,
+            LadderEditKind::AddressedRisingPulseNot,
+            LadderEditKind::AddressedFallingPulseNot,
+            LadderEditKind::Inverse,
+            LadderEditKind::RisingPulse,
+            LadderEditKind::FallingPulse,
+            LadderEditKind::Output,
+            LadderEditKind::InverseOutput,
+            LadderEditKind::Set,
+            LadderEditKind::Reset,
+            LadderEditKind::RisingPulseOutput,
+            LadderEditKind::FallingPulseOutput,
+        ] {
+            assert!(elements.iter().any(|(_, _, element)| element.kind == kind));
+        }
+
+        for (raw_y, column, element) in elements {
+            assert_eq!(
+                edit_ladder_cell(
+                    &data,
+                    &LadderCellEdit {
+                        raw_y,
+                        column,
+                        expected: Some(element.clone()),
+                        replacement: Some(element),
+                    },
+                )
+                .unwrap(),
+                data,
             );
         }
     }

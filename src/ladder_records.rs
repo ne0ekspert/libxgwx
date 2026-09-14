@@ -6,9 +6,19 @@ use crate::XgwxError;
 pub enum LadderEditKind {
     NormallyOpen,
     NormallyClosed,
+    AddressedRisingPulse,
+    AddressedFallingPulse,
+    AddressedRisingPulseNot,
+    AddressedFallingPulseNot,
+    Inverse,
+    RisingPulse,
+    FallingPulse,
     Output,
+    InverseOutput,
     Set,
     Reset,
+    RisingPulseOutput,
+    FallingPulseOutput,
 }
 
 impl LadderEditKind {
@@ -17,29 +27,62 @@ impl LadderEditKind {
         match self {
             Self::NormallyOpen => 6,
             Self::NormallyClosed => 7,
+            Self::AddressedRisingPulse => 8,
+            Self::AddressedFallingPulse => 9,
+            Self::AddressedRisingPulseNot => 10,
+            Self::AddressedFallingPulseNot => 11,
+            Self::Inverse => 0x3e,
+            Self::RisingPulse => 0x48,
+            Self::FallingPulse => 0x49,
             Self::Output => 14,
+            Self::InverseOutput => 15,
             Self::Set => 16,
             Self::Reset => 17,
+            Self::RisingPulseOutput => 18,
+            Self::FallingPulseOutput => 19,
         }
     }
     fn from_marker(marker: u8) -> Option<Self> {
         match marker {
             6 => Some(Self::NormallyOpen),
             7 => Some(Self::NormallyClosed),
+            8 => Some(Self::AddressedRisingPulse),
+            9 => Some(Self::AddressedFallingPulse),
+            10 => Some(Self::AddressedRisingPulseNot),
+            11 => Some(Self::AddressedFallingPulseNot),
             14 => Some(Self::Output),
+            15 => Some(Self::InverseOutput),
             16 => Some(Self::Set),
             17 => Some(Self::Reset),
+            18 => Some(Self::RisingPulseOutput),
+            19 => Some(Self::FallingPulseOutput),
+            0x3e => Some(Self::Inverse),
+            0x48 => Some(Self::RisingPulse),
+            0x49 => Some(Self::FallingPulse),
             _ => None,
         }
     }
     #[cfg(feature = "write")]
     pub(crate) fn is_coil(self) -> bool {
-        matches!(self, Self::Output | Self::Set | Self::Reset)
+        matches!(
+            self,
+            Self::Output
+                | Self::InverseOutput
+                | Self::Set
+                | Self::Reset
+                | Self::RisingPulseOutput
+                | Self::FallingPulseOutput
+        )
+    }
+    #[cfg(feature = "write")]
+    pub(crate) fn has_operand(self) -> bool {
+        !matches!(self, Self::Inverse | Self::RisingPulse | Self::FallingPulse)
     }
 }
 
-/// One supported contact or coil. Operands are device addresses, not arbitrary
-/// instruction strings or variable symbols.
+/// One supported contact, coil or operandless logic operation. Operands are
+/// device addresses, not arbitrary instruction strings or variable symbols;
+/// operandless operations use an empty string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
@@ -358,6 +401,12 @@ fn parse_record(bytes: &[u8], pos: usize, y: u8) -> Result<(Record, usize), Xgwx
                 return Err(unsupported());
             }
             end = pos + 15;
+            if let Some(kind) = LadderEditKind::from_marker(marker[1]) {
+                element = Some(LadderEditElement {
+                    kind,
+                    operand: String::new(),
+                });
+            }
         } else if marker[0] == 255 && matches!(marker[1], 0x3f | 0x40) {
             let (_, next) = string_at(bytes, pos + 15)?;
             bytes.get(next..next + 8).ok_or_else(unsupported)?;

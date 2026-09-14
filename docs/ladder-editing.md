@@ -7,13 +7,14 @@ recognized application instructions; other text records retain bounded,
 same-length editing.
 
 Supported programs use the captured `LD VER 1.1`, `ProjectType=1` layout:
-linear and branched rows containing normally open/closed contacts, output/set/reset
-coils, horizontal wires and preserved END instructions. Recognized comments,
-application instructions and pulse elements are preserved, allowing contact/coil
-edits elsewhere in the same program. Instruction operand text is editable as
-described below; instruction insertion and deletion remain protected. The entire
-program is validated before editing; unknown record layouts and malformed or
-truncated records reject the structural operation.
+linear and branched rows containing normally open/closed, rising/falling-edge and
+negated edge contacts; operandless INV, PUP and PDN operations; output, inverse,
+set/reset and rising/falling-edge coils; horizontal wires; and preserved END
+instructions. Recognized comments and application instructions are preserved,
+allowing structural edits elsewhere in the same program. Instruction operand
+text is editable as described below; instruction insertion and deletion remain
+protected. The entire program is validated before editing; unknown record
+layouts and malformed or truncated records reject the structural operation.
 
 Contacts occupy columns 0–8; coils occupy column 9. `raw_y` is the decoded
 physical row coordinate (0, 4, 8, …), not a logical rung index. Existing rows are
@@ -23,10 +24,11 @@ coordinate, matching native Ctrl+L, and stretches crossing branch connections.
 `edit_ladder_branch` adds or removes a vertical connection between adjacent rows
 at a column boundary. Row deletion and horizontal-wire editing are not implemented.
 
-Operands currently accept uppercase P/M/K/F/L/T/C followed by decimal digits
-(2–32 ASCII bytes total). This is a bounded serialization syntax, not CPU-specific
-device-range or program validation. Symbol names and other addressing forms are
-not supported by the structural API.
+Addressed elements currently accept uppercase P/M/K/F/L/T/C followed by decimal
+digits (2–32 ASCII bytes total). INV, PUP and PDN use an empty operand. This is a
+bounded serialization syntax, not CPU-specific device-range or program
+validation. Symbol names and other addressing forms are not supported by the
+structural API.
 
 ```rust
 use xgwx::{LadderCellEdit, LadderEditElement, LadderEditKind};
