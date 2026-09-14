@@ -1170,6 +1170,17 @@ impl XgwxDocument {
         })
     }
 
+    /// Create or edit a native rung/output comment record.
+    pub fn edit_ladder_comment(
+        &mut self,
+        program_index: usize,
+        edit: &LadderCommentEdit,
+    ) -> Result<(), XgwxError> {
+        self.edit_ladder_payload(program_index, |payload| {
+            crate::ladder_write::edit_ladder_comment(payload, edit)
+        })
+    }
+
     /// Add or remove a supported vertical connection between adjacent rows.
     pub fn edit_ladder_branch(
         &mut self,

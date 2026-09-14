@@ -57,7 +57,10 @@ an unsupported instruction is not deleted. Each completed edit uses the existing
 document edit bridge. Programs without the supported layout retain their
 existing bounded text editor, with structural insertion/deletion unavailable.
 Ctrl+L and the Rows and branches inspector insert rows. Choose a boundary after
-column 1–9 to add or remove its connection to the row below.
+column 1–9 to add or remove its connection to the row below. Native rung and
+output comments can be created with `edit_ladder_comment`; edits use an expected
+text value so stale UI actions fail without changing the document. Rung comment
+creation inserts a dedicated comment row and is rejected inside a branch span.
 
 ## Native acceptance — 2026-09-09
 

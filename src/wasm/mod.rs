@@ -102,6 +102,28 @@ pub fn edit_xgwx_ladder_cell_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Create or edit a supported native rung/output comment.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_ladder_comment)]
+pub fn edit_xgwx_ladder_comment_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    edit: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let edit: LadderCommentEdit = serde_json::from_str(
+        &js_sys::JSON::stringify(&edit)?
+            .as_string()
+            .ok_or_else(|| JsValue::from_str("invalid comment edit"))?,
+    )
+    .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.edit_ladder_comment(program_index, &edit)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Add or remove a supported vertical branch connection.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_ladder_branch)]

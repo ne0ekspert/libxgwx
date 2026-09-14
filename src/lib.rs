@@ -65,7 +65,7 @@ pub use instruction_catalog::{LadderInstructionSpec, ladder_instruction_catalog}
 #[cfg(feature = "write")]
 pub use ladder_records::{LadderEditElement, LadderEditKind};
 #[cfg(feature = "write")]
-pub use ladder_write::{LadderBranchEdit, LadderCellEdit};
+pub use ladder_write::{LadderBranchEdit, LadderCellEdit, LadderCommentEdit, LadderCommentKind};
 pub use mnemonic::*;
 pub use model::*;
 #[cfg(feature = "write")]
@@ -76,11 +76,11 @@ pub use wasm::{cpu_catalog_wasm, parse_xgwx};
 #[cfg(all(feature = "wasm", feature = "write"))]
 pub use wasm::{
     delete_xgwx_module_wasm, edit_xgwx_ladder_branch_wasm, edit_xgwx_ladder_cell_wasm,
-    insert_xgwx_ladder_row_wasm, insert_xgwx_module_wasm, select_xgwx_cpu_wasm,
-    select_xgwx_module_wasm, set_xgwx_module_input_filter_wasm, set_xgwx_module_option_wasm,
-    update_xgwx_ladder_cell_wasm, update_xgwx_module_wasm, update_xgwx_network_module_wasm,
-    update_xgwx_network_wasm, update_xgwx_program_wasm, update_xgwx_variable_wasm,
-    xgk_module_catalog_wasm, xgwx_module_option_values_wasm,
+    edit_xgwx_ladder_comment_wasm, insert_xgwx_ladder_row_wasm, insert_xgwx_module_wasm,
+    select_xgwx_cpu_wasm, select_xgwx_module_wasm, set_xgwx_module_input_filter_wasm,
+    set_xgwx_module_option_wasm, update_xgwx_ladder_cell_wasm, update_xgwx_module_wasm,
+    update_xgwx_network_module_wasm, update_xgwx_network_wasm, update_xgwx_program_wasm,
+    update_xgwx_variable_wasm, xgk_module_catalog_wasm, xgwx_module_option_values_wasm,
 };
 
 pub(crate) use internal::*;

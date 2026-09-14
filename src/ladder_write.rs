@@ -13,6 +13,26 @@ pub struct LadderCellEdit {
     pub replacement: Option<LadderEditElement>,
 }
 
+/// Kind of native comment record shown in an LD diagram.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+pub enum LadderCommentKind {
+    Rung,
+    Output,
+}
+
+/// Create or replace a native LD comment. `expected` is `None` only when
+/// creating a comment; edits fail if the stored text changed after selection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct LadderCommentEdit {
+    pub kind: LadderCommentKind,
+    pub raw_y: u8,
+    pub expected: Option<String>,
+    pub replacement: String,
+}
+
 /// Replace a recognized instruction's combined text and all decomposed tokens.
 /// Returns None for a target outside an instruction in a supported program.
 /// Unknown layouts retain the older bounded text API.
@@ -271,6 +291,169 @@ fn element_record(x: u8, y: u8, element: &LadderEditElement) -> Record {
         wire_end: None,
         element: Some(element.clone()),
     }
+}
+
+fn comment_marker(kind: LadderCommentKind) -> u8 {
+    match kind {
+        LadderCommentKind::Rung => 0x3f,
+        LadderCommentKind::Output => 0x40,
+    }
+}
+
+fn comment_record(kind: LadderCommentKind, y: u8, text: &str) -> Record {
+    let rung = kind == LadderCommentKind::Rung;
+    let x = if rung { 1 } else { 97 };
+    let mut bytes = vec![
+        255,
+        comment_marker(kind),
+        0,
+        0,
+        0,
+        x,
+        y,
+        0,
+        0,
+        0,
+        0,
+        if rung { 32 } else { 0 },
+        0,
+        0,
+        0,
+    ];
+    append_string(&mut bytes, text);
+    let native_width = if rung { 13_u32 } else { 12_u32 };
+    bytes.extend(native_width.to_le_bytes());
+    bytes.extend(native_width.to_le_bytes());
+    Record {
+        bytes,
+        x,
+        wire_end: None,
+        element: None,
+    }
+}
+
+fn replace_comment_text(
+    record: &Record,
+    expected: &str,
+    replacement: &str,
+) -> Result<Record, XgwxError> {
+    let (actual, text_end) = string_at(&record.bytes, 15)?;
+    if actual != expected {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "comment changed since selection",
+        });
+    }
+    let trailer = record.bytes.get(text_end..).ok_or_else(unsupported)?;
+    if trailer.len() != 8 {
+        return Err(unsupported());
+    }
+    let mut bytes = record.bytes[..15].to_vec();
+    append_string(&mut bytes, replacement);
+    bytes.extend(trailer);
+    Ok(Record {
+        bytes,
+        x: record.x,
+        wire_end: None,
+        element: None,
+    })
+}
+
+/// Create or edit a native rung/output comment record.
+pub(crate) fn edit_ladder_comment(
+    bytes: &[u8],
+    edit: &LadderCommentEdit,
+) -> Result<Vec<u8>, XgwxError> {
+    let units = edit.replacement.encode_utf16().count();
+    if !edit.raw_y.is_multiple_of(4)
+        || edit.replacement.trim().is_empty()
+        || units > u8::MAX as usize
+        || edit.replacement.chars().any(|character| {
+            character == '\0'
+                || (character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+        })
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "comment must contain 1 to 255 UTF-16 units of text",
+        });
+    }
+
+    let marker = [255, comment_marker(edit.kind)];
+    if let Some(expected) = &edit.expected {
+        let mut program = EditableProgram::parse(bytes)?;
+        let row = program
+            .rows
+            .iter_mut()
+            .find(|row| row.y == edit.raw_y)
+            .ok_or(XgwxError::InvalidLadderEdit {
+                reason: "comment row does not exist",
+            })?;
+        let record = row
+            .records
+            .iter_mut()
+            .find(|record| record.bytes.starts_with(&marker))
+            .ok_or(XgwxError::InvalidLadderEdit {
+                reason: "comment changed since selection",
+            })?;
+        *record = replace_comment_text(record, expected, &edit.replacement)?;
+        return Ok(program.encode());
+    }
+
+    let mut program = if edit.kind == LadderCommentKind::Rung {
+        let parsed = EditableProgram::parse(bytes)?;
+        if parsed.rows.iter().any(|row| {
+            row.records.iter().any(|record| {
+                record.bytes.starts_with(&[0, 0])
+                    && row.y < edit.raw_y
+                    && record.bytes[18] >= edit.raw_y
+            })
+        }) {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "rung comments cannot be inserted inside a branch span",
+            });
+        }
+        EditableProgram::parse(&insert_ladder_row(bytes, edit.raw_y)?)?
+    } else {
+        EditableProgram::parse(bytes)?
+    };
+
+    let count = u16_at(&program.header, 4)?;
+    if edit.kind == LadderCommentKind::Output && count == 0 && edit.raw_y == 0 {
+        program.header[4..6].copy_from_slice(&1_u16.to_le_bytes());
+    } else if usize::from(edit.raw_y) / 4 >= u16_at(&program.header, 4)? {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "comment row does not exist",
+        });
+    }
+    let index = program.materialize_row(edit.raw_y);
+    let row = &mut program.rows[index];
+    if row
+        .records
+        .iter()
+        .any(|record| record.bytes.starts_with(&marker))
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "comment already exists at this row",
+        });
+    }
+    if edit.kind == LadderCommentKind::Rung {
+        if !row.records.is_empty() {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "rung comment row is not empty",
+            });
+        }
+        row.prefix[13] = 1;
+    } else if row.prefix[13] != 0 {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "output comments require a ladder row",
+        });
+    }
+    row.records
+        .push(comment_record(edit.kind, edit.raw_y, &edit.replacement));
+    row.records.sort_by_key(|record| record.x);
+    program.rebuild_groups();
+    let output = program.encode();
+    EditableProgram::parse(&output)?;
+    Ok(output)
 }
 
 /// Physical rows, including sparse blanks, excluding comment-only rows.
@@ -1088,6 +1271,125 @@ mod tests {
                 .unwrap(),
                 data,
             );
+        }
+    }
+
+    #[test]
+    fn comments_edit_and_create_native_records() {
+        let doc = crate::XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+        let data = doc.ladder_programs().remove(0).unwrap().data;
+        for (kind, raw_y, text) in [
+            (LadderCommentKind::Rung, 0, "렁 설명문 1"),
+            (LadderCommentKind::Output, 4, "출력 설명문 1"),
+        ] {
+            assert_eq!(
+                edit_ladder_comment(
+                    &data,
+                    &LadderCommentEdit {
+                        kind,
+                        raw_y,
+                        expected: Some(text.to_owned()),
+                        replacement: text.to_owned(),
+                    },
+                )
+                .unwrap(),
+                data,
+            );
+        }
+
+        let edited = edit_ladder_comment(
+            &data,
+            &LadderCommentEdit {
+                kind: LadderCommentKind::Output,
+                raw_y: 4,
+                expected: Some("출력 설명문 1".to_owned()),
+                replacement: "Updated output comment".to_owned(),
+            },
+        )
+        .unwrap();
+        let parsed = EditableProgram::parse(&edited).unwrap();
+        let output = parsed
+            .rows
+            .iter()
+            .find(|row| row.y == 4)
+            .unwrap()
+            .records
+            .iter()
+            .find(|record| record.bytes.starts_with(&[255, 0x40]))
+            .unwrap();
+        assert_eq!(
+            string_at(&output.bytes, 15).unwrap().0,
+            "Updated output comment"
+        );
+
+        let empty = include_bytes!("../fixtures/ladder-edit/R10.bin");
+        let rung = edit_ladder_comment(
+            empty,
+            &LadderCommentEdit {
+                kind: LadderCommentKind::Rung,
+                raw_y: 0,
+                expected: None,
+                replacement: "New rung comment".to_owned(),
+            },
+        )
+        .unwrap();
+        let parsed = EditableProgram::parse(&rung).unwrap();
+        assert_eq!(u16_at(&parsed.header, 4).unwrap(), 1);
+        assert_eq!(parsed.rows[0].prefix[13], 1);
+        assert_eq!(
+            string_at(&parsed.rows[0].records[0].bytes, 15).unwrap().0,
+            "New rung comment"
+        );
+
+        let output = edit_ladder_comment(
+            empty,
+            &LadderCommentEdit {
+                kind: LadderCommentKind::Output,
+                raw_y: 0,
+                expected: None,
+                replacement: "New output comment".to_owned(),
+            },
+        )
+        .unwrap();
+        let parsed = EditableProgram::parse(&output).unwrap();
+        assert_eq!(parsed.rows[0].prefix[13], 0);
+        assert_eq!(
+            string_at(&parsed.rows[0].records[0].bytes, 15).unwrap().0,
+            "New output comment"
+        );
+    }
+
+    #[test]
+    fn comment_edits_reject_stale_empty_and_unsafe_creations() {
+        let doc = crate::XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+        let data = doc.ladder_programs().remove(0).unwrap().data;
+        for edit in [
+            LadderCommentEdit {
+                kind: LadderCommentKind::Rung,
+                raw_y: 0,
+                expected: Some("stale".to_owned()),
+                replacement: "Updated".to_owned(),
+            },
+            LadderCommentEdit {
+                kind: LadderCommentKind::Output,
+                raw_y: 4,
+                expected: None,
+                replacement: "Duplicate".to_owned(),
+            },
+            LadderCommentEdit {
+                kind: LadderCommentKind::Output,
+                raw_y: 4,
+                expected: Some("출력 설명문 1".to_owned()),
+                replacement: "  ".to_owned(),
+            },
+            LadderCommentEdit {
+                kind: LadderCommentKind::Rung,
+                raw_y: 24,
+                expected: None,
+                replacement: "Inside branch".to_owned(),
+            },
+        ] {
+            assert!(edit_ladder_comment(&data, &edit).is_err());
         }
     }
     #[test]
