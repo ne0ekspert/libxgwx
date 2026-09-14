@@ -158,7 +158,14 @@ The writable `options` subset contains only fields whose `Details` byte mapping
 and numeric choices have been verified. Use
 `module_option_values` to read the current selections and `set_module_option`
 to update one module-wide, channel, or group value. Unknown keys, indices, and
-values fail without mutating the document:
+values fail without mutating the document.
+
+The verified high-speed-counter subset includes the dropdown settings for
+`XGF-HD2A`, `XGF-HO2A`, and `XGF-HO8A`; their numeric counter, comparison, and
+frequency fields remain read only until their range and encoding rules are
+mapped separately.
+
+For example:
 
 ```rust,no_run
 use xgwx::XgwxDocument;

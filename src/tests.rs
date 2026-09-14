@@ -937,6 +937,157 @@ fn writes_verified_module_dropdown_options_and_round_trips() {
 
 #[cfg(feature = "write")]
 #[test]
+fn exposes_verified_high_speed_counter_options() {
+    for (model, expected_keys) in [
+        (
+            "XGF-HD2A",
+            &[
+                "counterMode",
+                "pulseInputMode",
+                "compareOutput0Mode",
+                "compareOutput1Mode",
+                "outputStateSetting",
+                "auxiliaryFunctionMode",
+            ][..],
+        ),
+        (
+            "XGF-HO2A",
+            &[
+                "counterMode",
+                "pulseInputMode",
+                "compareOutput0Mode",
+                "compareOutput1Mode",
+                "outputStateSetting",
+                "auxiliaryFunctionMode",
+            ][..],
+        ),
+        (
+            "XGF-HO8A",
+            &[
+                "counterMode",
+                "pulseInputMode",
+                "compareOutputMode",
+                "outputStateSetting",
+                "inputFilter",
+                "auxiliaryFunctionMode",
+                "pulseInputLevel",
+            ][..],
+        ),
+    ] {
+        let entry = xgk_module_catalog()
+            .iter()
+            .find(|entry| entry.model == model)
+            .expect("high-speed-counter module is in the catalog");
+        assert_eq!(
+            entry
+                .options
+                .iter()
+                .map(|option| option.key)
+                .collect::<Vec<_>>(),
+            expected_keys
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn writes_high_speed_counter_options_at_xg5000_verified_offsets() {
+    fn details_bytes(doc: &XgwxDocument, slot: u32) -> Vec<u8> {
+        let details = doc
+            .modules()
+            .into_iter()
+            .find(|module| module.base == Some(1) && module.slot == Some(slot))
+            .and_then(|module| module.details)
+            .expect("fixture module has Details");
+        details
+            .as_bytes()
+            .chunks_exact(2)
+            .map(|pair| {
+                u8::from_str_radix(std::str::from_utf8(pair).expect("hex is UTF-8"), 16)
+                    .expect("Details contains hex")
+            })
+            .collect()
+    }
+
+    let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
+    let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+
+    // XGF-HO2A: two little-endian u32 channel records with a 100-byte stride.
+    doc.set_module_option(1, 8, "counterMode", 1, 1)
+        .expect("HO2A counter mode writes");
+    doc.set_module_option(1, 8, "pulseInputMode", 0, 7)
+        .expect("HO2A pulse mode writes");
+    doc.set_module_option(1, 8, "compareOutput0Mode", 1, 6)
+        .expect("HO2A compare 0 mode writes");
+    doc.set_module_option(1, 8, "compareOutput1Mode", 0, 5)
+        .expect("HO2A compare 1 mode writes");
+    doc.set_module_option(1, 8, "outputStateSetting", 0, 1)
+        .expect("HO2A output state writes");
+    doc.set_module_option(1, 8, "auxiliaryFunctionMode", 1, 6)
+        .expect("HO2A auxiliary mode writes");
+    let ho2a = details_bytes(&doc, 8);
+    assert_eq!(&ho2a[4..8], &7u32.to_le_bytes());
+    assert_eq!(&ho2a[36..40], &5u32.to_le_bytes());
+    assert_eq!(&ho2a[100..104], &1u32.to_le_bytes());
+    assert_eq!(&ho2a[132..136], &6u32.to_le_bytes());
+    assert_eq!(&ho2a[172..176], &6u32.to_le_bytes());
+    assert_eq!(&ho2a[200..204], &1u32.to_le_bytes());
+
+    // XGF-HD2A uses the same record layout, independently verified in XG5000.
+    doc.set_module_option(1, 9, "pulseInputMode", 1, 5)
+        .expect("HD2A pulse mode writes");
+    doc.set_module_option(1, 9, "auxiliaryFunctionMode", 0, 5)
+        .expect("HD2A auxiliary mode writes");
+    doc.set_module_option(1, 9, "outputStateSetting", 0, 1)
+        .expect("HD2A output state writes");
+    let hd2a = details_bytes(&doc, 9);
+    assert_eq!(&hd2a[104..108], &5u32.to_le_bytes());
+    assert_eq!(&hd2a[72..76], &5u32.to_le_bytes());
+    assert_eq!(&hd2a[200..204], &1u32.to_le_bytes());
+
+    // XGF-HO8A packs two four-bit channels per byte and eight flags per byte.
+    doc.set_module_option(1, 10, "counterMode", 7, 1)
+        .expect("HO8A counter mode writes");
+    doc.set_module_option(1, 10, "pulseInputMode", 0, 4)
+        .expect("HO8A pulse mode 0 writes");
+    doc.set_module_option(1, 10, "pulseInputMode", 7, 7)
+        .expect("HO8A pulse mode 7 writes");
+    doc.set_module_option(1, 10, "compareOutputMode", 1, 6)
+        .expect("HO8A compare mode writes");
+    doc.set_module_option(1, 10, "outputStateSetting", 4, 1)
+        .expect("HO8A output state writes");
+    doc.set_module_option(1, 10, "inputFilter", 2, 3)
+        .expect("HO8A input filter writes");
+    doc.set_module_option(1, 10, "auxiliaryFunctionMode", 5, 6)
+        .expect("HO8A auxiliary mode writes");
+    doc.set_module_option(1, 10, "pulseInputLevel", 7, 1)
+        .expect("HO8A pulse input level writes");
+    let ho8a = details_bytes(&doc, 10);
+    assert_eq!(ho8a[0], 0x80);
+    assert_eq!(ho8a[4], 0x04);
+    assert_eq!(ho8a[7], 0x70);
+    assert_eq!(ho8a[8], 0x60);
+    assert_eq!(ho8a[13], 0x03);
+    assert_eq!(ho8a[16], 0x10);
+    assert_eq!(ho8a[26], 0x60);
+    assert_eq!(ho8a[28], 0x80);
+
+    let selections = doc
+        .module_option_values(1, 10)
+        .expect("HO8A options decode");
+    assert!(selections.iter().any(|selection| {
+        selection.key == "auxiliaryFunctionMode" && selection.index == 5 && selection.value == 6
+    }));
+
+    let rewritten = doc.to_bytes().expect("workspace writes");
+    let reparsed = XgwxDocument::parse(&rewritten).expect("workspace reparses");
+    assert_eq!(details_bytes(&reparsed, 8), ho2a);
+    assert_eq!(details_bytes(&reparsed, 9), hd2a);
+    assert_eq!(details_bytes(&reparsed, 10), ho8a);
+}
+
+#[cfg(feature = "write")]
+#[test]
 fn rejects_unverified_module_option_values_without_mutating_xml() {
     let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
     let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
