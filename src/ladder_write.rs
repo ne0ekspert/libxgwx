@@ -456,6 +456,103 @@ pub(crate) fn edit_ladder_comment(
     Ok(output)
 }
 
+pub(crate) fn delete_ladder_rung_comment(
+    bytes: &[u8],
+    raw_y: u8,
+    expected: &str,
+) -> Result<Vec<u8>, XgwxError> {
+    if !raw_y.is_multiple_of(4) {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "invalid rung comment row",
+        });
+    }
+    let mut program = EditableProgram::parse(bytes)?;
+    let count = u16_at(&program.header, 4)?;
+    let row_index =
+        program
+            .rows
+            .iter()
+            .position(|row| row.y == raw_y)
+            .ok_or(XgwxError::InvalidLadderEdit {
+                reason: "comment row does not exist",
+            })?;
+    let row = &program.rows[row_index];
+    let record = row
+        .records
+        .iter()
+        .find(|record| record.bytes.starts_with(&[255, 0x3f]))
+        .ok_or(XgwxError::InvalidLadderEdit {
+            reason: "comment changed since selection",
+        })?;
+    let (actual, _) = string_at(&record.bytes, 15)?;
+    if actual != expected {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "comment changed since selection",
+        });
+    }
+    if row.prefix[13] != 1 || row.records.len() != 1 || count == 0 {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "rung comment row contains unsupported records",
+        });
+    }
+    if program.rows.iter().any(|row| {
+        row.y < raw_y
+            && row
+                .records
+                .iter()
+                .any(|record| record.bytes.starts_with(&[0, 0]) && record.bytes[18] > raw_y)
+    }) {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "rung comment belongs to a branch span",
+        });
+    }
+
+    program.rows.remove(row_index);
+    for row in &mut program.rows {
+        let old_y = row.y;
+        if old_y > raw_y {
+            row.y -= 4;
+            row.prefix[..4].copy_from_slice(&(u32::from(row.y) / 4).to_le_bytes());
+            row.prefix[22] = row.y;
+            row.prefix[30] = row.y;
+        }
+        for record in &mut row.records {
+            if record.bytes.starts_with(&[0, 0]) {
+                if record.bytes[8] > raw_y {
+                    record.bytes[8] -= 4;
+                }
+                if record.bytes[18] > raw_y {
+                    record.bytes[18] -= 4;
+                }
+            } else if record.bytes.starts_with(&[1, 0]) {
+                if record.bytes[6] > raw_y {
+                    record.bytes[6] -= 4;
+                }
+            } else if old_y > raw_y {
+                record.bytes[6] = row.y;
+                if record.wire_end.is_some() {
+                    record.bytes[16] = row.y;
+                }
+                if record.bytes.starts_with(&[0, 34]) {
+                    let (_, end) = string_at(&record.bytes, 19)?;
+                    let operand_count = u16_at(&record.bytes, end)?;
+                    let mut next = end + 2;
+                    for _ in 0..operand_count {
+                        record.bytes[next + 1] = row.y;
+                        let (_, end) = string_at(&record.bytes, next + 10)?;
+                        next = end;
+                    }
+                }
+            }
+        }
+    }
+    program.header[4..6].copy_from_slice(&((count - 1) as u16).to_le_bytes());
+    program.rebuild_groups();
+    let output = program.encode();
+    EditableProgram::parse(&output)?;
+    Ok(output)
+}
+
 /// Physical rows, including sparse blanks, excluding comment-only rows.
 #[cfg(feature = "wasm")]
 pub(crate) fn editable_ladder_rows(bytes: &[u8]) -> Result<Vec<u8>, XgwxError> {
@@ -1296,6 +1393,20 @@ mod tests {
                 data,
             );
         }
+        let without_rung = delete_ladder_rung_comment(&data, 0, "렁 설명문 1").unwrap();
+        let restored = edit_ladder_comment(
+            &without_rung,
+            &LadderCommentEdit {
+                kind: LadderCommentKind::Rung,
+                raw_y: 0,
+                expected: None,
+                replacement: "렁 설명문 1".to_owned(),
+            },
+        )
+        .unwrap();
+        assert_eq!(restored, data);
+        assert!(delete_ladder_rung_comment(&data, 0, "stale").is_err());
+        assert!(delete_ladder_rung_comment(&data, 1, "렁 설명문 1").is_err());
 
         let edited = edit_ladder_comment(
             &data,
@@ -1340,6 +1451,8 @@ mod tests {
             string_at(&parsed.rows[0].records[0].bytes, 15).unwrap().0,
             "New rung comment"
         );
+        let deleted = delete_ladder_rung_comment(&rung, 0, "New rung comment").unwrap();
+        assert_eq!(deleted, empty);
 
         let output = edit_ladder_comment(
             empty,

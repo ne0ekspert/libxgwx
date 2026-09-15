@@ -1181,6 +1181,18 @@ impl XgwxDocument {
         })
     }
 
+    /// Delete a native rung-comment row and close the resulting coordinate gap.
+    pub fn delete_ladder_rung_comment(
+        &mut self,
+        program_index: usize,
+        raw_y: u8,
+        expected: &str,
+    ) -> Result<(), XgwxError> {
+        self.edit_ladder_payload(program_index, |payload| {
+            crate::ladder_write::delete_ladder_rung_comment(payload, raw_y, expected)
+        })
+    }
+
     /// Add or remove a supported vertical connection between adjacent rows.
     pub fn edit_ladder_branch(
         &mut self,

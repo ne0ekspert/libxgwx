@@ -124,6 +124,23 @@ pub fn edit_xgwx_ladder_comment_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Delete a supported native rung comment.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_ladder_rung_comment)]
+pub fn delete_xgwx_ladder_rung_comment_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    raw_y: u8,
+    expected: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.delete_ladder_rung_comment(program_index, raw_y, expected)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Add or remove a supported vertical branch connection.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_ladder_branch)]

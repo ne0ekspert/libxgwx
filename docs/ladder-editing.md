@@ -61,6 +61,9 @@ column 1–9 to add or remove its connection to the row below. Native rung and
 output comments can be created with `edit_ladder_comment`; edits use an expected
 text value so stale UI actions fail without changing the document. Rung comment
 creation inserts a dedicated comment row and is rejected inside a branch span.
+Dedicated rung-comment rows can be removed with
+`delete_ladder_rung_comment`; later ladder rows and their embedded coordinates
+shift upward, while stale text and branch-crossing deletions fail closed.
 
 ## Native acceptance — 2026-09-09
 
