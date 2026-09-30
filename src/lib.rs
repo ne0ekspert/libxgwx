@@ -39,6 +39,10 @@ mod catalog;
 mod cpu;
 mod document;
 mod error;
+mod iec_graph;
+mod iec_ld;
+mod iec_records;
+mod iec_symbols;
 #[cfg(feature = "il")]
 mod il;
 mod instruction_catalog;
@@ -59,6 +63,21 @@ pub use catalog::*;
 pub use cpu::*;
 pub use document::XgwxDocument;
 pub use error::XgwxError;
+pub use iec_graph::{
+    IecCircuitArea, IecCircuitAreaKind, IecCircuitEdge, IecCircuitEdgeKind, IecCircuitGraph,
+    IecCircuitPoint, IecFunctionBinding, IecPowerComponent,
+};
+pub use iec_ld::{IecGeometry, IecHorizontalSegment, IecRowFrame, IecVerticalConnection};
+pub use iec_records::{
+    IecConnectedArithmeticDeletionSite, IecFunctionBlock, IecFunctionCellDeletionSite,
+    IecFunctionCellInsertionSite, IecFunctionOperandLink, IecFunctionPin, IecFunctionPinDirection,
+    IecFunctionReference, IecHorizontalWireDeletionSite, IecHorizontalWireRepairSite,
+    IecLeadingContactInsertionSite, IecNoContactDeletionSite, IecNoContactInsertionSite,
+    IecRecordFrame, IecRecordKind, IecShortWireContactInsertionSite,
+    IecStandaloneFunctionDeletionSite, IecStandaloneFunctionInsertionSite,
+    IecTerminalFunctionDeletionSite, IecTerminalFunctionInsertionSite,
+};
+pub use iec_symbols::IecLocalSymbol;
 #[cfg(feature = "il")]
 pub use il::*;
 pub use instruction_catalog::{LadderInstructionSpec, ladder_instruction_catalog};
@@ -75,12 +94,21 @@ pub use writer::*;
 pub use wasm::{cpu_catalog_wasm, parse_xgwx};
 #[cfg(all(feature = "wasm", feature = "write"))]
 pub use wasm::{
-    delete_xgwx_module_wasm, edit_xgwx_ladder_branch_wasm, edit_xgwx_ladder_cell_wasm,
-    edit_xgwx_ladder_comment_wasm, insert_xgwx_ladder_row_wasm, insert_xgwx_module_wasm,
-    select_xgwx_cpu_wasm, select_xgwx_module_wasm, set_xgwx_module_input_filter_wasm,
-    set_xgwx_module_option_wasm, update_xgwx_ladder_cell_wasm, update_xgwx_module_wasm,
-    update_xgwx_network_module_wasm, update_xgwx_network_wasm, update_xgwx_program_wasm,
-    update_xgwx_variable_wasm, xgk_module_catalog_wasm, xgwx_module_option_values_wasm,
+    delete_xgwx_iec_ld_function_cell_wasm, delete_xgwx_iec_ld_no_contact_cell_wasm,
+    delete_xgwx_iec_ld_no_contact_wasm, delete_xgwx_iec_ld_standalone_function_wasm,
+    delete_xgwx_iec_ld_terminal_function_wasm, delete_xgwx_module_wasm,
+    edit_xgwx_ladder_branch_wasm, edit_xgwx_ladder_cell_wasm, edit_xgwx_ladder_comment_wasm,
+    insert_xgwx_iec_ld_contact_wasm, insert_xgwx_iec_ld_function_cell_wasm,
+    insert_xgwx_iec_ld_no_contact_wasm, insert_xgwx_ladder_row_wasm, insert_xgwx_module_wasm,
+    repair_xgwx_iec_ld_horizontal_wire_wasm, select_xgwx_cpu_wasm, select_xgwx_module_wasm,
+    set_xgwx_module_input_filter_wasm, set_xgwx_module_option_wasm,
+    update_xgwx_iec_ld_arithmetic_function_wasm, update_xgwx_iec_ld_comment_wasm,
+    update_xgwx_iec_ld_comparison_function_wasm, update_xgwx_iec_ld_contact_kind_wasm,
+    update_xgwx_iec_ld_element_operand_wasm, update_xgwx_iec_ld_function_operand_wasm,
+    update_xgwx_iec_ld_rising_contact_operand_wasm, update_xgwx_ladder_cell_wasm,
+    update_xgwx_module_wasm, update_xgwx_network_module_wasm, update_xgwx_network_wasm,
+    update_xgwx_program_wasm, update_xgwx_variable_wasm, xgk_module_catalog_wasm,
+    xgwx_module_option_values_wasm,
 };
 
 pub(crate) use internal::*;

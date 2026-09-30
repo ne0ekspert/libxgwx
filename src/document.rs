@@ -131,6 +131,24 @@ impl XgwxDocument {
         VariableSummary::from_symbols_element(symbols)
     }
 
+    /// Decode each program's IEC `PB50` local symbol table in program order.
+    /// A missing table is represented by an empty list for that program.
+    pub fn iec_local_symbols(&self) -> Vec<Result<Vec<IecLocalSymbol>, XgwxError>> {
+        self.root
+            .descendants_named("Program")
+            .map(|program| {
+                match program
+                    .descendants_named("LocalVar")
+                    .next()
+                    .and_then(|local| local.descendants_named("Symbols").next())
+                {
+                    Some(symbols) => IecLocalSymbol::from_symbols_element(symbols),
+                    None => Ok(Vec::new()),
+                }
+            })
+            .collect()
+    }
+
     /// Decode ladder `<ProgramData>` payloads for all `<Program>` elements.
     ///
     /// XG5000 stores ladder bodies as base64, usually bzip2-compressed, binary

@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 use std::io;
 
-use xgwx::{CnetPortConfigSummary, Ipv4Summary, XgwxDocument};
+use xgwx::{CnetPortConfigSummary, Ipv4Summary, XgwxDocument, cpu_catalog};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = env::args().nth(1).ok_or_else(|| {
@@ -24,9 +24,32 @@ fn main() -> Result<(), Box<dyn Error>> {
         project.file_version.as_deref().unwrap_or("<unknown>")
     );
     println!("configurations: {}", doc.configurations().len());
+    for configuration in doc.configurations() {
+        let model = configuration
+            .type_code
+            .and_then(|code| cpu_catalog().iter().find(|cpu| cpu.type_code == code))
+            .map(|cpu| cpu.model)
+            .unwrap_or("<unknown>");
+        println!(
+            "  CPU: {model} (type {})",
+            option_u32(configuration.type_code)
+        );
+    }
     println!("networks: {}", doc.networks().len());
     println!("modules: {}", doc.modules().len());
     println!("programs: {}", doc.programs().len());
+    for (program, decoded) in doc.programs().into_iter().zip(doc.ladder_programs()) {
+        let name = program.name.as_deref().unwrap_or("<unnamed>");
+        match decoded {
+            Ok(body) => println!(
+                "  {name}: {} ({} rungs, {} unknown records)",
+                body.version.as_deref().unwrap_or("<unknown format>"),
+                body.structure.rungs.len(),
+                body.structure.unknown_records.len()
+            ),
+            Err(error) => println!("  {name}: payload decode failed: {error}"),
+        }
+    }
     println!("variables: {}", doc.variables().map(|items| items.len())?);
     println!("payloads: {}", doc.decoded_payloads().len());
 

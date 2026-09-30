@@ -113,6 +113,40 @@ impl WasmVariableSummary {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(super) struct WasmIecLocalSymbolSummary {
+    pub(super) record_offset: usize,
+    pub(super) name: String,
+    pub(super) address: Option<String>,
+    pub(super) type_reference: Option<String>,
+    pub(super) data_type_code: u32,
+    pub(super) data_type: Option<String>,
+    pub(super) storage_class: String,
+    pub(super) allocation_number: Option<u32>,
+    pub(super) allocation_width: Option<u32>,
+    pub(super) description: Option<String>,
+    pub(super) is_instance: bool,
+}
+
+impl WasmIecLocalSymbolSummary {
+    pub(super) fn from_symbol(symbol: IecLocalSymbol) -> Self {
+        Self {
+            record_offset: symbol.record_offset,
+            name: symbol.name,
+            address: symbol.address,
+            type_reference: symbol.type_reference,
+            data_type_code: symbol.data_type_code,
+            data_type: symbol.data_type,
+            storage_class: symbol.storage_class,
+            allocation_number: symbol.allocation_number,
+            allocation_width: symbol.allocation_width,
+            description: symbol.description,
+            is_instance: symbol.is_instance,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct WasmHardwareSummary {
     pub(super) cpu_profile: Option<&'static CpuHardwareProfile>,
     pub(super) bases: Vec<WasmBaseSummary>,

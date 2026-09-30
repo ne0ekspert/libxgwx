@@ -219,6 +219,58 @@ const CPU_CATALOG: &[CpuCatalogEntry] = &[
         max_base: 1,
         max_slot: 11,
     },
+    // The ordered CPU-name table on the installed XG5000 4.82.1 disk, anchored
+    // to known XGK/XGB types, yields these XGI Configuration Type mappings.
+    // Physical rack limits come from LS ELECTRIC's CPU documentation.
+    CpuCatalogEntry {
+        model: "XGI-CPUU",
+        family: "XGI",
+        type_code: 100,
+        max_base: 8,
+        max_slot: 12,
+    },
+    CpuCatalogEntry {
+        model: "XGI-CPUH",
+        family: "XGI",
+        type_code: 102,
+        max_base: 8,
+        max_slot: 12,
+    },
+    CpuCatalogEntry {
+        model: "XGI-CPUS",
+        family: "XGI",
+        type_code: 104,
+        max_base: 4,
+        max_slot: 12,
+    },
+    CpuCatalogEntry {
+        model: "XGI-CPUE",
+        family: "XGI",
+        type_code: 106,
+        max_base: 2,
+        max_slot: 12,
+    },
+    CpuCatalogEntry {
+        model: "XGI-CPUU/D",
+        family: "XGI",
+        type_code: 107,
+        max_base: 8,
+        max_slot: 12,
+    },
+    CpuCatalogEntry {
+        model: "XGI-CPUS/P",
+        family: "XGI",
+        type_code: 110,
+        max_base: 1,
+        max_slot: 12,
+    },
+    CpuCatalogEntry {
+        model: "XGI-CPUUN",
+        family: "XGI",
+        type_code: 111,
+        max_base: 8,
+        max_slot: 12,
+    },
 ];
 
 /// Return CPU models supported by the Workspace Overview selector.

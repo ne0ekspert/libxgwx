@@ -279,6 +279,20 @@ fn cpu_catalog_maps_fixture_configuration_types() {
     assert_eq!(cpu_for_type(17).map(|entry| entry.model), Some("XGK-CPUSN"));
     assert_eq!(cpu_for_type(2).map(|entry| entry.model), Some("XGB-XBMS"));
     assert!(cpu_catalog().iter().any(|entry| entry.model == "XGB-XBMH2"));
+    for (type_code, model, max_base) in [
+        (100, "XGI-CPUU", 8),
+        (102, "XGI-CPUH", 8),
+        (104, "XGI-CPUS", 4),
+        (106, "XGI-CPUE", 2),
+        (107, "XGI-CPUU/D", 8),
+        (110, "XGI-CPUS/P", 1),
+        (111, "XGI-CPUUN", 8),
+    ] {
+        let entry = cpu_for_type(type_code).expect("XGI type is cataloged");
+        assert_eq!(entry.model, model);
+        assert_eq!(entry.family, "XGI");
+        assert_eq!(entry.max_base, max_base);
+    }
 }
 
 #[cfg(feature = "write")]
@@ -314,6 +328,23 @@ fn cpu_writer_rejects_unknown_models_without_mutating_xml() {
         .expect_err("unknown CPU must fail");
     assert!(matches!(error, XgwxError::UnknownCpuModel { .. }));
     assert_eq!(doc.xml, original_xml);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn xgi_cpu_selection_recognizes_current_model_but_rejects_migration() {
+    let mut doc = XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
+    let xml = doc.xml.replace("Type=\"17\"", "Type=\"106\"");
+    doc.root = parse_xml(&xml).unwrap();
+    doc.xml = xml.clone();
+
+    doc.select_cpu("xgi-cpue").expect("same XGI CPU is a no-op");
+    assert_eq!(doc.xml, xml);
+    assert!(matches!(
+        doc.select_cpu("XGI-CPUS"),
+        Err(XgwxError::UnsupportedCpuChange { .. })
+    ));
+    assert_eq!(doc.xml, xml);
 }
 
 #[cfg(feature = "write")]
@@ -2440,6 +2471,4226 @@ fn parses_real_fixture_from_env() {
 }
 
 #[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_function_bodies_decode_typed_pin_geometry() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let doc = XgwxDocument::from_path(path).expect("fixture parses");
+    let programs = doc
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .expect("all programs parse");
+    let blocks = programs
+        .iter()
+        .flat_map(|program| program.iec_function_blocks().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(blocks.len(), 81);
+    assert_eq!(
+        blocks.iter().map(|block| block.pins.len()).sum::<usize>(),
+        192
+    );
+    assert_eq!(
+        blocks
+            .iter()
+            .flat_map(|block| &block.pins)
+            .filter(|pin| pin.is_array)
+            .count(),
+        46
+    );
+    assert!(blocks.iter().all(|block| {
+        block.control_input.direction == IecFunctionPinDirection::Input
+            && block.control_output.direction == IecFunctionPinDirection::Output
+            && block.control_input.data_type == Some("BOOL")
+            && block.control_output.data_type == Some("BOOL")
+            && block.pins.iter().all(|pin| pin.data_type.is_some())
+    }));
+
+    let add = blocks
+        .iter()
+        .find(|block| block.name.value == "ADD")
+        .unwrap();
+    assert_eq!(
+        add.pins
+            .iter()
+            .map(|pin| (
+                pin.name.value.as_str(),
+                pin.direction,
+                pin.reference_ordinal,
+                pin.row_index,
+                pin.raw_x,
+                pin.data_type,
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                "IN1",
+                IecFunctionPinDirection::Input,
+                Some(1),
+                add.row_index + 1,
+                add.raw_x,
+                Some("ANY_NUM"),
+            ),
+            (
+                "OUT",
+                IecFunctionPinDirection::Output,
+                Some(3),
+                add.row_index + 1,
+                add.raw_x + 3,
+                Some("ANY_NUM"),
+            ),
+            (
+                "IN2",
+                IecFunctionPinDirection::Input,
+                Some(2),
+                add.row_index + 2,
+                add.raw_x,
+                Some("ANY_NUM"),
+            ),
+        ]
+    );
+    let trigger = blocks
+        .iter()
+        .find(|block| block.name.value == "R_TRIG")
+        .unwrap();
+    assert!(trigger.pins.is_empty());
+    assert_eq!(trigger.control_input.name.value, "CLK");
+    assert_eq!(trigger.control_output.name.value, "Q");
+    assert_eq!(trigger.control_output.reference_ordinal, Some(1));
+    let timer = blocks
+        .iter()
+        .find(|block| block.name.value == "TON")
+        .unwrap();
+    assert_eq!(
+        timer
+            .pins
+            .iter()
+            .map(|pin| (
+                pin.name.value.as_str(),
+                pin.reference_ordinal,
+                pin.data_type,
+            ))
+            .collect::<Vec<_>>(),
+        vec![("PT", Some(1), Some("TIME")), ("ET", Some(2), Some("TIME"))]
+    );
+    let mover = blocks
+        .iter()
+        .find(|block| block.name.value == "MOVE")
+        .unwrap();
+    assert!(mover.pins.iter().all(|pin| {
+        pin.is_array
+            && pin.data_type == Some("ANY")
+            && pin
+                .type_expression
+                .as_ref()
+                .map(|field| field.value.as_str())
+                == Some("ARRAY[0..-1] OF ANY")
+    }));
+
+    let references = programs
+        .iter()
+        .flat_map(|program| program.iec_function_references().unwrap())
+        .collect::<Vec<_>>();
+    let operands = programs
+        .iter()
+        .flat_map(|program| program.iec_function_operand_links().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(references.len(), 196);
+    assert_eq!(operands.len(), 176);
+    for program in &programs {
+        let program_blocks = program.iec_function_blocks().unwrap();
+        for reference in program.iec_function_references().unwrap() {
+            let block = program_blocks
+                .iter()
+                .find(|block| block.record_offset == reference.target_record_offset)
+                .unwrap();
+            let pin = block
+                .pins
+                .iter()
+                .chain([&block.control_input, &block.control_output])
+                .find(|pin| pin.reference_ordinal == Some(reference.ordinal))
+                .unwrap();
+            assert_eq!(reference.pin_row_index, pin.row_index);
+            assert_eq!(reference.pin_raw_x, pin.raw_x);
+            assert_eq!(reference.data_type_mask, pin.data_type_mask);
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_TERMINAL_MOVE_DELETED_FIXTURE and LIBXGWX_NATIVE_TERMINAL_MOVE_INSERT_FIXTURE"]
+fn xgi_terminal_move_insertion_matches_native() {
+    let deleted = env::var("LIBXGWX_TERMINAL_MOVE_DELETED_FIXTURE")
+        .expect("deleted terminal MOVE fixture path");
+    let native = env::var("LIBXGWX_NATIVE_TERMINAL_MOVE_INSERT_FIXTURE")
+        .expect("native terminal MOVE insertion fixture path");
+    let mut document = XgwxDocument::from_path(deleted).expect("deleted fixture parses");
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .insert_iec_ld_terminal_move(3, 137, "1", "%MX300")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    let mut alternate = document.clone();
+    alternate
+        .insert_iec_ld_terminal_move(3, 137, "2", "%MW301")
+        .expect("alternate MOVE operands are valid");
+    assert!(
+        alternate.ladder_programs()[3]
+            .as_ref()
+            .unwrap()
+            .iec_circuit_graph()
+            .is_some()
+    );
+    document
+        .insert_iec_ld_terminal_move(3, 137, "1", "%MW300")
+        .expect("restore terminal MOVE");
+    let native = XgwxDocument::from_path(native).expect("native insertion parses");
+    for (index, (changed, native)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .enumerate()
+    {
+        let changed = changed.unwrap();
+        let native = native.unwrap();
+        let mut changed_data = changed.data.clone();
+        let mut native_data = native.data.clone();
+        if index == 3 {
+            for row in changed.iec_row_frames().unwrap() {
+                changed_data[row.start + 17] = 0;
+            }
+            for row in native.iec_row_frames().unwrap() {
+                native_data[row.start + 17] = 0;
+            }
+        }
+        assert_eq!(changed_data, native_data, "program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_TERMINAL_MOVE_L4_FIXTURE"]
+fn xgi_elevator_move_insertion_covers_all_five_groups() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let native_l4 = env::var("LIBXGWX_NATIVE_TERMINAL_MOVE_L4_FIXTURE")
+        .expect("native L4 MOVE insertion fixture path");
+    let source = XgwxDocument::from_path(source).expect("source fixture parses");
+    let native_l4 = XgwxDocument::from_path(native_l4).expect("native L4 fixture parses");
+    let source_programs = source.ladder_programs();
+    let source_program = source_programs[3].as_ref().unwrap();
+    for group_index in 1..=5 {
+        let site = source_program
+            .iec_terminal_function_deletion_sites()
+            .unwrap()
+            .into_iter()
+            .find(|site| site.group_index == group_index)
+            .expect("original elevator MOVE deletion site");
+        let mut generated = source.clone();
+        generated
+            .delete_iec_ld_terminal_function(3, site.block_offset, "MOVE")
+            .expect("delete elevator MOVE");
+        let retained = generated.ladder_programs()[3]
+            .as_ref()
+            .unwrap()
+            .iec_terminal_function_insertion_sites()
+            .unwrap();
+        assert_eq!(retained.len(), 1);
+        assert_eq!(retained[0].group_index, group_index);
+        generated
+            .insert_iec_ld_terminal_move(
+                3,
+                retained[0].contact_offset,
+                &group_index.to_string(),
+                "%MW300",
+            )
+            .expect("restore elevator MOVE");
+        let changed_programs = generated.ladder_programs();
+        let changed = changed_programs[3].as_ref().unwrap();
+        assert!(changed.iec_circuit_graph().is_some());
+        let mut changed_data = changed.data.clone();
+        let mut source_data = source_program.data.clone();
+        for row in changed.iec_row_frames().unwrap() {
+            changed_data[row.start + 17] = 0;
+        }
+        for row in source_program.iec_row_frames().unwrap() {
+            source_data[row.start + 17] = 0;
+        }
+        assert_eq!(changed_data, source_data, "group {group_index}");
+        if group_index == 2 {
+            let native_programs = native_l4.ladder_programs();
+            let native_program = native_programs[3].as_ref().unwrap();
+            let mut native_data = native_program.data.clone();
+            for row in native_program.iec_row_frames().unwrap() {
+                native_data[row.start + 17] = 0;
+            }
+            assert_eq!(changed_data, native_data, "native L4 insertion");
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_TERMINAL_MOVE_P0_ALT_FIXTURE"]
+fn xgi_lighting_terminal_move_insertion_restores_native_group() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let native_alt = env::var("LIBXGWX_NATIVE_TERMINAL_MOVE_P0_ALT_FIXTURE")
+        .expect("native resaved program-0 MOVE alternate fixture path");
+    let source = XgwxDocument::from_path(source).expect("source fixture parses");
+    let native_alt = XgwxDocument::from_path(native_alt).expect("native alternate fixture parses");
+    let mut restored = source.clone();
+    restored
+        .delete_iec_ld_terminal_function(0, 10289, "MOVE")
+        .expect("delete lighting MOVE");
+    let deleted_bytes = restored.to_bytes().unwrap();
+    let sites = restored.ladder_programs()[0]
+        .as_ref()
+        .unwrap()
+        .iec_terminal_function_insertion_sites()
+        .unwrap();
+    assert_eq!(sites.len(), 1);
+    assert_eq!(sites[0].group_index, 32);
+    assert_eq!(sites[0].row_index, 63);
+    assert_eq!(sites[0].contact_offset, 10247);
+    assert_eq!(sites[0].raw_x, 16);
+    let mut alternate = restored.clone();
+    alternate
+        .insert_iec_ld_terminal_move(0, 10247, "1", "자기유지1")
+        .expect("compatible BOOL output is writable");
+    assert!(
+        alternate.ladder_programs()[0]
+            .as_ref()
+            .unwrap()
+            .iec_circuit_graph()
+            .is_some()
+    );
+    for (index, (actual, native)) in alternate
+        .ladder_programs()
+        .into_iter()
+        .zip(native_alt.ladder_programs())
+        .enumerate()
+    {
+        assert_eq!(
+            actual.unwrap().data,
+            native.unwrap().data,
+            "native program {index}"
+        );
+    }
+    assert!(
+        restored
+            .insert_iec_ld_terminal_move(0, 10247, "0", "UNKNOWN_OUTPUT")
+            .is_err()
+    );
+    assert_eq!(restored.to_bytes().unwrap(), deleted_bytes);
+    restored
+        .insert_iec_ld_terminal_move(0, 10247, "0", "자기유지2")
+        .expect("restore original lighting MOVE");
+    for (index, (actual, expected)) in restored
+        .ladder_programs()
+        .into_iter()
+        .zip(source.ladder_programs())
+        .enumerate()
+    {
+        assert_eq!(
+            actual.unwrap().data,
+            expected.unwrap().data,
+            "program {index}"
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_FUNCTION_DELETE_FIXTURE"]
+fn xgi_terminal_function_deletion_matches_native() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let native = env::var("LIBXGWX_NATIVE_FUNCTION_DELETE_FIXTURE")
+        .expect("native XG5000 function deletion capture");
+    let mut document = XgwxDocument::from_path(&source).expect("fixture parses");
+    assert_eq!(
+        document
+            .ladder_programs()
+            .iter()
+            .map(|program| {
+                program
+                    .as_ref()
+                    .unwrap()
+                    .iec_terminal_function_deletion_sites()
+                    .unwrap()
+                    .len()
+            })
+            .collect::<Vec<_>>(),
+        vec![1, 0, 0, 5, 0, 0, 0]
+    );
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .delete_iec_ld_terminal_function(3, 185, "ADD")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document
+        .delete_iec_ld_terminal_function(3, 185, "MOVE")
+        .expect("delete first elevator MOVE block");
+
+    let changed = document
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(changed[3].iec_row_frames().unwrap().len(), 75);
+    assert_eq!(changed[3].iec_record_frames().unwrap().len(), 314);
+    assert_eq!(changed[3].iec_function_blocks().unwrap().len(), 9);
+    assert!(changed[3].iec_circuit_graph().is_some());
+
+    let native = XgwxDocument::from_path(native).expect("native fixture parses");
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    for (index, (changed, native)) in changed.iter().zip(&native_programs).enumerate() {
+        let mut changed_data = changed.data.clone();
+        let mut native_data = native.data.clone();
+        if index == 3 {
+            let changed_rows = changed.iec_row_frames().unwrap();
+            let native_rows = native.iec_row_frames().unwrap();
+            let deleted_group_row = changed_rows
+                .iter()
+                .find(|row| row.group_index == 1 && row.row_index == 1)
+                .unwrap();
+            let native_deleted_group_row = native_rows
+                .iter()
+                .find(|row| row.group_index == 1 && row.row_index == 1)
+                .unwrap();
+            assert_eq!(changed_data[deleted_group_row.start + 17], 0x27);
+            assert_eq!(native_data[native_deleted_group_row.start + 17], 0x27);
+
+            // XG5000 refreshes this undocumented row cache only for function
+            // rows visible in the editor viewport. Ignore it for all retained
+            // rows while comparing the structural deletion byte-for-byte.
+            for row in changed_rows {
+                changed_data[row.start + 17] = 0;
+            }
+            for row in native_rows {
+                native_data[row.start + 17] = 0;
+            }
+        }
+        assert_eq!(changed_data, native_data, "program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_STANDALONE_FUNCTION_DELETE_FIXTURE"]
+fn xgi_standalone_function_deletion_matches_native() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let native = env::var("LIBXGWX_NATIVE_STANDALONE_FUNCTION_DELETE_FIXTURE")
+        .expect("native XG5000 standalone function deletion capture");
+    let mut document = XgwxDocument::from_path(&source).expect("fixture parses");
+    assert_eq!(
+        document
+            .ladder_programs()
+            .iter()
+            .map(|program| {
+                program
+                    .as_ref()
+                    .unwrap()
+                    .iec_standalone_function_deletion_sites()
+                    .unwrap()
+                    .len()
+            })
+            .collect::<Vec<_>>(),
+        vec![0, 0, 1, 0, 0, 0, 0]
+    );
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .delete_iec_ld_standalone_function(2, 206, "MOVE")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document
+        .delete_iec_ld_standalone_function(2, 206, "WORD_TO_UDINT")
+        .expect("delete standalone WORD_TO_UDINT group");
+
+    let changed = document
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(changed[2].iec_row_frames().unwrap().len(), 37);
+    assert_eq!(changed[2].iec_record_frames().unwrap().len(), 151);
+    assert_eq!(changed[2].iec_function_blocks().unwrap().len(), 8);
+    assert!(changed[2].iec_circuit_graph().is_some());
+
+    let native = XgwxDocument::from_path(native).expect("native fixture parses");
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    for (index, (changed, native)) in changed.iter().zip(&native_programs).enumerate() {
+        let mut changed_data = changed.data.clone();
+        let mut native_data = native.data.clone();
+        if index == 2 {
+            // XG5000 refreshed two visible retained-row caches while deleting
+            // the group. The structural payload otherwise matches exactly.
+            for row in changed.iec_row_frames().unwrap() {
+                changed_data[row.start + 17] = 0;
+            }
+            for row in native.iec_row_frames().unwrap() {
+                native_data[row.start + 17] = 0;
+            }
+        }
+        assert_eq!(changed_data, native_data, "program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_L26_STANDALONE_INSERT_FIXTURE"]
+fn xgi_l26_standalone_function_insertion_matches_native() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let native = env::var("LIBXGWX_NATIVE_L26_STANDALONE_INSERT_FIXTURE")
+        .expect("native L26 insertion fixture path");
+    let mut document = XgwxDocument::from_path(source).expect("source parses");
+    let source_programs = document.ladder_programs();
+    assert_eq!(
+        source_programs[4]
+            .as_ref()
+            .unwrap()
+            .iec_standalone_function_insertion_sites()
+            .unwrap(),
+        vec![crate::IecStandaloneFunctionInsertionSite {
+            group_index: 15,
+            row_index: 26,
+            insertion_offset: 4054,
+            raw_x: 4,
+        }]
+    );
+    document
+        .insert_iec_ld_standalone_function(4, 4054, "WORD_TO_UDINT", "%MW301", "div_값")
+        .expect("insert native L26 block");
+    let native = XgwxDocument::from_path(native).expect("native insertion parses");
+    for (index, (changed, native)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .enumerate()
+    {
+        let changed = changed.unwrap();
+        let native = native.unwrap();
+        let mut changed_data = changed.data.clone();
+        let mut native_data = native.data.clone();
+        if index == 4 {
+            // XG5000 refreshes preexisting row display caches on Save As.
+            for row in changed.iec_row_frames().unwrap() {
+                changed_data[row.start + 17] = 0;
+            }
+            for row in native.iec_row_frames().unwrap() {
+                native_data[row.start + 17] = 0;
+            }
+        }
+        assert_eq!(changed_data, native_data, "program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_STANDALONE_FUNCTION_DELETE_FIXTURE and LIBXGWX_NATIVE_STANDALONE_FUNCTION_INSERT_FIXTURE"]
+fn xgi_standalone_function_insertion_matches_native() {
+    let deleted = env::var("LIBXGWX_NATIVE_STANDALONE_FUNCTION_DELETE_FIXTURE")
+        .expect("native deleted fixture path");
+    let native = env::var("LIBXGWX_NATIVE_STANDALONE_FUNCTION_INSERT_FIXTURE")
+        .expect("native inserted fixture path");
+    let mut document = XgwxDocument::from_path(&deleted).expect("deleted fixture parses");
+    let programs = document.ladder_programs();
+    let program = programs[2].as_ref().unwrap();
+    let sites = program.iec_standalone_function_insertion_sites().unwrap();
+    assert_eq!(sites.len(), 1);
+    assert_eq!(sites[0].group_index, 1);
+    assert_eq!(sites[0].row_index, 1);
+    assert_eq!(sites[0].insertion_offset, 142);
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .insert_iec_ld_standalone_function(2, 142, "MOVE", "%MW301", "변환")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    assert!(
+        document
+            .insert_iec_ld_standalone_function(2, 142, "WORD_TO_UDINT", "%MX302", "변환")
+            .is_err()
+    );
+    assert!(
+        document
+            .insert_iec_ld_standalone_function(2, 142, "WORD_TO_UDINT", "%MW302", "missing")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    let mut alternate = XgwxDocument::from_path(&deleted).unwrap();
+    alternate
+        .insert_iec_ld_standalone_function(2, 142, "WORD_TO_UDINT", "%MW302", "변환")
+        .expect("alternate WORD input is accepted");
+    let alternate_program = alternate.ladder_programs()[2].as_ref().unwrap().clone();
+    assert!(
+        crate::iec_ld::function_operands(&alternate_program)
+            .iter()
+            .any(|item| item.value == "%MW302")
+    );
+    document
+        .insert_iec_ld_standalone_function(2, 142, "WORD_TO_UDINT", "%MW301", "변환")
+        .expect("insert native standalone WORD_TO_UDINT group");
+    let native = XgwxDocument::from_path(native).expect("native inserted fixture parses");
+    let changed = document.ladder_programs();
+    let native_programs = native.ladder_programs();
+    for (index, (changed, native)) in changed.into_iter().zip(native_programs).enumerate() {
+        let changed = changed.unwrap();
+        let native = native.unwrap();
+        let mut changed_data = changed.data.clone();
+        let mut native_data = native.data.clone();
+        if index == 2 {
+            let changed_rows = changed.iec_row_frames().unwrap();
+            let native_rows = native.iec_row_frames().unwrap();
+            for row in changed_rows {
+                changed_data[row.start + 17] = 0;
+            }
+            for row in native_rows {
+                native_data[row.start + 17] = 0;
+            }
+        }
+        assert_eq!(changed_data, native_data, "program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_STANDALONE_FUNCTION_DELETE_FIXTURE and LIBXGWX_NATIVE_STANDALONE_FUNCTION_ALT_OUTPUT_FIXTURE"]
+fn xgi_standalone_function_insertion_with_new_output_survives_native_save() {
+    let deleted = env::var("LIBXGWX_NATIVE_STANDALONE_FUNCTION_DELETE_FIXTURE")
+        .expect("native deleted fixture path");
+    let native = env::var("LIBXGWX_NATIVE_STANDALONE_FUNCTION_ALT_OUTPUT_FIXTURE")
+        .expect("native resave with new output symbol");
+    let mut generated = XgwxDocument::from_path(deleted).expect("deleted fixture parses");
+    generated
+        .insert_iec_local_symbol(2, "변환_2", "UDINT", "")
+        .expect("insert output symbol");
+    generated
+        .insert_iec_ld_standalone_function(2, 142, "WORD_TO_UDINT", "%MW302", "변환_2")
+        .expect("insert function with alternate bindings");
+    let native = XgwxDocument::from_path(native).expect("native resave parses");
+    let generated_programs = generated
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    for (index, (generated, native)) in generated_programs.iter().zip(&native_programs).enumerate()
+    {
+        assert_eq!(generated.data, native.data, "program {index}");
+    }
+    let generated_symbols = generated
+        .iec_local_symbols()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native_symbols = native
+        .iec_local_symbols()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(generated_symbols, native_symbols);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_COIL_DELETE_FIXTURE"]
+fn xgi_terminal_coil_deletion_matches_native_and_restores() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let native = env::var("LIBXGWX_NATIVE_COIL_DELETE_FIXTURE").expect("native coil deletion path");
+    let mut document = XgwxDocument::from_path(source).expect("source parses");
+    let original = document.to_bytes().unwrap();
+    assert!(
+        document
+            .delete_iec_ld_terminal_coil(0, 271, "wrong")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), original);
+    document
+        .delete_iec_ld_terminal_coil(0, 271, "시작")
+        .unwrap();
+    let saved = XgwxDocument::from_path(native).expect("native deletion parses");
+    for (generated, native) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(saved.ladder_programs())
+    {
+        assert_eq!(generated.unwrap().data, native.unwrap().data);
+    }
+    if let Ok(path) = env::var("LIBXGWX_NATIVE_COIL_DELETE_RESAVED_FIXTURE") {
+        let resaved = XgwxDocument::from_path(path).expect("XG5000 resave parses");
+        for (generated, native) in document
+            .ladder_programs()
+            .into_iter()
+            .zip(resaved.ladder_programs())
+        {
+            assert_eq!(generated.unwrap().data, native.unwrap().data);
+        }
+    }
+    let deleted = document.to_bytes().unwrap();
+    assert!(
+        document
+            .insert_iec_ld_terminal_coil(0, 223, "스위치_1", "OUTPUT", "UNKNOWN")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), deleted);
+    for (kind, code) in [
+        ("OUTPUT", 0x0e),
+        ("INVERSE", 0x0f),
+        ("SET", 0x10),
+        ("RESET", 0x11),
+        ("RISING", 0x12),
+        ("FALLING", 0x13),
+    ] {
+        let mut variant = XgwxDocument::parse(&deleted).unwrap();
+        variant
+            .insert_iec_ld_terminal_coil(0, 223, "스위치_1", kind, "시작")
+            .unwrap();
+        let program = variant.ladder_programs().remove(0).unwrap();
+        assert!(
+            program
+                .iec_record_frames()
+                .unwrap()
+                .iter()
+                .any(|record| { record.offset == 271 && record.kind == IecRecordKind::Coil(code) })
+        );
+        assert!(program.iec_circuit_graph().is_some());
+        if kind == "SET" {
+            if let Ok(path) = env::var("LIBXGWX_NATIVE_SET_COIL_RESAVED_FIXTURE") {
+                let resaved = XgwxDocument::from_path(path).expect("XG5000 SET resave parses");
+                for (generated, native) in variant
+                    .ladder_programs()
+                    .into_iter()
+                    .zip(resaved.ladder_programs())
+                {
+                    assert_eq!(generated.unwrap().data, native.unwrap().data);
+                }
+            }
+        }
+    }
+    document
+        .insert_iec_ld_terminal_coil(0, 223, "스위치_1", "OUTPUT", "시작")
+        .unwrap();
+    let restored = XgwxDocument::parse(&original).unwrap();
+    for (generated, source) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(restored.ladder_programs())
+    {
+        let generated = generated.unwrap().data;
+        let source = source.unwrap().data;
+        assert_eq!(generated.len(), source.len());
+        assert_eq!(
+            generated.iter().zip(&source).position(|(a, b)| a != b),
+            None
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE"]
+fn xgi_complete_iec_group_deletion_keeps_other_networks() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    for (group_index, first_row) in [(3, 3), (14, 20)] {
+        let mut document = XgwxDocument::from_path(&source).unwrap();
+        let original = document.to_bytes().unwrap();
+        assert!(
+            document
+                .delete_iec_ld_group(0, group_index, first_row + 1)
+                .is_err()
+        );
+        assert_eq!(document.to_bytes().unwrap(), original);
+        let before = document.ladder_programs().remove(0).unwrap();
+        let removed_rows = before
+            .iec_row_frames()
+            .unwrap()
+            .iter()
+            .filter(|row| row.group_index == group_index)
+            .count();
+        document
+            .delete_iec_ld_group(0, group_index, first_row)
+            .unwrap();
+        let after = document.ladder_programs().remove(0).unwrap();
+        assert_eq!(
+            after.iec_row_frames().unwrap().len(),
+            before.iec_row_frames().unwrap().len() - removed_rows
+        );
+        assert!(after.iec_circuit_graph().is_some());
+        for (before, after) in XgwxDocument::parse(&original)
+            .unwrap()
+            .ladder_programs()
+            .into_iter()
+            .skip(1)
+            .zip(document.ladder_programs().into_iter().skip(1))
+        {
+            assert_eq!(before.unwrap().data, after.unwrap().data);
+        }
+        let native_key = if group_index == 3 {
+            "LIBXGWX_NATIVE_GROUP3_RESAVED_FIXTURE"
+        } else {
+            "LIBXGWX_NATIVE_GROUP14_RESAVED_FIXTURE"
+        };
+        if let Ok(path) = env::var(native_key) {
+            let native = XgwxDocument::from_path(path).unwrap();
+            for (generated, resaved) in document
+                .ladder_programs()
+                .into_iter()
+                .zip(native.ladder_programs())
+            {
+                assert_eq!(generated.unwrap().data, resaved.unwrap().data);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE"]
+fn xgi_every_captured_iec_group_can_be_cleared() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let baseline = XgwxDocument::from_path(&source).unwrap();
+    for (program_index, program) in baseline.ladder_programs().into_iter().enumerate() {
+        let program = program.unwrap();
+        let rows = program.iec_row_frames().unwrap();
+        let groups = rows
+            .iter()
+            .map(|row| row.group_index)
+            .collect::<std::collections::BTreeSet<_>>();
+        if groups.len() <= 1 {
+            continue;
+        }
+        for group_index in groups {
+            let first_row = rows
+                .iter()
+                .find(|row| row.group_index == group_index)
+                .unwrap()
+                .row_index;
+            let mut document = XgwxDocument::from_path(&source).unwrap();
+            document
+                .delete_iec_ld_group(program_index, group_index, first_row)
+                .unwrap_or_else(|error| {
+                    panic!("program {program_index} group {group_index} L{first_row}: {error}")
+                });
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE"]
+fn xgi_complete_iec_groups_move_into_empty_ranges() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    for (delete, group_index, first_row, destination, native_key) in [
+        (
+            None,
+            4,
+            6,
+            5,
+            "LIBXGWX_NATIVE_GROUP_MOVE_SIMPLE_RESAVED_FIXTURE",
+        ),
+        (
+            Some((33, 67)),
+            14,
+            20,
+            67,
+            "LIBXGWX_NATIVE_GROUP_MOVE_FUNCTION_RESAVED_FIXTURE",
+        ),
+    ] {
+        let mut document = XgwxDocument::from_path(&source).unwrap();
+        if let Some((removed_group, removed_row)) = delete {
+            document
+                .delete_iec_ld_group(0, removed_group, removed_row)
+                .unwrap();
+        }
+        let before = document.to_bytes().unwrap();
+        assert!(
+            document
+                .move_iec_ld_group(0, group_index, first_row, first_row)
+                .is_err()
+        );
+        assert!(
+            document
+                .move_iec_ld_group(0, group_index, first_row + 1, destination)
+                .is_err()
+        );
+        assert_eq!(document.to_bytes().unwrap(), before);
+        let program = document.ladder_programs().remove(0).unwrap();
+        let before_records = program.iec_record_frames().unwrap().len();
+        let before_functions = program.iec_function_blocks().unwrap().len();
+        document
+            .move_iec_ld_group(0, group_index, first_row, destination)
+            .unwrap();
+        let moved = document.ladder_programs().remove(0).unwrap();
+        assert_eq!(moved.iec_record_frames().unwrap().len(), before_records);
+        assert_eq!(moved.iec_function_blocks().unwrap().len(), before_functions);
+        assert!(moved.iec_circuit_graph().is_some());
+        assert!(
+            moved
+                .iec_row_frames()
+                .unwrap()
+                .iter()
+                .any(|row| row.row_index == destination)
+        );
+        assert!(
+            !moved
+                .iec_row_frames()
+                .unwrap()
+                .iter()
+                .any(|row| row.row_index == first_row)
+        );
+        if let Ok(path) = env::var(native_key) {
+            let native = XgwxDocument::from_path(path).unwrap();
+            for (generated, resaved) in document
+                .ladder_programs()
+                .into_iter()
+                .zip(native.ladder_programs())
+            {
+                assert_eq!(generated.unwrap().data, resaved.unwrap().data);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE"]
+fn xgi_complete_iec_groups_copy_into_empty_ranges() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    for (delete, group_index, first_row, destination, native_key) in [
+        (
+            None,
+            4,
+            6,
+            5,
+            "LIBXGWX_NATIVE_GROUP_COPY_SIMPLE_RESAVED_FIXTURE",
+        ),
+        (
+            Some((33, 67)),
+            14,
+            20,
+            67,
+            "LIBXGWX_NATIVE_GROUP_COPY_FUNCTION_RESAVED_FIXTURE",
+        ),
+    ] {
+        let mut document = XgwxDocument::from_path(&source).unwrap();
+        if let Some((removed_group, removed_row)) = delete {
+            document
+                .delete_iec_ld_group(0, removed_group, removed_row)
+                .unwrap();
+        }
+        let before = document.to_bytes().unwrap();
+        assert!(
+            document
+                .copy_iec_ld_group(0, group_index, first_row, first_row)
+                .is_err()
+        );
+        assert!(
+            document
+                .copy_iec_ld_group(0, group_index, first_row + 1, destination)
+                .is_err()
+        );
+        assert_eq!(document.to_bytes().unwrap(), before);
+        let prior = document.ladder_programs().remove(0).unwrap();
+        let source_rows = prior
+            .iec_row_frames()
+            .unwrap()
+            .iter()
+            .filter(|row| row.group_index == group_index)
+            .count();
+        let source_records = prior
+            .iec_record_frames()
+            .unwrap()
+            .iter()
+            .filter(|record| record.group_index == group_index)
+            .count();
+        document
+            .copy_iec_ld_group(0, group_index, first_row, destination)
+            .unwrap();
+        let copied = document.ladder_programs().remove(0).unwrap();
+        assert_eq!(
+            copied.iec_row_frames().unwrap().len(),
+            prior.iec_row_frames().unwrap().len() + source_rows
+        );
+        assert_eq!(
+            copied.iec_record_frames().unwrap().len(),
+            prior.iec_record_frames().unwrap().len() + source_records
+        );
+        assert!(
+            copied
+                .iec_row_frames()
+                .unwrap()
+                .iter()
+                .any(|row| row.row_index == first_row)
+        );
+        assert!(
+            copied
+                .iec_row_frames()
+                .unwrap()
+                .iter()
+                .any(|row| row.row_index == destination)
+        );
+        assert!(copied.iec_circuit_graph().is_some());
+        if let Ok(path) = env::var(native_key) {
+            let native = XgwxDocument::from_path(path).unwrap();
+            for (generated, resaved) in document
+                .ladder_programs()
+                .into_iter()
+                .zip(native.ladder_programs())
+            {
+                assert_eq!(generated.unwrap().data, resaved.unwrap().data);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE"]
+fn xgi_iec_network_replacement_is_atomic_and_preserves_other_programs() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let original = XgwxDocument::from_path(path).unwrap();
+    let before = original.to_bytes().unwrap();
+    for (source_group, source_row, destination_group, destination_row) in [
+        (2, 2, 4, 6),
+        (4, 6, 2, 2),
+        (14, 20, 16, 26),
+        (16, 26, 14, 20),
+    ] {
+        let mut document = original.clone();
+        assert!(
+            document
+                .replace_iec_ld_group(
+                    0,
+                    source_group,
+                    source_row + 1,
+                    destination_group,
+                    destination_row
+                )
+                .is_err()
+        );
+        assert!(
+            document
+                .replace_iec_ld_group(0, source_group, source_row, source_group, source_row)
+                .is_err()
+        );
+        assert_eq!(document.to_bytes().unwrap(), before);
+        document
+            .replace_iec_ld_group(
+                0,
+                source_group,
+                source_row,
+                destination_group,
+                destination_row,
+            )
+            .unwrap();
+        let reparsed = XgwxDocument::parse(&document.to_bytes().unwrap()).unwrap();
+        let original_programs = original.ladder_programs();
+        let edited_programs = reparsed.ladder_programs();
+        for index in 1..7 {
+            assert_eq!(
+                original_programs[index].as_ref().unwrap().data,
+                edited_programs[index].as_ref().unwrap().data
+            );
+        }
+        let old = original_programs[0].as_ref().unwrap();
+        let new = edited_programs[0].as_ref().unwrap();
+        assert_eq!(
+            old.iec_row_frames().unwrap().len(),
+            new.iec_row_frames().unwrap().len()
+        );
+        assert_eq!(
+            old.iec_record_frames().unwrap().len(),
+            new.iec_record_frames().unwrap().len()
+        );
+        assert!(new.iec_circuit_graph().is_some());
+        assert_ne!(old.data, new.data);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE"]
+fn xgi_cross_program_function_copy_checks_instances_and_restores() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let original = XgwxDocument::from_path(path).unwrap();
+    let mut missing_instance = original.clone();
+    missing_instance.delete_iec_ld_group(3, 1, 1).unwrap();
+    let before = missing_instance.to_bytes().unwrap();
+    assert!(
+        missing_instance
+            .copy_iec_ld_group_to_program(0, 14, 20, 3, 1)
+            .is_err()
+    );
+    assert_eq!(missing_instance.to_bytes().unwrap(), before);
+
+    let mut document = original.clone();
+    document.delete_iec_ld_group(3, 1, 1).unwrap();
+    let cleared = document.ladder_programs();
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .copy_iec_ld_group_to_program(2, 1, 2, 3, 1)
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document
+        .copy_iec_ld_group_to_program(2, 1, 1, 3, 1)
+        .unwrap();
+    let copied = XgwxDocument::parse(&document.to_bytes().unwrap()).unwrap();
+    let programs = copied.ladder_programs();
+    let destination = programs[3].as_ref().unwrap();
+    assert!(destination.iec_circuit_graph().is_some());
+    let group = destination
+        .iec_row_frames()
+        .unwrap()
+        .into_iter()
+        .find(|row| row.row_index == 1)
+        .unwrap()
+        .group_index;
+    assert!(
+        destination
+            .iec_function_blocks()
+            .unwrap()
+            .iter()
+            .any(|block| block.group_index == group && block.name.value == "WORD_TO_UDINT")
+    );
+    for index in [0, 1, 2, 4, 5, 6] {
+        assert_eq!(
+            programs[index].as_ref().unwrap().data,
+            original.ladder_programs()[index].as_ref().unwrap().data
+        );
+    }
+    document.delete_iec_ld_group(3, group, 1).unwrap();
+    for (restored, expected) in document.ladder_programs().into_iter().zip(cleared) {
+        assert_eq!(restored.unwrap().data, expected.unwrap().data);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_GROUP_COPY_FUNCTION_FIXTURE to the generated function-copy project"]
+fn xgi_copied_function_can_receive_independent_instance() {
+    let path = env::var("LIBXGWX_NATIVE_GROUP_COPY_FUNCTION_FIXTURE")
+        .expect("generated function-copy fixture path");
+    let mut doc = XgwxDocument::from_path(path).expect("fixture parses");
+    let original = doc.to_bytes().expect("original bytes");
+    let blocks = doc.ladder_programs()[0]
+        .as_ref()
+        .unwrap()
+        .iec_function_blocks()
+        .unwrap();
+    let copied = blocks
+        .iter()
+        .find(|block| block.group_index == 33 && block.name.value == "R_TRIG")
+        .expect("copied R_TRIG");
+    let original_instance = copied.instance.as_ref().unwrap().value.clone();
+    assert!(
+        doc.duplicate_iec_ld_function_instance(0, copied.record_offset, "WRONG", "INST4")
+            .is_err()
+    );
+    assert!(
+        doc.duplicate_iec_ld_function_instance(
+            0,
+            copied.record_offset,
+            &original_instance,
+            "INST3"
+        )
+        .is_err()
+    );
+    assert_eq!(doc.to_bytes().unwrap(), original);
+    doc.duplicate_iec_ld_function_instance(0, copied.record_offset, &original_instance, "INST4")
+        .expect("duplicate instance and rebind copied block");
+    let saved = XgwxDocument::parse(&doc.to_bytes().unwrap()).expect("round trip");
+    let symbols = saved.iec_local_symbols();
+    let local = symbols[0].as_ref().unwrap();
+    assert_eq!(local.len(), 16);
+    assert!(local.iter().any(|symbol| {
+        symbol.name == "INST4"
+            && symbol.is_instance
+            && symbol.type_reference.as_deref() == Some("R_TRIG")
+    }));
+    let blocks = saved.ladder_programs()[0]
+        .as_ref()
+        .unwrap()
+        .iec_function_blocks()
+        .unwrap();
+    assert_eq!(
+        blocks
+            .iter()
+            .find(|block| block.group_index == 14 && block.name.value == "R_TRIG")
+            .unwrap()
+            .instance
+            .as_ref()
+            .unwrap()
+            .value,
+        original_instance
+    );
+    assert_eq!(
+        blocks
+            .iter()
+            .find(|block| block.group_index == 33 && block.name.value == "R_TRIG")
+            .unwrap()
+            .instance
+            .as_ref()
+            .unwrap()
+            .value,
+        "INST4"
+    );
+    if let Ok(path) = env::var("LIBXGWX_NATIVE_GROUP_COPY_INSTANCE_RESAVED_FIXTURE") {
+        let native = XgwxDocument::from_path(path).expect("native Save As parses");
+        assert_eq!(
+            saved
+                .iec_local_symbols()
+                .into_iter()
+                .map(Result::unwrap)
+                .collect::<Vec<_>>(),
+            native
+                .iec_local_symbols()
+                .into_iter()
+                .map(Result::unwrap)
+                .collect::<Vec<_>>()
+        );
+        for (generated, resaved) in saved
+            .ladder_programs()
+            .into_iter()
+            .zip(native.ladder_programs())
+        {
+            assert_eq!(generated.unwrap().data, resaved.unwrap().data);
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_CONNECTED_ADD_RESAVE_FIXTURE"]
+fn xgi_connected_add_deletion_survives_native_save() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let resaved = env::var("LIBXGWX_NATIVE_CONNECTED_ADD_RESAVE_FIXTURE")
+        .expect("native resave of generated ADD deletion");
+    let mut document = XgwxDocument::from_path(source).expect("source parses");
+    let before = document.to_bytes().unwrap();
+    assert_eq!(
+        document.ladder_programs()[0]
+            .as_ref()
+            .unwrap()
+            .iec_connected_arithmetic_deletion_sites()
+            .unwrap()
+            .len(),
+        2,
+    );
+    assert!(
+        document
+            .delete_iec_ld_connected_arithmetic(0, 2858, "SUB")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document
+        .delete_iec_ld_connected_arithmetic(0, 2858, "ADD")
+        .unwrap();
+    let resaved = XgwxDocument::from_path(resaved).expect("native resave parses");
+    let generated = document
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native = resaved
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(generated.len(), native.len());
+    for (generated, native) in generated.iter().zip(&native) {
+        assert_eq!(generated.data, native.data);
+        assert!(generated.iec_circuit_graph().is_some());
+    }
+    let rows = generated[0].iec_row_frames().unwrap();
+    assert_eq!(
+        rows.iter()
+            .find(|row| row.row_index == 20)
+            .unwrap()
+            .group_index,
+        14
+    );
+    assert_eq!(
+        rows.iter()
+            .find(|row| row.row_index == 22)
+            .unwrap()
+            .group_index,
+        15
+    );
+    assert_eq!(generated[0].iec_record_frames().unwrap().len(), 281);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_CONNECTED_SUB_RESAVE_FIXTURE"]
+fn xgi_connected_sub_deletion_survives_native_save() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let resaved = env::var("LIBXGWX_NATIVE_CONNECTED_SUB_RESAVE_FIXTURE")
+        .expect("native resave of generated SUB deletion");
+    let mut document = XgwxDocument::from_path(source).expect("source parses");
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .delete_iec_ld_connected_arithmetic(0, 4076, "ADD")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document
+        .delete_iec_ld_connected_arithmetic(0, 4076, "SUB")
+        .unwrap();
+    let resaved = XgwxDocument::from_path(resaved).expect("native resave parses");
+    let generated = document
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native = resaved
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(generated.len(), native.len());
+    for (generated, native) in generated.iter().zip(&native) {
+        assert_eq!(generated.data, native.data);
+        assert!(generated.iec_circuit_graph().is_some());
+    }
+    let rows = generated[0].iec_row_frames().unwrap();
+    assert_eq!(
+        rows.iter()
+            .find(|row| row.row_index == 26)
+            .unwrap()
+            .group_index,
+        16
+    );
+    assert_eq!(
+        rows.iter()
+            .find(|row| row.row_index == 28)
+            .unwrap()
+            .group_index,
+        17
+    );
+    assert_eq!(generated[0].iec_record_frames().unwrap().len(), 281);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_FUNCTION_CELL_DELETE_FIXTURE"]
+fn xgi_function_cell_deletion_matches_native() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let native = env::var("LIBXGWX_NATIVE_FUNCTION_CELL_DELETE_FIXTURE")
+        .expect("native XG5000 function cell deletion capture");
+    let mut document = XgwxDocument::from_path(&source).expect("fixture parses");
+    assert_eq!(
+        document
+            .ladder_programs()
+            .iter()
+            .map(|program| {
+                program
+                    .as_ref()
+                    .unwrap()
+                    .iec_function_cell_deletion_sites()
+                    .unwrap()
+                    .len()
+            })
+            .collect::<Vec<_>>(),
+        vec![1, 0, 0, 0, 0, 0, 0]
+    );
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .delete_iec_ld_function_cell(0, 1639, "R_TRIG")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document
+        .delete_iec_ld_function_cell(0, 1639, "FF")
+        .expect("delete connected FF function cell");
+
+    let changed = document
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(changed[0].iec_row_frames().unwrap().len(), 86);
+    assert_eq!(changed[0].iec_record_frames().unwrap().len(), 287);
+    assert_eq!(changed[0].iec_function_blocks().unwrap().len(), 22);
+    assert!(changed[0].iec_circuit_graph().is_some());
+
+    let native = XgwxDocument::from_path(native).expect("native fixture parses");
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    for (index, (changed, native)) in changed.iter().zip(&native_programs).enumerate() {
+        let mut changed_data = changed.data.clone();
+        let mut native_data = native.data.clone();
+        if index == 0 {
+            // XG5000 refreshed seven visible retained-row caches. The function
+            // and link deletion otherwise matches the native payload exactly.
+            for row in changed.iec_row_frames().unwrap() {
+                changed_data[row.start + 17] = 0;
+            }
+            for row in native.iec_row_frames().unwrap() {
+                native_data[row.start + 17] = 0;
+            }
+        }
+        assert_eq!(changed_data, native_data, "program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_FUNCTION_CELL_DELETE_FIXTURE and LIBXGWX_NATIVE_FUNCTION_CELL_INSERT_FIXTURE"]
+fn xgi_function_cell_insertion_matches_native() {
+    let deleted = env::var("LIBXGWX_NATIVE_FUNCTION_CELL_DELETE_FIXTURE")
+        .expect("native XG5000 function cell deletion capture");
+    let native = env::var("LIBXGWX_NATIVE_FUNCTION_CELL_INSERT_FIXTURE")
+        .expect("native XG5000 function cell insertion capture");
+    let mut document = XgwxDocument::from_path(&deleted).expect("deleted fixture parses");
+    assert_eq!(
+        document
+            .ladder_programs()
+            .iter()
+            .map(|program| {
+                program
+                    .as_ref()
+                    .unwrap()
+                    .iec_function_cell_insertion_sites()
+                    .unwrap()
+                    .len()
+            })
+            .collect::<Vec<_>>(),
+        vec![1, 0, 0, 0, 0, 0, 0]
+    );
+    let site = document.ladder_programs()[0]
+        .as_ref()
+        .unwrap()
+        .iec_function_cell_insertion_sites()
+        .unwrap()[0];
+    assert_eq!(site.group_index, 9);
+    assert_eq!(site.row_index, 14);
+    assert_eq!(site.insertion_offset, 1639);
+    assert_eq!(site.reference_offset, 1766);
+    assert_eq!(site.raw_x, 4);
+
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .insert_iec_ld_function_cell(0, 1639, "R_TRIG", "FF")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    assert!(
+        document
+            .insert_iec_ld_function_cell(0, 1639, "FF", "INST3")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document
+        .insert_iec_ld_function_cell(0, 1639, "FF", "FF")
+        .expect("insert connected FF function cell");
+
+    let changed = document
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(changed[0].iec_row_frames().unwrap().len(), 86);
+    assert_eq!(changed[0].iec_record_frames().unwrap().len(), 289);
+    assert_eq!(changed[0].iec_function_blocks().unwrap().len(), 23);
+    assert_eq!(changed[0].iec_function_references().unwrap().len(), 50);
+    assert_eq!(changed[0].iec_function_operand_links().unwrap().len(), 45);
+    assert!(
+        changed[0]
+            .iec_function_cell_insertion_sites()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        changed[0].iec_function_cell_deletion_sites().unwrap().len(),
+        1
+    );
+    assert!(changed[0].iec_circuit_graph().is_some());
+
+    let native = XgwxDocument::from_path(native).expect("native inserted fixture parses");
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    for (index, (changed, native)) in changed.iter().zip(&native_programs).enumerate() {
+        let mut changed_data = changed.data.clone();
+        let mut native_data = native.data.clone();
+        if index == 0 {
+            // Native insertion refreshes the selected row's visible cache.
+            // The generated function, link, counts, and graph match exactly.
+            for row in changed.iec_row_frames().unwrap() {
+                changed_data[row.start + 17] = 0;
+            }
+            for row in native.iec_row_frames().unwrap() {
+                native_data[row.start + 17] = 0;
+            }
+        }
+        assert_eq!(changed_data, native_data, "program {index}");
+    }
+}
+
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_circuit_graph_covers_every_decoded_element_and_function_binding() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let doc = XgwxDocument::from_path(path).expect("fixture parses");
+    let programs = doc
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .expect("all programs parse");
+    let graphs = programs
+        .iter()
+        .map(|program| {
+            program
+                .iec_circuit_graph()
+                .expect("validated circuit graph")
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        graphs
+            .iter()
+            .map(|graph| graph.edges.len())
+            .collect::<Vec<_>>(),
+        [153, 47, 101, 239, 69, 76, 212]
+    );
+    assert_eq!(
+        graphs
+            .iter()
+            .map(|graph| graph.occupied_areas.len())
+            .collect::<Vec<_>>(),
+        [171, 44, 105, 224, 88, 80, 169]
+    );
+    assert_eq!(
+        graphs
+            .iter()
+            .map(|graph| graph.function_bindings.len())
+            .collect::<Vec<_>>(),
+        [50, 4, 23, 24, 23, 28, 44]
+    );
+    assert_eq!(
+        graphs
+            .iter()
+            .map(|graph| graph.power_components.len())
+            .collect::<Vec<_>>(),
+        [24, 5, 15, 29, 13, 7, 9]
+    );
+    assert_eq!(
+        graphs
+            .iter()
+            .flat_map(|graph| &graph.function_bindings)
+            .filter(|binding| binding.expression_record_offset.is_some())
+            .count(),
+        176
+    );
+
+    for graph in &graphs {
+        let mut component_edges = graph
+            .power_components
+            .iter()
+            .flat_map(|component| component.edge_indices.iter().copied())
+            .collect::<Vec<_>>();
+        component_edges.sort_unstable();
+        assert_eq!(component_edges, (0..graph.edges.len()).collect::<Vec<_>>());
+        assert!(graph.edges.iter().all(|edge| {
+            edge.start.group_index == edge.end.group_index
+                && edge.start.x <= 96
+                && edge.end.x <= 96
+                && edge.start.x % 3 == 0
+                && edge.end.x % 3 == 0
+        }));
+        assert!(graph.function_bindings.iter().all(|binding| {
+            binding.data_type_mask != 0
+                && binding
+                    .expression_cell_x
+                    .is_none_or(|raw_x| match binding.direction {
+                        IecFunctionPinDirection::Input => {
+                            raw_x.checked_add(2) == Some(binding.pin_point.x)
+                        }
+                        IecFunctionPinDirection::Output => {
+                            raw_x.checked_sub(1) == Some(binding.pin_point.x)
+                        }
+                    })
+        }));
+    }
+
+    let mut overlap = programs[0].clone();
+    let short_wire = overlap
+        .iec_record_frames()
+        .unwrap()
+        .into_iter()
+        .find(|record| {
+            record.group_index == 16
+                && record.row_index == 26
+                && record.kind == IecRecordKind::ShortWire
+        })
+        .expect("captured short wire");
+    overlap.data[short_wire.offset + 5] = 1;
+    assert!(overlap.iec_record_frames().is_some());
+    assert!(overlap.iec_circuit_graph().is_none());
+
+    let mut isolated_branch = programs[0].clone();
+    let branch = isolated_branch
+        .iec_geometry()
+        .unwrap()
+        .vertical
+        .into_iter()
+        .find(|connection| {
+            connection.group_index == 3
+                && connection.start_row_index == 3
+                && connection.end_row_index == 4
+                && connection.x == 6
+        })
+        .expect("captured branch");
+    isolated_branch.data[branch.start_offset + 7] = 9;
+    isolated_branch.data[branch.start_offset + 17] = 8;
+    isolated_branch.data[branch.end_offset + 5] = 9;
+    assert!(isolated_branch.iec_record_frames().is_some());
+    assert!(isolated_branch.iec_geometry().is_some());
+    assert!(isolated_branch.iec_circuit_graph().is_none());
+}
+
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_GROUP33_DELETE_FIXTURE to the native XG5000 row deletion capture"]
+fn xgi_native_eq_row_deletion_retains_flagged_vertical_branch() {
+    let path = env::var("LIBXGWX_NATIVE_GROUP33_DELETE_FIXTURE")
+        .expect("native XG5000 EQ row deletion capture");
+    let document = XgwxDocument::from_path(path).expect("native file parses");
+    let program = document
+        .ladder_programs()
+        .remove(0)
+        .expect("program decodes");
+    let rows = program.iec_row_frames().expect("rows frame");
+    let records = program.iec_record_frames().expect("records frame");
+    let geometry = program.iec_geometry().expect("geometry frames");
+    assert_eq!(rows.iter().filter(|row| row.group_index == 33).count(), 15);
+    assert_eq!(program.iec_function_blocks().unwrap().len(), 22);
+    assert_eq!(program.iec_circuit_graph().unwrap().edges.len(), 150);
+    let flagged = records
+        .iter()
+        .find(|record| {
+            record.group_index == 33
+                && record.row_index == 68
+                && record.kind == IecRecordKind::BranchStart
+                && program.data[record.offset + 7] == 12
+        })
+        .expect("flagged x12 branch start");
+    assert_eq!(
+        &program.data[flagged.offset + 10..flagged.offset + 17],
+        &[0, 0, 0, 4, 0, 0, 0]
+    );
+    assert_eq!(
+        &program.data[flagged.offset + 20..flagged.offset + 27],
+        &[0, 0, 0, 4, 0, 0, 0]
+    );
+    assert!(geometry.vertical.iter().any(|branch| {
+        branch.group_index == 33
+            && branch.start_row_index == 68
+            && branch.end_row_index == 69
+            && branch.x == 12
+    }));
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_GROUP33_DELETE_FIXTURE"]
+fn xgi_eq_chain_head_delete_matches_native_group_and_preserves_other_programs() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home source");
+    let native =
+        env::var("LIBXGWX_NATIVE_GROUP33_DELETE_FIXTURE").expect("native XG5000 deletion capture");
+    let mut generated = XgwxDocument::from_path(source).expect("source parses");
+    let before = generated.to_bytes().unwrap();
+    assert!(
+        generated
+            .delete_iec_ld_eq_chain_head(0, 0x2a5c, "GT")
+            .is_err()
+    );
+    assert_eq!(generated.to_bytes().unwrap(), before);
+    generated
+        .delete_iec_ld_eq_chain_head(0, 0x2a5c, "EQ")
+        .expect("delete captured EQ chain head");
+    let native = XgwxDocument::from_path(native).expect("native capture parses");
+    let generated_programs = generated.ladder_programs();
+    let native_programs = native.ladder_programs();
+    for (index, (generated, native)) in generated_programs
+        .into_iter()
+        .zip(native_programs)
+        .enumerate()
+    {
+        let generated = generated.unwrap();
+        let native = native.unwrap();
+        if index == 0 {
+            let mut generated_data = generated.data.clone();
+            let mut native_data = native.data.clone();
+            // XG5000 refreshes four pre-existing row display caches outside
+            // the edited group when saving this project.
+            for offset in [0xc88, 0xf1f, 0x114a, 0x27f5] {
+                generated_data[offset] = 0;
+                native_data[offset] = 0;
+            }
+            assert_eq!(generated_data, native_data);
+        } else {
+            assert_eq!(generated.data, native.data, "program {index}");
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_inserts_standalone_comment_into_empty_row() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let source = XgwxDocument::from_path(path).expect("fixture parses");
+    let mut document = source.clone();
+    let before = document.to_bytes().unwrap();
+    assert!(document.insert_iec_ld_comment(0, 5, "").is_err());
+    assert!(document.insert_iec_ld_comment(0, 6, "새 설명").is_err());
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document.insert_iec_ld_comment(0, 5, "새 설명").unwrap();
+    let updated = XgwxDocument::parse(&document.to_bytes().unwrap()).unwrap();
+    let original = source.ladder_programs()[0].as_ref().unwrap().clone();
+    let program = updated.ladder_programs()[0].as_ref().unwrap().clone();
+    let row = program
+        .iec_row_frames()
+        .unwrap()
+        .into_iter()
+        .find(|row| row.row_index == 5)
+        .unwrap();
+    assert_eq!(row.record_count, 1);
+    let comment = crate::iec_ld::comments(&program)
+        .into_iter()
+        .find(|item| item.value == "새 설명")
+        .unwrap();
+    assert!(comment.offset >= row.records_start && comment.offset < row.end);
+    assert!(program.iec_circuit_graph().is_some());
+    assert_eq!(
+        program.iec_row_frames().unwrap().len(),
+        original.iec_row_frames().unwrap().len() + 1
+    );
+    for index in 1..7 {
+        assert_eq!(
+            updated.ladder_programs()[index].as_ref().unwrap().data,
+            source.ladder_programs()[index].as_ref().unwrap().data
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_shifts_function_pin_rows_for_program_one_comment() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let source = XgwxDocument::from_path(path).expect("fixture parses");
+    let mut document = source.clone();
+    document
+        .insert_iec_ld_blank_row(1, 12)
+        .expect("append blank row after TON and MOVE");
+    document
+        .insert_iec_ld_comment(1, 13, "추가 설명")
+        .expect("fill new row");
+    let updated = XgwxDocument::parse(&document.to_bytes().unwrap()).unwrap();
+    let program = updated.ladder_programs()[1].as_ref().unwrap().clone();
+    assert!(program.iec_circuit_graph().is_some());
+    assert!(
+        crate::iec_ld::comments(&program)
+            .iter()
+            .any(|item| item.value == "추가 설명")
+    );
+    let mut shifted = source;
+    shifted
+        .insert_iec_ld_blank_row(1, 5)
+        .expect("shift MOVE function and its pins");
+    shifted
+        .insert_iec_ld_comment(1, 6, "중간 설명")
+        .expect("fill middle row");
+    let program = shifted.ladder_programs()[1].as_ref().unwrap().clone();
+    assert!(program.iec_circuit_graph().is_some());
+    assert!(
+        program
+            .iec_function_blocks()
+            .unwrap()
+            .iter()
+            .any(|block| block.name.value == "MOVE" && block.row_index == 7)
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_reuses_existing_contact_operand_for_serial_insertion() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let mut document = XgwxDocument::from_path(path).expect("fixture parses");
+    let before = document.to_bytes().unwrap();
+    assert!(
+        document
+            .insert_iec_ld_contact(0, 252, 25, 4, 91, "NO", "UNKNOWN_SWITCH")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), before);
+    document
+        .insert_iec_ld_contact(0, 252, 25, 4, 91, "NO", "ON")
+        .unwrap();
+    let program = document.ladder_programs()[0].as_ref().unwrap().clone();
+    let right = program
+        .iec_no_contact_insertion_sites()
+        .unwrap()
+        .into_iter()
+        .find(|site| site.row_index == 2 && site.start_x == 28 && site.end_x == 91)
+        .expect("right wire remains available");
+    document
+        .insert_iec_ld_contact(0, right.wire_offset, 49, 28, 91, "NC", "스위치_1")
+        .expect("captured contact operand can be reused");
+    let changed = XgwxDocument::parse(&document.to_bytes().unwrap()).unwrap();
+    let program = changed.ladder_programs()[0].as_ref().unwrap().clone();
+    assert!(program.iec_circuit_graph().is_some());
+    let contacts = crate::iec_ld::element_operands(&program);
+    assert!(
+        contacts.iter().any(|item| {
+            item.record_code == 0x06 && item.raw_x == 25 && item.string.value == "ON"
+        })
+    );
+    assert!(contacts.iter().any(|item| {
+        item.record_code == 0x07 && item.raw_x == 49 && item.string.value == "스위치_1"
+    }));
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_element_operand_edits_check_bool_type_and_writable_output() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let source = XgwxDocument::from_path(path).expect("fixture parses");
+    let programs = source.ladder_programs();
+    let program = programs[0].as_ref().unwrap();
+    let operands = crate::iec_ld::element_operands(program);
+    let contact = operands
+        .iter()
+        .find(|item| item.record_code == 0x08 && item.string.value == "스위치_1")
+        .expect("captured rising contact");
+    let coil = operands
+        .iter()
+        .find(|item| item.record_code == 0x0e && item.string.value != "ON")
+        .expect("captured output coil");
+
+    let mut valid_contact = source.clone();
+    valid_contact
+        .update_iec_ld_element_operand(0, contact.string.offset, "스위치_1", "ON")
+        .expect("existing BOOL contact operand");
+    let changed = XgwxDocument::parse(&valid_contact.to_bytes().unwrap()).unwrap();
+    assert!(
+        changed.ladder_programs()[0]
+            .as_ref()
+            .unwrap()
+            .strings
+            .iter()
+            .any(|item| item.offset == contact.string.offset && item.value == "ON")
+    );
+
+    let mut valid_coil = source.clone();
+    valid_coil
+        .update_iec_ld_element_operand(0, coil.string.offset, &coil.string.value, "%MX77")
+        .expect("writable BOOL coil address");
+
+    for replacement in ["1", "%MW700", "%MX", "%MX1.", "%NONSENSE"] {
+        let mut rejected = source.clone();
+        let before = rejected.to_bytes().unwrap();
+        assert!(
+            rejected
+                .update_iec_ld_element_operand(0, contact.string.offset, "스위치_1", replacement)
+                .is_err(),
+            "{replacement}"
+        );
+        assert_eq!(rejected.to_bytes().unwrap(), before, "{replacement}");
+    }
+    let mut input_coil = source.clone();
+    let before = input_coil.to_bytes().unwrap();
+    assert!(
+        input_coil
+            .update_iec_ld_element_operand(0, coil.string.offset, &coil.string.value, "%IX0")
+            .is_err()
+    );
+    assert_eq!(input_coil.to_bytes().unwrap(), before);
+
+    let mut inserted = source;
+    inserted.insert_iec_ld_blank_row(0, 30).unwrap();
+    let blank = inserted.to_bytes().unwrap();
+    assert!(
+        inserted
+            .insert_iec_ld_rung(0, 31, "NO", "%MW700", "OUTPUT", "ON")
+            .is_err()
+    );
+    assert!(
+        inserted
+            .insert_iec_ld_rung(0, 31, "NO", "ON", "OUTPUT", "%IX0")
+            .is_err()
+    );
+    assert_eq!(inserted.to_bytes().unwrap(), blank);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_function_operand_edits_validate_decoded_pin_types() {
+    fn site(
+        document: &XgwxDocument,
+        program_index: usize,
+        block_name: &str,
+        pin_name: &str,
+        value: &str,
+    ) -> usize {
+        let program = document.ladder_programs()[program_index]
+            .as_ref()
+            .unwrap()
+            .clone();
+        let blocks = program.iec_function_blocks().unwrap();
+        program
+            .iec_function_operand_links()
+            .unwrap()
+            .into_iter()
+            .find_map(|link| {
+                let block = blocks
+                    .iter()
+                    .find(|block| block.record_offset == link.target_record_offset)?;
+                let pin = block
+                    .pins
+                    .iter()
+                    .chain([&block.control_input, &block.control_output])
+                    .find(|pin| pin.reference_ordinal == Some(link.ordinal))?;
+                let strings = extract_utf16_marker_strings(&program.data, false, false);
+                let expression = strings
+                    .iter()
+                    .find(|string| string.offset == link.record_offset + 15)?;
+                (block.name.value == block_name
+                    && pin.name.value == pin_name
+                    && expression.value == value)
+                    .then_some(expression.offset)
+            })
+            .unwrap_or_else(|| panic!("captured operand site {block_name}.{pin_name}={value}"))
+    }
+
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let source = XgwxDocument::from_path(&path).expect("fixture parses");
+
+    let mut numeric = source.clone();
+    let offset = site(&numeric, 0, "ADD", "IN2", "1");
+    numeric
+        .update_iec_ld_function_operand(0, offset, "1", "123")
+        .expect("numeric literal remains compatible with ANY_NUM");
+    assert_eq!(
+        XgwxDocument::parse(&numeric.to_bytes().unwrap())
+            .unwrap()
+            .ladder_programs()[0]
+            .as_ref()
+            .unwrap()
+            .strings
+            .iter()
+            .find(|string| string.offset == offset)
+            .unwrap()
+            .value,
+        "123"
+    );
+
+    let mut output_literal = source.clone();
+    let offset = site(&output_literal, 0, "ADD", "OUT", "%MW700");
+    let before = output_literal.to_bytes().unwrap();
+    assert!(
+        output_literal
+            .update_iec_ld_function_operand(0, offset, "%MW700", "123")
+            .is_err()
+    );
+    assert_eq!(output_literal.to_bytes().unwrap(), before);
+    for replacement in ["%NONSENSE", "%MW", "%MW700.", "%MX700", "%IW0.0.0"] {
+        assert!(
+            output_literal
+                .update_iec_ld_function_operand(0, offset, "%MW700", replacement)
+                .is_err(),
+            "{replacement}"
+        );
+        assert_eq!(output_literal.to_bytes().unwrap(), before, "{replacement}");
+    }
+    output_literal
+        .update_iec_ld_function_operand(0, offset, "%MW700", "%MW701")
+        .expect("writable WORD address remains valid on ADD output");
+
+    let mut input_word = source.clone();
+    let offset = site(&input_word, 0, "ADD", "IN1", "%MW700");
+    input_word
+        .update_iec_ld_function_operand(0, offset, "%MW700", "%IW0.0.0")
+        .expect("three-part input WORD address is readable on ADD input");
+
+    let mut timer = source.clone();
+    let offset = site(&timer, 1, "TON", "PT", "T#5s");
+    let before = timer.to_bytes().unwrap();
+    assert!(
+        timer
+            .update_iec_ld_function_operand(1, offset, "T#5s", "123")
+            .is_err()
+    );
+    assert_eq!(timer.to_bytes().unwrap(), before);
+    timer
+        .update_iec_ld_function_operand(1, offset, "T#5s", "T#6s")
+        .expect("TIME literal remains compatible with PT");
+
+    let mut conversion = source;
+    let offset = site(&conversion, 4, "INT_TO_UDINT", "IN", "메모리값");
+    let before = conversion.to_bytes().unwrap();
+    assert!(
+        conversion
+            .update_iec_ld_function_operand(4, offset, "메모리값", "LED상태")
+            .is_err()
+    );
+    assert_eq!(conversion.to_bytes().unwrap(), before);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_TYPED_OPERAND_FIXTURE and LIBXGWX_NATIVE_TYPED_OPERAND_FIXTURE"]
+fn xgi_native_save_preserves_typed_timer_operand() {
+    fn timer_value(document: &XgwxDocument) -> String {
+        let programs = document.ladder_programs();
+        let program = programs[1].as_ref().expect("curtain program parses");
+        let graph = program
+            .iec_circuit_graph()
+            .expect("curtain circuit graph validates");
+        let binding = graph
+            .function_bindings
+            .iter()
+            .find(|binding| {
+                binding.function_name == "TON"
+                    && binding.pin_name == "PT"
+                    && binding.expression_record_offset.is_some()
+            })
+            .expect("TON.PT binding");
+        let record_offset = binding.expression_record_offset.unwrap();
+        let record = program
+            .iec_record_frames()
+            .unwrap()
+            .into_iter()
+            .find(|record| record.offset == record_offset)
+            .expect("TON.PT expression record");
+        program
+            .strings
+            .iter()
+            .find(|string| string.offset >= record.offset && string.end_offset <= record.end)
+            .expect("TON.PT expression")
+            .value
+            .clone()
+    }
+
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_TYPED_OPERAND_FIXTURE")
+            .expect("generated typed-operand fixture path"),
+    )
+    .expect("generated typed-operand fixture parses");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_TYPED_OPERAND_FIXTURE")
+            .expect("native typed-operand Save As fixture path"),
+    )
+    .expect("native typed-operand fixture parses");
+
+    assert_eq!(timer_value(&generated), "T#6s");
+    assert_eq!(timer_value(&native), "T#6s");
+    let generated_programs = generated
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("generated program parses").data)
+        .collect::<Vec<_>>();
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("native program parses").data)
+        .collect::<Vec<_>>();
+    assert_eq!(native_programs, generated_programs);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_NC_INSERT_FIXTURE and LIBXGWX_NATIVE_NC_INSERT_FIXTURE"]
+fn xgi_native_save_preserves_inserted_nc_contact() {
+    fn contact_value(document: &XgwxDocument) -> String {
+        let programs = document.ladder_programs();
+        let program = programs[0].as_ref().expect("lighting program parses");
+        program
+            .iec_circuit_graph()
+            .expect("lighting circuit graph validates");
+        let record = program
+            .iec_record_frames()
+            .expect("IEC records frame")
+            .into_iter()
+            .find(|record| {
+                record.offset == 271
+                    && record.kind == IecRecordKind::Contact(0x07)
+                    && program.data.get(record.offset + 5) == Some(&7)
+            })
+            .expect("inserted NC contact at record 271 and x=7");
+        let strings = program
+            .strings
+            .iter()
+            .filter(|item| item.offset >= record.offset && item.end_offset <= record.end)
+            .collect::<Vec<_>>();
+        assert_eq!(strings.len(), 1, "inserted contact has one operand");
+        strings[0].value.clone()
+    }
+
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_NC_INSERT_FIXTURE").expect("generated NC-insert fixture path"),
+    )
+    .expect("generated NC-insert fixture parses");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_NC_INSERT_FIXTURE")
+            .expect("native NC-insert Save As fixture path"),
+    )
+    .expect("native NC-insert fixture parses");
+
+    assert_eq!(contact_value(&generated), "ON");
+    assert_eq!(contact_value(&native), "ON");
+    let generated_programs = generated
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("generated program parses").data)
+        .collect::<Vec<_>>();
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("native program parses").data)
+        .collect::<Vec<_>>();
+    assert_eq!(native_programs, generated_programs);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_RISING_DELETE_FIXTURE and LIBXGWX_NATIVE_RISING_DELETE_FIXTURE"]
+fn xgi_native_save_preserves_rising_contact_cell_delete() {
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_RISING_DELETE_FIXTURE")
+            .expect("generated rising-delete fixture path"),
+    )
+    .expect("generated rising-delete fixture parses");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_RISING_DELETE_FIXTURE")
+            .expect("native rising-delete Save As fixture path"),
+    )
+    .expect("native rising-delete fixture parses");
+
+    for document in [&generated, &native] {
+        let programs = document.ladder_programs();
+        let program = programs[0].as_ref().expect("lighting program parses");
+        program
+            .iec_circuit_graph()
+            .expect("lighting circuit graph validates");
+        let rows = program.iec_row_frames().expect("IEC rows frame");
+        let row = rows
+            .iter()
+            .find(|row| row.group_index == 2 && row.row_index == 2)
+            .expect("edited lighting row");
+        assert_eq!(row.record_count, 4);
+        let records = program.iec_record_frames().expect("IEC records frame");
+        assert!(!records.iter().any(|record| {
+            record.group_index == 2
+                && record.row_index == 2
+                && record.kind == IecRecordKind::Contact(0x08)
+                && program.data.get(record.offset + 5) == Some(&7)
+        }));
+        assert!(records.iter().any(|record| {
+            record.group_index == 2
+                && record.row_index == 2
+                && record.kind == IecRecordKind::LongWire
+                && program.data.get(record.offset + 5) == Some(&7)
+        }));
+    }
+
+    let generated_programs = generated
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("generated program parses").data)
+        .collect::<Vec<_>>();
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("native program parses").data)
+        .collect::<Vec<_>>();
+    assert_eq!(native_programs, generated_programs);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE, LIBXGWX_NATIVE_BLANK_ROW_FIXTURE, and LIBXGWX_NATIVE_BLANK_ROW_DELETE_FIXTURE"]
+fn xgi_blank_row_insertion_matches_native_coordinates() {
+    let source_path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let mut generated = XgwxDocument::from_path(source_path).expect("source fixture parses");
+    let before = generated.ladder_programs();
+    let before_program = before[0].as_ref().unwrap();
+    let before_rows = before_program.iec_row_frames().unwrap();
+    let before_graph = before_program.iec_circuit_graph().unwrap();
+
+    generated
+        .insert_iec_ld_blank_row(0, 30)
+        .expect("captured blank row inserts");
+    let encoded = generated.to_bytes().unwrap();
+    let generated = XgwxDocument::parse(&encoded).unwrap();
+    let generated_programs = generated.ladder_programs();
+    let generated_program = generated_programs[0].as_ref().unwrap();
+    let generated_rows = generated_program.iec_row_frames().unwrap();
+    let generated_graph = generated_program.iec_circuit_graph().unwrap();
+    assert_eq!(
+        u16::from_le_bytes(generated_program.data[4..6].try_into().unwrap()),
+        91
+    );
+    assert_eq!(generated_rows.len(), before_rows.len());
+    for (before, after) in before_rows.iter().zip(&generated_rows) {
+        assert_eq!(
+            after.row_index,
+            before.row_index + u16::from(before.row_index > 30)
+        );
+        assert_eq!(after.group_index, before.group_index);
+        assert_eq!(after.record_count, before.record_count);
+    }
+    assert_eq!(generated_graph.edges.len(), before_graph.edges.len());
+    assert_eq!(
+        generated_graph.function_bindings.len(),
+        before_graph.function_bindings.len()
+    );
+
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BLANK_ROW_FIXTURE").expect("native blank-row fixture path"),
+    )
+    .expect("native blank-row fixture parses");
+    let native_programs = native.ladder_programs();
+    for index in 0..generated_programs.len() {
+        let generated = generated_programs[index].as_ref().unwrap();
+        let native = native_programs[index].as_ref().unwrap();
+        let differences = generated
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![0x0c88, 0x0f1f, 0x114a]
+            } else {
+                vec![]
+            },
+            "program {index} differences"
+        );
+    }
+
+    let mut stale = XgwxDocument::parse(&encoded).unwrap();
+    let unchanged = stale.to_bytes().unwrap();
+    assert!(stale.insert_iec_ld_blank_row(0, 91).is_err());
+    assert_eq!(stale.to_bytes().unwrap(), unchanged);
+
+    let mut deleted = XgwxDocument::parse(&encoded).unwrap();
+    deleted
+        .delete_iec_ld_blank_row(0, 31)
+        .expect("captured blank row deletes");
+    let deleted = XgwxDocument::parse(&deleted.to_bytes().unwrap()).unwrap();
+    let deleted_programs = deleted.ladder_programs();
+    for index in 0..before.len() {
+        let original = before[index].as_ref().unwrap();
+        let deleted = deleted_programs[index].as_ref().unwrap();
+        let differences = original
+            .data
+            .iter()
+            .zip(&deleted.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 0 { vec![0x130c] } else { vec![] },
+            "program {index} generated delete differences"
+        );
+    }
+    let native_deleted = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BLANK_ROW_DELETE_FIXTURE")
+            .expect("native blank-row delete fixture path"),
+    )
+    .expect("native blank-row delete fixture parses");
+    let native_deleted_programs = native_deleted.ladder_programs();
+    for index in 0..deleted_programs.len() {
+        let generated = deleted_programs[index].as_ref().unwrap();
+        let native = native_deleted_programs[index].as_ref().unwrap();
+        let differences = generated
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![0x0c88, 0x0f1f, 0x114a, 0x1389]
+            } else {
+                vec![]
+            },
+            "program {index} native delete differences"
+        );
+    }
+    let mut occupied = XgwxDocument::parse(&encoded).unwrap();
+    let unchanged = occupied.to_bytes().unwrap();
+    assert!(occupied.delete_iec_ld_blank_row(0, 30).is_err());
+    assert_eq!(occupied.to_bytes().unwrap(), unchanged);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_BLANK_ROW_FIXTURE and LIBXGWX_NATIVE_BLANK_ROW_RESAVE_FIXTURE"]
+fn xgi_native_save_preserves_generated_blank_row() {
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_BLANK_ROW_FIXTURE").expect("generated blank-row fixture path"),
+    )
+    .expect("generated blank-row fixture parses");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BLANK_ROW_RESAVE_FIXTURE")
+            .expect("native blank-row Save As fixture path"),
+    )
+    .expect("native blank-row fixture parses");
+    let generated_programs = generated.ladder_programs();
+    let native_programs = native.ladder_programs();
+    assert_eq!(generated_programs.len(), native_programs.len());
+    for (generated, native) in generated_programs.into_iter().zip(native_programs) {
+        assert_eq!(generated.unwrap().data, native.unwrap().data);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_BLANK_ROW_DELETE_FIXTURE and LIBXGWX_NATIVE_BLANK_ROW_DELETE_RESAVE_FIXTURE"]
+fn xgi_native_save_preserves_generated_blank_row_delete() {
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_BLANK_ROW_DELETE_FIXTURE")
+            .expect("generated blank-row delete fixture path"),
+    )
+    .expect("generated blank-row delete fixture parses");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BLANK_ROW_DELETE_RESAVE_FIXTURE")
+            .expect("native blank-row delete Save As fixture path"),
+    )
+    .expect("native blank-row delete fixture parses");
+    let generated_programs = generated.ladder_programs();
+    let native_programs = native.ladder_programs();
+    assert_eq!(generated_programs.len(), native_programs.len());
+    for (generated, native) in generated_programs.into_iter().zip(native_programs) {
+        assert_eq!(generated.unwrap().data, native.unwrap().data);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE"]
+fn xgi_append_rung_preserves_existing_programs_and_supports_repeated_edits() {
+    let source = XgwxDocument::from_path(
+        env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path"),
+    )
+    .unwrap();
+    let original_bytes = source.to_bytes().unwrap();
+    let original_programs = source.ladder_programs();
+    for program_index in 0..original_programs.len() {
+        let before = original_programs[program_index].as_ref().unwrap();
+        let row_index = before.iec_row_frames().unwrap().last().unwrap().row_index + 1;
+        let mut edited = source.clone();
+        edited
+            .insert_iec_ld_rung(program_index, row_index, "NC", "%MX1000", "SET", "%MX1001")
+            .expect("new rung appends after final network");
+        let reparsed = XgwxDocument::parse(&edited.to_bytes().unwrap()).unwrap();
+        let programs = reparsed.ladder_programs();
+        for (index, program) in programs.iter().enumerate() {
+            let program = program.as_ref().unwrap();
+            if index != program_index {
+                assert_eq!(
+                    program.data,
+                    original_programs[index].as_ref().unwrap().data
+                );
+                continue;
+            }
+            assert_eq!(&program.data[..4], &before.data[..4]);
+            assert_eq!(
+                u16::from_le_bytes(program.data[4..6].try_into().unwrap()),
+                row_index + 1
+            );
+            assert_eq!(&program.data[8..before.data.len()], &before.data[8..]);
+            let appended = program.iec_row_frames().unwrap().pop().unwrap();
+            assert_eq!(appended.row_index, row_index);
+            assert_eq!(appended.record_count, 3);
+            assert!(
+                program
+                    .iec_circuit_graph()
+                    .unwrap()
+                    .power_components
+                    .iter()
+                    .any(|component| {
+                        component.group_index == appended.group_index
+                            && component.touches_left_rail
+                            && component.touches_right_rail
+                    })
+            );
+        }
+        edited
+            .insert_iec_ld_rung(
+                program_index,
+                row_index + 1,
+                "NO",
+                "%MX1002",
+                "OUTPUT",
+                "%MX1003",
+            )
+            .expect("a second rung appends to the edited program");
+        edited
+            .delete_iec_ld_rung(
+                program_index,
+                row_index + 1,
+                "NO",
+                "%MX1002",
+                "OUTPUT",
+                "%MX1003",
+            )
+            .unwrap();
+        edited
+            .delete_iec_ld_rung(program_index, row_index, "NC", "%MX1000", "SET", "%MX1001")
+            .unwrap();
+        let restored = edited.ladder_programs().remove(program_index).unwrap();
+        assert_eq!(&restored.data[..4], &before.data[..4]);
+        assert_eq!(&restored.data[6..], &before.data[6..]);
+        let unchanged = edited.to_bytes().unwrap();
+        assert!(
+            edited
+                .insert_iec_ld_rung(
+                    program_index,
+                    u16::MAX / 4,
+                    "NO",
+                    "%MX1000",
+                    "OUTPUT",
+                    "%MX1001"
+                )
+                .is_err()
+        );
+        assert_eq!(edited.to_bytes().unwrap(), unchanged);
+    }
+    assert_eq!(source.to_bytes().unwrap(), original_bytes);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_BLANK_ROW_FIXTURE and LIBXGWX_NATIVE_LINEAR_RUNG_FIXTURE"]
+fn xgi_linear_rung_creation_matches_native_group() {
+    let source_path =
+        env::var("LIBXGWX_GENERATED_BLANK_ROW_FIXTURE").expect("generated blank-row fixture path");
+    let mut generated = XgwxDocument::from_path(source_path).expect("source fixture parses");
+    let source_bytes = generated.to_bytes().unwrap();
+    let before = generated.ladder_programs();
+    let before_program = before[0].as_ref().unwrap();
+    let before_rows = before_program.iec_row_frames().unwrap();
+    let before_records = before_program.iec_record_frames().unwrap();
+    let before_graph = before_program.iec_circuit_graph().unwrap();
+
+    generated
+        .insert_iec_ld_linear_rung(0, 31, "ON", "OFF")
+        .expect("captured linear rung inserts");
+    let encoded = generated.to_bytes().unwrap();
+    let generated = XgwxDocument::parse(&encoded).unwrap();
+    let generated_programs = generated.ladder_programs();
+    let program = generated_programs[0].as_ref().unwrap();
+    let rows = program.iec_row_frames().unwrap();
+    let records = program.iec_record_frames().unwrap();
+    let graph = program.iec_circuit_graph().unwrap();
+    let row = rows
+        .iter()
+        .find(|row| row.group_index == 17 && row.row_index == 31)
+        .expect("created row");
+    assert_eq!(rows.len(), before_rows.len() + 1);
+    assert_eq!(records.len(), before_records.len() + 3);
+    assert_eq!(row.record_count, 3);
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| record.group_index == 17 && record.row_index == 31)
+            .map(|record| record.kind)
+            .collect::<Vec<_>>(),
+        [
+            IecRecordKind::Contact(0x06),
+            IecRecordKind::LongWire,
+            IecRecordKind::Coil(0x0e),
+        ]
+    );
+    assert_eq!(graph.edges.len(), before_graph.edges.len() + 3);
+    assert!(graph.power_components.iter().any(|component| {
+        component.group_index == 17 && component.touches_left_rail && component.touches_right_rail
+    }));
+    let created_operands = crate::iec_ld::element_operands(program)
+        .into_iter()
+        .filter(|operand| operand.raw_y == 31 * 4)
+        .collect::<Vec<_>>();
+    let contact_offset = created_operands
+        .iter()
+        .find(|operand| operand.record_code == 0x06)
+        .unwrap()
+        .string
+        .offset;
+    let coil_offset = created_operands
+        .iter()
+        .find(|operand| operand.record_code == 0x0e)
+        .unwrap()
+        .string
+        .offset;
+    for (contact_kind, coil_kind) in [
+        ("NC", "INVERSE"),
+        ("RISING", "RISING"),
+        ("FALLING", "SET"),
+        ("NEGATED_RISING", "FALLING"),
+        ("NEGATED_FALLING", "RESET"),
+    ] {
+        let mut changed = XgwxDocument::parse(&encoded).unwrap();
+        changed
+            .update_iec_ld_contact_kind(0, contact_offset, "NO", contact_kind)
+            .unwrap();
+        changed
+            .update_iec_ld_coil_kind(0, coil_offset, "OUTPUT", coil_kind)
+            .unwrap();
+
+        let mut directly_created = XgwxDocument::parse(&source_bytes).unwrap();
+        directly_created
+            .insert_iec_ld_rung(0, 31, contact_kind, "ON", coil_kind, "OFF")
+            .unwrap();
+        assert_eq!(
+            changed
+                .ladder_programs()
+                .into_iter()
+                .map(|program| program.unwrap().data)
+                .collect::<Vec<_>>(),
+            directly_created
+                .ladder_programs()
+                .into_iter()
+                .map(|program| program.unwrap().data)
+                .collect::<Vec<_>>(),
+            "kind update matches direct {contact_kind} to {coil_kind} creation",
+        );
+        changed
+            .update_iec_ld_contact_kind(0, contact_offset, contact_kind, "NO")
+            .unwrap();
+        changed
+            .update_iec_ld_coil_kind(0, coil_offset, coil_kind, "OUTPUT")
+            .unwrap();
+        assert_eq!(changed.to_bytes().unwrap(), encoded);
+    }
+    for index in 1..generated_programs.len() {
+        assert_eq!(
+            generated_programs[index].as_ref().unwrap().data,
+            before[index].as_ref().unwrap().data
+        );
+    }
+
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LINEAR_RUNG_FIXTURE").expect("native linear-rung fixture path"),
+    )
+    .expect("native linear-rung fixture parses");
+    for (index, (generated, native)) in generated_programs
+        .iter()
+        .zip(native.ladder_programs())
+        .enumerate()
+    {
+        let generated = generated.as_ref().unwrap();
+        let native = native.unwrap();
+        let differences = generated
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![0x0c88, 0x0f1f, 0x114a, 0x13f9]
+            } else {
+                vec![]
+            },
+            "program {index} differences"
+        );
+    }
+
+    let mut stale = XgwxDocument::parse(&encoded).unwrap();
+    let unchanged = stale.to_bytes().unwrap();
+    assert!(stale.insert_iec_ld_linear_rung(0, 31, "ON", "OFF").is_err());
+    assert!(stale.insert_iec_ld_linear_rung(0, 30, "ON", "OFF").is_err());
+    assert!(
+        stale
+            .insert_iec_ld_linear_rung(0, 66, "WW700", "OFF")
+            .is_err()
+    );
+    assert_eq!(stale.to_bytes().unwrap(), unchanged);
+
+    let mut restored = XgwxDocument::parse(&encoded).unwrap();
+    restored
+        .delete_iec_ld_linear_rung(0, 31, "ON", "OFF")
+        .expect("captured linear rung deletes");
+    assert_eq!(restored.to_bytes().unwrap(), source_bytes);
+    let mut stale_delete = XgwxDocument::parse(&encoded).unwrap();
+    let unchanged = stale_delete.to_bytes().unwrap();
+    assert!(
+        stale_delete
+            .delete_iec_ld_linear_rung(0, 31, "STALE", "OFF")
+            .is_err()
+    );
+    assert_eq!(stale_delete.to_bytes().unwrap(), unchanged);
+
+    for (contact_kind, contact_code) in [
+        ("NO", 0x06),
+        ("NC", 0x07),
+        ("RISING", 0x08),
+        ("FALLING", 0x09),
+        ("NEGATED_RISING", 0x0a),
+        ("NEGATED_FALLING", 0x0b),
+    ] {
+        for (coil_kind, coil_code) in [
+            ("OUTPUT", 0x0e),
+            ("INVERSE", 0x0f),
+            ("SET", 0x10),
+            ("RESET", 0x11),
+            ("RISING", 0x12),
+            ("FALLING", 0x13),
+        ] {
+            let mut variant = XgwxDocument::parse(&source_bytes).unwrap();
+            variant
+                .insert_iec_ld_rung(0, 31, contact_kind, "ON", coil_kind, "OFF")
+                .unwrap();
+            let variant_bytes = variant.to_bytes().unwrap();
+            let variant_program = XgwxDocument::parse(&variant_bytes)
+                .unwrap()
+                .ladder_programs()
+                .remove(0)
+                .unwrap();
+            let kinds = variant_program
+                .iec_record_frames()
+                .unwrap()
+                .into_iter()
+                .filter(|record| record.group_index == 17 && record.row_index == 31)
+                .map(|record| record.kind)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                kinds,
+                [
+                    IecRecordKind::Contact(contact_code),
+                    IecRecordKind::LongWire,
+                    IecRecordKind::Coil(coil_code),
+                ],
+                "{contact_kind} to {coil_kind}",
+            );
+            let mut restored = XgwxDocument::parse(&variant_bytes).unwrap();
+            restored
+                .delete_iec_ld_rung(0, 31, contact_kind, "ON", coil_kind, "OFF")
+                .unwrap();
+            assert_eq!(
+                restored.to_bytes().unwrap(),
+                source_bytes,
+                "{contact_kind} to {coil_kind} inverse",
+            );
+        }
+    }
+    let mut invalid_kind = XgwxDocument::parse(&source_bytes).unwrap();
+    let unchanged = invalid_kind.to_bytes().unwrap();
+    assert!(
+        invalid_kind
+            .insert_iec_ld_rung(0, 31, "INVALID", "ON", "OUTPUT", "OFF")
+            .is_err()
+    );
+    assert_eq!(invalid_kind.to_bytes().unwrap(), unchanged);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_LINEAR_RUNG_FIXTURE and LIBXGWX_NATIVE_LINEAR_RUNG_RESAVE_FIXTURE"]
+fn xgi_native_save_preserves_generated_linear_rung() {
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_LINEAR_RUNG_FIXTURE")
+            .expect("generated linear-rung fixture path"),
+    )
+    .expect("generated linear-rung fixture parses");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LINEAR_RUNG_RESAVE_FIXTURE")
+            .expect("native linear-rung Save As fixture path"),
+    )
+    .expect("native linear-rung fixture parses");
+    let generated_programs = generated.ladder_programs();
+    let native_programs = native.ladder_programs();
+    assert_eq!(generated_programs.len(), native_programs.len());
+    for (generated, native) in generated_programs.into_iter().zip(native_programs) {
+        assert_eq!(generated.unwrap().data, native.unwrap().data);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_RUNG_KIND_CAPTURE_DIR to the captured generated/native-resaved pair directory"]
+fn xgi_native_save_preserves_generated_rung_kinds() {
+    let directory = std::path::PathBuf::from(
+        env::var("LIBXGWX_NATIVE_RUNG_KIND_CAPTURE_DIR")
+            .expect("native rung-kind capture directory"),
+    );
+    for stem in [
+        "falling_set",
+        "nc_inverse",
+        "rising_rising",
+        "negated_rising_falling",
+        "negated_falling_reset",
+    ] {
+        let generated =
+            XgwxDocument::from_path(directory.join(format!("generated_{stem}_l31.xgwx")))
+                .expect("generated rung-kind fixture parses");
+        let native =
+            XgwxDocument::from_path(directory.join(format!("native_resaved_{stem}_l31.xgwx")))
+                .expect("native-resaved rung-kind fixture parses");
+        let generated_programs = generated.ladder_programs();
+        let native_programs = native.ladder_programs();
+        assert_eq!(generated_programs.len(), native_programs.len(), "{stem}");
+        for (index, (generated, native)) in generated_programs
+            .into_iter()
+            .zip(native_programs)
+            .enumerate()
+        {
+            assert_eq!(
+                generated.unwrap().data,
+                native.unwrap().data,
+                "{stem} program {index}",
+            );
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_local_address_updates_text_and_binary_number() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let mut doc = XgwxDocument::from_path(path).expect("fixture parses");
+    let before_programs = doc
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("program parses").data)
+        .collect::<Vec<_>>();
+    doc.update_iec_local_symbol_address(0, 5, "ON", "%MX8", "%MX9")
+        .expect("mapped address edit");
+    let encoded = doc.to_bytes().expect("serialize");
+    let edited = XgwxDocument::parse(&encoded).expect("round trip");
+    assert_eq!(
+        edited.iec_local_symbols()[0].as_ref().unwrap()[5]
+            .address
+            .as_deref(),
+        Some("%MX9")
+    );
+    let after_programs = edited
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("program parses").data)
+        .collect::<Vec<_>>();
+    assert_eq!(before_programs, after_programs);
+
+    let xml = roxmltree::Document::parse(&edited.xml).expect("XML parses");
+    let table = xml
+        .descendants()
+        .find(|node| node.has_tag_name("Program"))
+        .and_then(|program| {
+            program
+                .descendants()
+                .find(|node| node.has_tag_name("Symbols"))
+        })
+        .expect("local symbols");
+    let data = decode_base64_payload(table.text().unwrap_or_default(), true)
+        .expect("symbols decode")
+        .data;
+    let strings = extract_utf16_marker_strings(&data, false, true);
+    let starts = strings
+        .iter()
+        .enumerate()
+        .filter_map(|(index, field)| (field.value == "PB50").then_some(index))
+        .collect::<Vec<_>>();
+    let record = &strings[starts[5]..starts[6]];
+    assert_eq!(record[2].value, "%MX9");
+    let numeric_offset = record[record.len() - 3].end_offset;
+    assert_eq!(
+        &data[numeric_offset..numeric_offset + 4],
+        &9u32.to_le_bytes()
+    );
+
+    let mut longer = XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap())
+        .expect("fixture parses");
+    longer
+        .update_iec_local_symbol_address(0, 5, "ON", "%MX8", "%MX100")
+        .expect("variable-length address edit");
+    let encoded = longer.to_bytes().expect("serialize longer address");
+    let mut restored = XgwxDocument::parse(&encoded).expect("parse longer address");
+    assert_eq!(
+        restored.iec_local_symbols()[0].as_ref().unwrap()[5]
+            .address
+            .as_deref(),
+        Some("%MX100")
+    );
+    restored
+        .update_iec_local_symbol_address(0, 5, "ON", "%MX100", "%MX8")
+        .expect("restore shorter address");
+    assert_eq!(
+        restored.iec_local_symbols()[0].as_ref().unwrap()[5]
+            .address
+            .as_deref(),
+        Some("%MX8")
+    );
+
+    let mut unmapped = XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap())
+        .expect("fixture parses");
+    unmapped
+        .update_iec_local_symbol_address(0, 5, "ON", "%MX8", "")
+        .expect("clear mapped BOOL address");
+    let generated_symbols = unmapped.iec_local_symbols();
+    let generated_on = &generated_symbols[0].as_ref().unwrap()[5];
+    assert_eq!(generated_on.address, None);
+    assert_eq!(generated_on.storage_class, "");
+    assert_eq!(generated_on.allocation_number, None);
+    assert_eq!(generated_on.allocation_width, None);
+    if let Ok(native_path) = env::var("LIBXGWX_NATIVE_UNMAP_FIXTURE") {
+        let native = XgwxDocument::from_path(native_path).expect("native unmap capture parses");
+        let native_symbols = native.iec_local_symbols();
+        let native_on = &native_symbols[0].as_ref().unwrap()[5];
+        assert_eq!(generated_on.address, native_on.address);
+        assert_eq!(generated_on.storage_class, native_on.storage_class);
+        assert_eq!(generated_on.allocation_number, native_on.allocation_number);
+        assert_eq!(generated_on.allocation_width, native_on.allocation_width);
+        assert_eq!(generated_on.data_type, native_on.data_type);
+    }
+    unmapped
+        .update_iec_local_symbol_address(0, 5, "ON", "", "%MX8")
+        .expect("restore mapped BOOL address");
+    assert_eq!(
+        unmapped.iec_local_symbols()[0].as_ref().unwrap()[5],
+        XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap())
+            .unwrap()
+            .iec_local_symbols()[0]
+            .as_ref()
+            .unwrap()[5]
+    );
+    let mut retyped =
+        XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap()).unwrap();
+    retyped
+        .update_iec_local_symbol_address(0, 5, "ON", "%MX8", "")
+        .unwrap();
+    retyped
+        .update_iec_local_symbol_type(0, 5, "ON", "BOOL", "WORD")
+        .expect("cleared mapping permits primitive type change");
+
+    let mut dotted = XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap())
+        .expect("fixture parses");
+    dotted
+        .update_iec_local_symbol_address(4, 3, "LED상태", "%QX0.1.1", "%QX0.1.5")
+        .expect("captured dotted address edit");
+    let xml = roxmltree::Document::parse(&dotted.xml).expect("XML parses");
+    let table = xml
+        .descendants()
+        .filter(|node| node.has_tag_name("Program"))
+        .nth(4)
+        .unwrap()
+        .descendants()
+        .find(|node| node.has_tag_name("Symbols"))
+        .unwrap();
+    let data = decode_base64_payload(table.text().unwrap_or_default(), true)
+        .unwrap()
+        .data;
+    let strings = extract_utf16_marker_strings(&data, false, true);
+    let starts = strings
+        .iter()
+        .enumerate()
+        .filter_map(|(index, field)| (field.value == "PB50").then_some(index))
+        .collect::<Vec<_>>();
+    let record = &strings[starts[3]..starts[4]];
+    assert_eq!(record[2].value, "%QX0.1.5");
+    let numeric_offset = record[record.len() - 3].end_offset;
+    assert_eq!(
+        &data[numeric_offset..numeric_offset + 4],
+        &69u32.to_le_bytes()
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_all_mapped_bool_addresses_clear_and_restore() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let original = XgwxDocument::from_path(&path).expect("fixture parses");
+    let original_symbols = original
+        .iec_local_symbols()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .expect("symbol tables parse");
+    let original_programs = original
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("program parses").data)
+        .collect::<Vec<_>>();
+    let mut checked = 0;
+    for (program_index, symbols) in original_symbols.iter().enumerate() {
+        for (symbol_index, symbol) in symbols.iter().enumerate() {
+            let Some(address) = symbol.address.as_deref() else {
+                continue;
+            };
+            if symbol.data_type.as_deref() != Some("BOOL")
+                || !["%MX", "%IX", "%QX"]
+                    .iter()
+                    .any(|area| address.starts_with(area))
+            {
+                continue;
+            }
+            let mut edited = XgwxDocument::from_path(&path).expect("fixture parses");
+            edited
+                .update_iec_local_symbol_address(
+                    program_index,
+                    symbol_index,
+                    &symbol.name,
+                    address,
+                    "",
+                )
+                .unwrap_or_else(|error| panic!("cannot clear {} {address}: {error}", symbol.name));
+            let cleared = XgwxDocument::parse(&edited.to_bytes().expect("serialize clear"))
+                .expect("clear reparses");
+            let cleared_symbols = cleared.iec_local_symbols();
+            let cleared_symbol = &cleared_symbols[program_index].as_ref().unwrap()[symbol_index];
+            assert_eq!(cleared_symbol.address, None, "{}", symbol.name);
+            assert_eq!(cleared_symbol.storage_class, "", "{}", symbol.name);
+            assert_eq!(cleared_symbol.allocation_number, None, "{}", symbol.name);
+            assert_eq!(cleared_symbol.allocation_width, None, "{}", symbol.name);
+            let mut restored = cleared;
+            restored
+                .update_iec_local_symbol_address(
+                    program_index,
+                    symbol_index,
+                    &symbol.name,
+                    "",
+                    address,
+                )
+                .unwrap_or_else(|error| {
+                    panic!("cannot restore {} {address}: {error}", symbol.name)
+                });
+            let restored = XgwxDocument::parse(&restored.to_bytes().expect("serialize restore"))
+                .expect("restore reparses");
+            assert_eq!(
+                restored
+                    .iec_local_symbols()
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>()
+                    .expect("restored tables parse"),
+                original_symbols,
+                "{} {address}",
+                symbol.name
+            );
+            assert_eq!(
+                restored
+                    .ladder_programs()
+                    .into_iter()
+                    .map(|program| program.expect("restored program parses").data)
+                    .collect::<Vec<_>>(),
+                original_programs,
+                "{} {address}",
+                symbol.name
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 1, "expected multiple mapped BOOL symbols");
+    println!("checked {checked} mapped BOOL symbols across seven IEC programs");
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_short_wire_delete_and_repair_restore_program_data() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let original = XgwxDocument::from_path(&path).expect("fixture parses");
+    let original_programs = original
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.expect("program parses").data)
+        .collect::<Vec<_>>();
+    let expected = [
+        (0, 0x1fd1, 7),
+        (0, 0x2340, 7),
+        (1, 0x448, 10),
+        (2, 0x180e, 10),
+    ];
+    let programs = original.ladder_programs();
+    let sites = programs
+        .iter()
+        .enumerate()
+        .flat_map(|(program_index, program)| {
+            program
+                .as_ref()
+                .unwrap()
+                .iec_horizontal_wire_deletion_sites()
+                .expect("wire sites parse")
+                .into_iter()
+                .map(move |site| (program_index, site.wire_offset, site.raw_x))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(sites, expected);
+    for (program_index, wire_offset, raw_x) in expected {
+        let mut edited = XgwxDocument::from_path(&path).expect("fixture parses");
+        assert!(
+            edited
+                .delete_iec_ld_horizontal_wire(program_index, wire_offset, raw_x + 1)
+                .is_err()
+        );
+        edited
+            .delete_iec_ld_horizontal_wire(program_index, wire_offset, raw_x)
+            .expect("captured short wire deletes");
+        let deleted = XgwxDocument::parse(&edited.to_bytes().unwrap()).expect("deletion reparses");
+        assert!(
+            deleted.ladder_programs()[program_index]
+                .as_ref()
+                .unwrap()
+                .iec_horizontal_wire_repair_sites()
+                .unwrap()
+                .iter()
+                .any(|site| site.insertion_offset == wire_offset && site.raw_x == raw_x)
+        );
+        let mut repaired = deleted;
+        repaired
+            .repair_iec_ld_horizontal_wire(program_index, wire_offset, raw_x)
+            .expect("short wire repairs");
+        assert_eq!(
+            repaired
+                .ladder_programs()
+                .into_iter()
+                .map(|program| program.expect("program parses").data)
+                .collect::<Vec<_>>(),
+            original_programs
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_local_rename_updates_all_captured_references() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let mut doc = XgwxDocument::from_path(path).expect("fixture parses");
+    let before = doc.to_bytes().expect("original bytes");
+    assert!(doc.rename_iec_local_symbol(0, 5, "ON", "OFF").is_err());
+    assert_eq!(doc.to_bytes().unwrap(), before);
+    doc.rename_iec_local_symbol(0, 5, "ON", "ON2")
+        .expect("rename known references");
+    let saved = XgwxDocument::parse(&doc.to_bytes().unwrap()).expect("round trip");
+    assert_eq!(
+        saved.iec_local_symbols()[0].as_ref().unwrap()[5].name,
+        "ON2"
+    );
+    let programs = saved.ladder_programs();
+    let strings = &programs[0].as_ref().unwrap().strings;
+    assert_eq!(strings.iter().filter(|item| item.value == "ON2").count(), 6);
+    assert_eq!(strings.iter().filter(|item| item.value == "ON").count(), 0);
+
+    let mut unicode = XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap())
+        .expect("fixture parses");
+    unicode
+        .rename_iec_local_symbol(0, 12, "조명_1", "조명_1A")
+        .expect("rename Unicode references");
+    let programs = unicode.ladder_programs();
+    let strings = extract_utf16_marker_strings(&programs[0].as_ref().unwrap().data, false, false);
+    assert_eq!(
+        strings
+            .iter()
+            .filter(|item| item.value == "조명_1A")
+            .count(),
+        8
+    );
+    assert_eq!(
+        strings.iter().filter(|item| item.value == "조명_1").count(),
+        0
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_contact_kind_changes_cover_all_captured_contact_codes() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let original = XgwxDocument::from_path(&path).expect("fixture parses");
+    let original_programs = original
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.unwrap().data)
+        .collect::<Vec<_>>();
+
+    let mut changed = XgwxDocument::from_path(&path).unwrap();
+    changed
+        .update_iec_ld_contact_kind(0, 238, "RISING", "NEGATED_RISING")
+        .unwrap();
+    let changed_programs = changed.ladder_programs();
+    assert_eq!(changed_programs[0].as_ref().unwrap().data[224], 0x0a);
+    for index in 1..changed_programs.len() {
+        assert_eq!(
+            changed_programs[index].as_ref().unwrap().data,
+            original_programs[index]
+        );
+    }
+    assert!(
+        changed
+            .update_iec_ld_contact_kind(0, 238, "RISING", "NO")
+            .is_err()
+    );
+    changed
+        .update_iec_ld_contact_kind(0, 238, "NEGATED_RISING", "RISING")
+        .unwrap();
+    assert_eq!(
+        changed.ladder_programs()[0].as_ref().unwrap().data,
+        original_programs[0]
+    );
+
+    let mut negated = XgwxDocument::from_path(path).unwrap();
+    negated
+        .update_iec_ld_contact_kind(6, 555, "NEGATED_RISING", "NO")
+        .unwrap();
+    assert_eq!(
+        negated.ladder_programs()[6].as_ref().unwrap().data[541],
+        0x06
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_branch_segment_remove_and_restore_is_byte_exact() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let mut document = XgwxDocument::from_path(path).expect("fixture parses");
+    let original = document
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.unwrap().data)
+        .collect::<Vec<_>>();
+
+    document
+        .edit_iec_ld_branch_segment(6, 3, 3, 4, 6, true, false)
+        .expect("remove middle parallel branch segment");
+    let removed = document.ladder_programs();
+    assert_eq!(
+        removed[6]
+            .as_ref()
+            .unwrap()
+            .iec_geometry()
+            .unwrap()
+            .vertical
+            .len(),
+        85
+    );
+    assert!(
+        removed[6]
+            .as_ref()
+            .unwrap()
+            .iec_geometry()
+            .unwrap()
+            .vertical
+            .iter()
+            .all(|connection| !(connection.group_index == 3
+                && connection.start_row_index == 3
+                && connection.end_row_index == 4
+                && connection.x == 6))
+    );
+    for index in 0..6 {
+        assert_eq!(removed[index].as_ref().unwrap().data, original[index]);
+    }
+
+    let removed_bytes = document.to_bytes().unwrap();
+    let mut restored = XgwxDocument::parse(&removed_bytes).expect("removed file reparses");
+    assert!(
+        restored
+            .edit_iec_ld_branch_segment(6, 3, 3, 4, 6, true, true)
+            .is_err()
+    );
+    restored
+        .edit_iec_ld_branch_segment(6, 3, 3, 4, 6, false, true)
+        .expect("restore middle parallel branch segment");
+    let restored_programs = restored.ladder_programs();
+    for index in 0..restored_programs.len() {
+        assert_eq!(
+            restored_programs[index].as_ref().unwrap().data,
+            original[index]
+        );
+    }
+
+    restored
+        .edit_iec_ld_branch_segment(0, 3, 3, 4, 6, true, false)
+        .expect("remove captured final branch row");
+    let final_removed = restored.ladder_programs();
+    let changed = final_removed[0].as_ref().unwrap();
+    assert_eq!(changed.iec_row_frames().unwrap().len(), 85);
+    assert_eq!(changed.iec_record_frames().unwrap().len(), 286);
+    assert_eq!(changed.iec_geometry().unwrap().vertical.len(), 26);
+    for index in 1..7 {
+        assert_eq!(final_removed[index].as_ref().unwrap().data, original[index]);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_BRANCH_SEGMENT_FIXTURE and LIBXGWX_NATIVE_BRANCH_SEGMENT_FIXTURE"]
+fn xgi_native_save_preserves_generated_branch_segment_removal() {
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_BRANCH_SEGMENT_FIXTURE")
+            .expect("generated branch-segment fixture path"),
+    )
+    .expect("generated fixture parses");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BRANCH_SEGMENT_FIXTURE")
+            .expect("native branch-segment fixture path"),
+    )
+    .expect("native Save As fixture parses");
+    let generated_programs = generated.ladder_programs();
+    let native_programs = native.ladder_programs();
+    assert_eq!(generated_programs.len(), 7);
+    assert_eq!(native_programs.len(), generated_programs.len());
+    for (index, (generated, native)) in generated_programs
+        .iter()
+        .zip(native_programs.iter())
+        .enumerate()
+    {
+        assert_eq!(
+            generated.as_ref().unwrap().data,
+            native.as_ref().unwrap().data,
+            "program {index}"
+        );
+    }
+    let geometry = native_programs[6].as_ref().unwrap().iec_geometry().unwrap();
+    assert_eq!(geometry.vertical.len(), 85);
+    assert!(geometry.vertical.iter().all(|connection| {
+        !(connection.group_index == 3
+            && connection.start_row_index == 3
+            && connection.end_row_index == 4
+            && connection.x == 6)
+    }));
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_FINAL_BRANCH_FIXTURE"]
+fn xgi_final_branch_row_removal_matches_native_structure() {
+    let source =
+        std::fs::read(env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path"))
+            .expect("read smart home fixture");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_FINAL_BRANCH_FIXTURE").expect("native final-branch fixture path"),
+    )
+    .expect("native final-branch fixture parses");
+    let original = XgwxDocument::parse(&source).expect("fixture parses");
+    let original_programs = original.ladder_programs();
+    let mut generated = XgwxDocument::parse(&source).expect("fixture reparses");
+    generated
+        .edit_iec_ld_branch_segment(0, 3, 3, 4, 6, true, false)
+        .expect("remove captured final branch row");
+    let generated_programs = generated.ladder_programs();
+    let native_programs = native.ladder_programs();
+    assert_eq!(generated_programs.len(), 7);
+    assert_eq!(native_programs.len(), 7);
+    let generated_program = generated_programs[0].as_ref().unwrap();
+    let native_program = native_programs[0].as_ref().unwrap();
+    let generated_rows = generated_program.iec_row_frames().unwrap();
+    let opaque_row_cache_offsets = generated_rows
+        .iter()
+        .filter(|row| matches!(row.row_index, 21 | 25 | 27))
+        .map(|row| row.start + 17)
+        .collect::<Vec<_>>();
+    let differences = generated_program
+        .data
+        .iter()
+        .zip(&native_program.data)
+        .enumerate()
+        .filter_map(|(offset, (generated, native))| (generated != native).then_some(offset))
+        .collect::<Vec<_>>();
+    assert_eq!(differences, opaque_row_cache_offsets);
+    for index in 1..7 {
+        assert_eq!(
+            generated_programs[index].as_ref().unwrap().data,
+            original_programs[index].as_ref().unwrap().data,
+        );
+        assert_eq!(
+            native_programs[index].as_ref().unwrap().data,
+            original_programs[index].as_ref().unwrap().data,
+        );
+    }
+    let changed = generated_program;
+    assert_eq!(changed.iec_row_frames().unwrap().len(), 85);
+    assert_eq!(changed.iec_record_frames().unwrap().len(), 286);
+    assert_eq!(changed.iec_geometry().unwrap().vertical.len(), 26);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_GENERATED_CONTACT_KIND_FIXTURE and LIBXGWX_NATIVE_CONTACT_KIND_FIXTURE"]
+fn xgi_native_save_preserves_generated_contact_kind() {
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_CONTACT_KIND_FIXTURE")
+            .expect("generated contact-kind fixture path"),
+    )
+    .expect("generated fixture parses");
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_CONTACT_KIND_FIXTURE").expect("native contact-kind fixture path"),
+    )
+    .expect("native Save As fixture parses");
+
+    let generated_programs = generated.ladder_programs();
+    let native_programs = native.ladder_programs();
+    assert_eq!(generated_programs.len(), native_programs.len());
+    for (index, (generated, native)) in generated_programs
+        .into_iter()
+        .zip(native_programs.iter())
+        .enumerate()
+    {
+        assert_eq!(
+            generated.unwrap().data,
+            native.as_ref().unwrap().data,
+            "program {index}"
+        );
+    }
+    assert_eq!(native_programs[0].as_ref().unwrap().data[224], 0x0a);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_local_instance_rename_updates_function_header() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let mut doc = XgwxDocument::from_path(path).expect("fixture parses");
+    let original = doc.to_bytes().expect("original bytes");
+    assert!(
+        doc.rename_iec_local_symbol(0, 1, "INST3", "INST_사본1")
+            .is_err()
+    );
+    assert_eq!(doc.to_bytes().unwrap(), original);
+    doc.rename_iec_local_symbol(0, 1, "INST3", "INST4")
+        .expect("rename classified function instance");
+    let saved = XgwxDocument::parse(&doc.to_bytes().unwrap()).expect("round trip");
+    let symbols = saved.iec_local_symbols();
+    assert_eq!(symbols[0].as_ref().unwrap()[1].name, "INST4");
+    assert_eq!(
+        symbols[0].as_ref().unwrap()[1].type_reference.as_deref(),
+        Some("R_TRIG")
+    );
+    let programs = saved.ladder_programs();
+    let renamed = programs[0]
+        .as_ref()
+        .unwrap()
+        .iec_function_blocks()
+        .unwrap()
+        .into_iter()
+        .filter(|block| {
+            block
+                .instance
+                .as_ref()
+                .is_some_and(|item| item.value == "INST4")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(renamed.len(), 1);
+    assert_eq!(renamed[0].name.value, "R_TRIG");
+    assert!(
+        programs[0]
+            .as_ref()
+            .unwrap()
+            .iec_function_blocks()
+            .unwrap()
+            .iter()
+            .all(|block| block
+                .instance
+                .as_ref()
+                .is_none_or(|item| item.value != "INST3"))
+    );
+
+    let mut same_name = XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap())
+        .expect("fixture parses");
+    same_name
+        .rename_iec_local_symbol(0, 0, "FF", "FF_INST")
+        .expect("rename instance without changing function type");
+    let saved = XgwxDocument::parse(&same_name.to_bytes().unwrap()).expect("round trip");
+    assert_eq!(
+        saved.iec_local_symbols()[0].as_ref().unwrap()[0].name,
+        "FF_INST"
+    );
+    let block = saved.ladder_programs()[0]
+        .as_ref()
+        .unwrap()
+        .iec_function_blocks()
+        .unwrap()
+        .into_iter()
+        .find(|block| {
+            block
+                .instance
+                .as_ref()
+                .is_some_and(|item| item.value == "FF_INST")
+        })
+        .expect("renamed FF instance");
+    assert_eq!(block.name.value, "FF");
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_INSTANCE_FIXTURE to an XG5000 Save As capture"]
+fn xgi_native_instance_save_preserves_rename() {
+    let path = env::var("LIBXGWX_NATIVE_INSTANCE_FIXTURE").expect("native Save As fixture path");
+    let doc = XgwxDocument::from_path(path).expect("native project parses");
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_INSTANCE_FIXTURE").expect("generated fixture path"),
+    )
+    .expect("generated project parses");
+    assert_eq!(doc.programs().len(), 7);
+    for (native, generated) in doc
+        .ladder_programs()
+        .into_iter()
+        .zip(generated.ladder_programs())
+    {
+        assert_eq!(native.unwrap().data, generated.unwrap().data);
+    }
+    let symbols = doc.iec_local_symbols();
+    let instance = &symbols[0].as_ref().unwrap()[1];
+    assert_eq!(instance.name, "INST4");
+    assert_eq!(instance.type_reference.as_deref(), Some("R_TRIG"));
+    let blocks = doc.ladder_programs()[0]
+        .as_ref()
+        .unwrap()
+        .iec_function_blocks()
+        .unwrap();
+    assert_eq!(
+        blocks
+            .iter()
+            .filter(|block| block
+                .instance
+                .as_ref()
+                .is_some_and(|item| item.value == "INST4"))
+            .count(),
+        1
+    );
+    assert!(blocks.iter().all(|block| {
+        block
+            .instance
+            .as_ref()
+            .is_none_or(|item| item.value != "INST3")
+    }));
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_local_symbol_description_round_trips() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let mut doc = XgwxDocument::from_path(path).expect("fixture parses");
+    let before = doc
+        .ladder_programs()
+        .into_iter()
+        .map(|program| program.unwrap().data)
+        .collect::<Vec<_>>();
+    let original = doc.to_bytes().unwrap();
+    assert!(
+        doc.update_iec_local_symbol_description(0, 5, "ON", "stale", "Living room switch")
+            .is_err()
+    );
+    assert_eq!(doc.to_bytes().unwrap(), original);
+    doc.update_iec_local_symbol_description(0, 5, "ON", "", "Living room switch")
+        .expect("edit empty local description");
+    let saved = XgwxDocument::parse(&doc.to_bytes().unwrap()).expect("round trip");
+    assert_eq!(
+        saved.iec_local_symbols()[0].as_ref().unwrap()[5]
+            .description
+            .as_deref(),
+        Some("Living room switch")
+    );
+    assert_eq!(
+        saved
+            .ladder_programs()
+            .into_iter()
+            .map(|program| program.unwrap().data)
+            .collect::<Vec<_>>(),
+        before
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE, LIBXGWX_NATIVE_DESCRIPTION_FIXTURE and LIBXGWX_GENERATED_DESCRIPTION_FIXTURE"]
+fn xgi_native_description_save_preserves_edit() {
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_DESCRIPTION_FIXTURE").expect("native Save As fixture path"),
+    )
+    .expect("native project parses");
+    let generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_DESCRIPTION_FIXTURE").expect("generated fixture path"),
+    )
+    .expect("generated project parses");
+    let original = XgwxDocument::from_path(
+        env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("source fixture path"),
+    )
+    .expect("source project parses");
+    assert_eq!(native.programs().len(), 7);
+    assert_eq!(
+        native.iec_local_symbols()[0].as_ref().unwrap()[5]
+            .description
+            .as_deref(),
+        Some("Living room switch")
+    );
+    for (index, ((native, generated), original)) in native
+        .ladder_programs()
+        .into_iter()
+        .zip(generated.ladder_programs())
+        .zip(original.ladder_programs())
+        .enumerate()
+    {
+        let native = native.unwrap();
+        let generated = generated.unwrap();
+        let original = original.unwrap();
+        assert_eq!(original.data, generated.data, "generated program {index}");
+        assert_eq!(
+            native.data.len(),
+            generated.data.len(),
+            "program {index} length"
+        );
+        let differences = native
+            .data
+            .iter()
+            .zip(&generated.data)
+            .enumerate()
+            .filter(|(_, (a, b))| a != b)
+            .map(|(offset, _)| offset)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![3208, 3871, 4426]
+            } else {
+                vec![]
+            },
+            "native program {index} changes"
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE, LIBXGWX_NATIVE_LOCAL_ADD_FIXTURE and LIBXGWX_NATIVE_GENERATED_LOCAL_ADD_FIXTURE"]
+fn xgi_local_symbol_insert_matches_native_record() {
+    fn local_payload(doc: &XgwxDocument) -> Vec<u8> {
+        let xml = roxmltree::Document::parse(&doc.xml).unwrap();
+        let table = xml
+            .descendants()
+            .find(|node| node.has_tag_name("Program"))
+            .unwrap()
+            .descendants()
+            .find(|node| node.has_tag_name("LocalVar"))
+            .unwrap()
+            .descendants()
+            .find(|node| node.has_tag_name("Symbols"))
+            .unwrap();
+        decode_base64_payload(
+            table.text().unwrap(),
+            table.attribute("Compressed") == Some("1"),
+        )
+        .unwrap()
+        .data
+    }
+    let source =
+        XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture"))
+            .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LOCAL_ADD_FIXTURE").expect("native local add fixture"),
+    )
+    .unwrap();
+    let native_generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_GENERATED_LOCAL_ADD_FIXTURE")
+            .expect("XG5000 Save As of generated local add"),
+    )
+    .unwrap();
+    let mut generated = source.clone();
+    let original_bytes = generated.to_bytes().unwrap();
+    assert!(
+        generated
+            .insert_iec_local_symbol(0, "ON", "BOOL", "")
+            .is_err()
+    );
+    assert!(
+        generated
+            .insert_iec_local_symbol(0, "TEST_LOCAL", "INVALID", "")
+            .is_err()
+    );
+    assert_eq!(generated.to_bytes().unwrap(), original_bytes);
+    generated
+        .insert_iec_local_symbol(0, "TEST_LOCAL", "BOOL", "")
+        .unwrap();
+    let generated = XgwxDocument::parse(&generated.to_bytes().unwrap()).unwrap();
+    let generated_tables = generated.iec_local_symbols();
+    let native_tables = native.iec_local_symbols();
+    let symbols = generated_tables[0].as_ref().unwrap();
+    let native_symbols = native_tables[0].as_ref().unwrap();
+    assert_eq!(symbols.len(), 16);
+    assert_eq!(symbols[6].name, "TEST_LOCAL");
+    assert_eq!(symbols[6].data_type.as_deref(), Some("BOOL"));
+    assert_eq!(symbols[6].storage_class, "");
+    assert_eq!(symbols[6].allocation_number, None);
+    assert_eq!(symbols[6].allocation_width, None);
+    assert_eq!(symbols[6].name, native_symbols[6].name);
+    let generated_payload = local_payload(&generated);
+    let native_payload = local_payload(&native);
+    let generated_record = &generated_payload[symbols[6].record_offset..symbols[7].record_offset];
+    let native_record =
+        &native_payload[native_symbols[6].record_offset..native_symbols[7].record_offset];
+    assert_eq!(generated_record, native_record);
+    assert_eq!(local_payload(&native_generated), native_payload);
+    for (before, after) in source
+        .ladder_programs()
+        .into_iter()
+        .zip(generated.ladder_programs())
+    {
+        assert_eq!(before.unwrap().data, after.unwrap().data);
+    }
+    for (before, after) in generated
+        .ladder_programs()
+        .into_iter()
+        .zip(native_generated.ladder_programs())
+    {
+        assert_eq!(before.unwrap().data, after.unwrap().data);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE, LIBXGWX_GENERATED_LOCAL_ADD_FIXTURE, LIBXGWX_NATIVE_LOCAL_ADD_FIXTURE, LIBXGWX_NATIVE_LOCAL_DELETE_FIXTURE and LIBXGWX_NATIVE_GENERATED_LOCAL_DELETE_FIXTURE"]
+fn xgi_local_symbol_delete_matches_native_record_removal() {
+    fn local_payload(doc: &XgwxDocument) -> Vec<u8> {
+        let xml = roxmltree::Document::parse(&doc.xml).unwrap();
+        let table = xml
+            .descendants()
+            .find(|node| node.has_tag_name("Program"))
+            .unwrap()
+            .descendants()
+            .find(|node| node.has_tag_name("LocalVar"))
+            .unwrap()
+            .descendants()
+            .find(|node| node.has_tag_name("Symbols"))
+            .unwrap();
+        decode_base64_payload(
+            table.text().unwrap(),
+            table.attribute("Compressed") == Some("1"),
+        )
+        .unwrap()
+        .data
+    }
+    let source =
+        XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture"))
+            .unwrap();
+    let generated_add = XgwxDocument::from_path(
+        env::var("LIBXGWX_GENERATED_LOCAL_ADD_FIXTURE").expect("generated add fixture"),
+    )
+    .unwrap();
+    let native_add = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LOCAL_ADD_FIXTURE").expect("native add fixture"),
+    )
+    .unwrap();
+    let native_delete = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LOCAL_DELETE_FIXTURE").expect("native delete fixture"),
+    )
+    .unwrap();
+    let native_generated_delete = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_GENERATED_LOCAL_DELETE_FIXTURE")
+            .expect("XG5000 Save As of generated delete"),
+    )
+    .unwrap();
+    let native_add_symbols = native_add.iec_local_symbols()[0].as_ref().unwrap().clone();
+    let native_add_payload = local_payload(&native_add);
+    let mut native_expected = native_add_payload.clone();
+    native_expected.drain(native_add_symbols[6].record_offset..native_add_symbols[7].record_offset);
+    assert_eq!(local_payload(&native_delete), native_expected);
+    assert_eq!(local_payload(&native_generated_delete), native_expected);
+    let mut edited = generated_add.clone();
+    let before_bytes = edited.to_bytes().unwrap();
+    assert!(edited.delete_iec_local_symbol(0, 6, "STALE").is_err());
+    assert!(edited.delete_iec_local_symbol(0, 5, "ON").is_err());
+    assert_eq!(edited.to_bytes().unwrap(), before_bytes);
+    edited.delete_iec_local_symbol(0, 6, "TEST_LOCAL").unwrap();
+    let edited = XgwxDocument::parse(&edited.to_bytes().unwrap()).unwrap();
+    assert_eq!(
+        edited
+            .iec_local_symbols()
+            .into_iter()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>(),
+        source
+            .iec_local_symbols()
+            .into_iter()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(local_payload(&edited), local_payload(&source));
+    for (before, after) in generated_add
+        .ladder_programs()
+        .into_iter()
+        .zip(edited.ladder_programs())
+    {
+        assert_eq!(before.unwrap().data, after.unwrap().data);
+    }
+    for (index, (generated, native)) in edited
+        .ladder_programs()
+        .into_iter()
+        .zip(native_generated_delete.ladder_programs())
+        .enumerate()
+    {
+        let generated = generated.unwrap();
+        let native = native.unwrap();
+        assert_eq!(
+            generated.data.len(),
+            native.data.len(),
+            "program {index} length"
+        );
+        let differences = generated
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![3208, 3871, 4426]
+            } else {
+                vec![]
+            },
+            "program {index} differences"
+        );
+    }
+    assert_eq!(
+        native_delete.iec_local_symbols()[0].as_ref().unwrap().len(),
+        15
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_LINEAR_CONTACT_FIXTURE"]
+fn xgi_linear_row_allows_second_wire_contact_insertion() {
+    let fixture = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture");
+    let mut document = XgwxDocument::from_path(&fixture).unwrap();
+    let original = document
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let sites = original[2].iec_no_contact_insertion_sites().unwrap();
+    assert!(
+        sites
+            .iter()
+            .any(|site| site.row_index == 40 && site.wire_offset == 6856),
+        "sites {sites:?}, wire {:?}",
+        &original[2].data[6856..6875]
+    );
+    document
+        .insert_iec_ld_no_contact(2, 6856, 19, 16, 91, "도어열림")
+        .unwrap();
+    let changed = document
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LINEAR_CONTACT_FIXTURE").expect("XG5000 Save As capture"),
+    )
+    .unwrap();
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let row = changed[2]
+        .iec_row_frames()
+        .unwrap()
+        .into_iter()
+        .find(|row| row.group_index == 14 && row.row_index == 40)
+        .unwrap();
+    assert_eq!(row.record_count, 7);
+    assert_eq!(changed[2].data[row.start + 29], 19);
+    assert_eq!(
+        changed[2]
+            .iec_record_frames()
+            .unwrap()
+            .into_iter()
+            .filter(|record| record.group_index == 14 && record.row_index == 40)
+            .count(),
+        7
+    );
+    for index in [0, 1, 3, 4, 5, 6] {
+        assert_eq!(changed[index].data, original[index].data, "program {index}");
+    }
+    for index in 0..7 {
+        assert_eq!(changed[index].data.len(), native_programs[index].data.len());
+        let differences = changed[index]
+            .data
+            .iter()
+            .zip(&native_programs[index].data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            Vec::<usize>::new(),
+            "program {index} differences"
+        );
+    }
+    for (kind, code) in [
+        ("NO", 0x06),
+        ("NC", 0x07),
+        ("RISING", 0x08),
+        ("FALLING", 0x09),
+        ("NEGATED_RISING", 0x0a),
+        ("NEGATED_FALLING", 0x0b),
+    ] {
+        let mut variant = XgwxDocument::from_path(&fixture).unwrap();
+        variant
+            .insert_iec_ld_contact(2, 6856, 19, 16, 91, kind, "도어열림")
+            .unwrap();
+        let program = variant.ladder_programs().remove(2).unwrap();
+        assert!(
+            program.iec_circuit_graph().is_some(),
+            "{kind} circuit graph"
+        );
+        assert!(program.iec_record_frames().unwrap().iter().any(|record| {
+            record.kind == IecRecordKind::Contact(code)
+                && program.data.get(record.offset + 5) == Some(&19)
+        }));
+        let site = program
+            .iec_no_contact_cell_deletion_sites()
+            .unwrap()
+            .into_iter()
+            .find(|site| site.raw_x == 19 && site.contact_code == code)
+            .expect("inserted contact deletion site");
+        let before = variant.to_bytes().unwrap();
+        assert!(
+            variant
+                .delete_iec_ld_contact_cell(
+                    2,
+                    site.contact_offset,
+                    site.raw_x,
+                    if kind == "NO" { "NC" } else { "NO" },
+                    "도어열림",
+                )
+                .is_err(),
+            "{kind} stale kind guard"
+        );
+        assert_eq!(
+            variant.to_bytes().unwrap(),
+            before,
+            "{kind} rejected atomically"
+        );
+        variant
+            .delete_iec_ld_contact_cell(2, site.contact_offset, site.raw_x, kind, "도어열림")
+            .unwrap();
+        let deleted = variant.ladder_programs().remove(2).unwrap();
+        assert!(
+            deleted.iec_circuit_graph().is_some(),
+            "{kind} deletion graph"
+        );
+        assert!(!deleted.iec_record_frames().unwrap().iter().any(|record| {
+            record.group_index == 14
+                && record.row_index == 40
+                && record.kind == IecRecordKind::Contact(code)
+                && deleted.data.get(record.offset + 5) == Some(&19)
+        }));
+    }
+    let mut invalid = XgwxDocument::from_path(&fixture).unwrap();
+    assert!(
+        invalid
+            .insert_iec_ld_contact(2, 6856, 19, 16, 91, "INVALID", "도어열림")
+            .is_err()
+    );
+    assert!(
+        invalid
+            .insert_iec_ld_contact(2, 6856, 19, 16, 91, "NO", "MISSING_BOOL")
+            .is_err()
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE, LIBXGWX_NATIVE_EXISTING_DELETE_FIXTURE, and LIBXGWX_NATIVE_GENERATED_EXISTING_DELETE_FIXTURE"]
+fn xgi_original_nc_contact_deletion_matches_native() {
+    let mut generated =
+        XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture"))
+            .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_EXISTING_DELETE_FIXTURE").expect("native XG5000 deletion capture"),
+    )
+    .unwrap();
+    let native_generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_GENERATED_EXISTING_DELETE_FIXTURE")
+            .expect("native Save As of generated deletion"),
+    )
+    .unwrap();
+    assert!(
+        generated.ladder_programs()[2]
+            .as_ref()
+            .unwrap()
+            .iec_no_contact_deletion_sites()
+            .unwrap()
+            .iter()
+            .any(|site| site.contact_offset == 6825 && site.raw_x == 13)
+    );
+    generated
+        .delete_iec_ld_no_contact(2, 6825, 13, "현관도어닫힘")
+        .unwrap();
+    let generated_programs = generated
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native_generated_programs = native_generated
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    for index in 0..7 {
+        assert_eq!(
+            generated_programs[index].data, native_generated_programs[index].data,
+            "program {index} after native Save As"
+        );
+        assert_eq!(
+            generated_programs[index].data.len(),
+            native_programs[index].data.len(),
+            "program {index} length"
+        );
+        let differences = generated_programs[index]
+            .data
+            .iter()
+            .zip(&native_programs[index].data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 2 {
+                vec![169, 407, 687, 972]
+            } else {
+                vec![]
+            },
+            "program {index} differences"
+        );
+        if index == 2 {
+            assert_eq!(
+                [169, 407, 687, 972].map(|offset| native_programs[index].data[offset]),
+                [50, 39, 39, 50]
+            );
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_DELETED_CONTACT_FIXTURE and LIBXGWX_NATIVE_WIRE_REPAIR_FIXTURE"]
+fn xgi_native_horizontal_wire_repair_shape() {
+    let mut generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_DELETED_CONTACT_FIXTURE").expect("native deleted-contact fixture"),
+    )
+    .unwrap();
+    let repaired = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_WIRE_REPAIR_FIXTURE").expect("native wire repair fixture"),
+    )
+    .unwrap();
+    let site = generated.ladder_programs()[2]
+        .as_ref()
+        .unwrap()
+        .iec_horizontal_wire_repair_sites()
+        .unwrap()
+        .into_iter()
+        .find(|site| site.row_index == 40)
+        .unwrap();
+    assert_eq!(site.insertion_offset, 6825);
+    assert_eq!(site.raw_x, 13);
+    generated
+        .repair_iec_ld_horizontal_wire(2, site.insertion_offset, site.raw_x)
+        .unwrap();
+    let generated_programs = generated
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let repaired_programs = repaired
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    for index in 0..7 {
+        assert_eq!(
+            generated_programs[index].data, repaired_programs[index].data,
+            "program {index} after native F5 wire repair"
+        );
+    }
+    let program = &generated_programs[2];
+    let rows = program.iec_row_frames().unwrap();
+    let records = program.iec_record_frames().unwrap();
+    let row = rows.iter().find(|row| row.row_index == 40).unwrap();
+    assert_eq!(row.record_count, 5);
+    let row_records = records
+        .iter()
+        .filter(|record| record.group_index == row.group_index && record.row_index == 40)
+        .collect::<Vec<_>>();
+    assert_eq!(row_records[2].kind, IecRecordKind::ShortWire);
+    assert_eq!(
+        &program.data[row_records[2].offset..row_records[2].end],
+        &[0xff, 0x01, 0, 0, 0, 13, 160, 0, 0, 0, 0, 0, 0, 0, 0]
+    );
+    assert!(
+        program
+            .iec_horizontal_wire_repair_sites()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_LINEAR_CONTACT_FIXTURE, LIBXGWX_NATIVE_LINEAR_CELL_DELETE_FIXTURE, and LIBXGWX_NATIVE_LINEAR_MIDDLE_CELL_DELETE_FIXTURE"]
+fn xgi_native_cell_delete_matches_writer() {
+    let source_path = env::var("LIBXGWX_NATIVE_LINEAR_CONTACT_FIXTURE")
+        .expect("native linear-contact source fixture");
+    let source = XgwxDocument::from_path(&source_path).unwrap();
+    let source_programs = source.ladder_programs();
+    let program = source_programs[2].as_ref().unwrap();
+    let sites = program.iec_no_contact_cell_deletion_sites().unwrap();
+    assert!(
+        sites
+            .iter()
+            .any(|site| site.contact_offset == 6825 && site.raw_x == 13)
+    );
+    assert!(
+        sites
+            .iter()
+            .any(|site| site.contact_offset == 6875 && site.raw_x == 19)
+    );
+
+    for (native_env, offset, raw_x, variable) in [
+        (
+            "LIBXGWX_NATIVE_LINEAR_CELL_DELETE_FIXTURE",
+            6875,
+            19,
+            "도어열림",
+        ),
+        (
+            "LIBXGWX_NATIVE_LINEAR_MIDDLE_CELL_DELETE_FIXTURE",
+            6825,
+            13,
+            "현관도어닫힘",
+        ),
+    ] {
+        let mut generated = XgwxDocument::from_path(&source_path).unwrap();
+        generated
+            .delete_iec_ld_no_contact_cell(2, offset, raw_x, variable)
+            .unwrap();
+        let native = XgwxDocument::from_path(env::var(native_env).expect(native_env)).unwrap();
+        for (index, (generated, native)) in generated
+            .ladder_programs()
+            .into_iter()
+            .zip(native.ladder_programs())
+            .enumerate()
+        {
+            let generated = generated.unwrap();
+            let native = native.unwrap();
+            let differences = generated
+                .data
+                .iter()
+                .zip(&native.data)
+                .enumerate()
+                .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                (generated.data.len(), differences),
+                (
+                    native.data.len(),
+                    if index == 2 {
+                        vec![169, 407, 687, 972]
+                    } else {
+                        vec![]
+                    }
+                ),
+                "program {index} for {native_env}",
+            );
+        }
+        let generated_programs = generated.ladder_programs();
+        let program = generated_programs[2].as_ref().unwrap();
+        let row = program
+            .iec_row_frames()
+            .unwrap()
+            .into_iter()
+            .find(|row| row.group_index == 14 && row.row_index == 40)
+            .unwrap();
+        assert_eq!(row.record_count, 6);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE, LIBXGWX_NATIVE_WIRE_REPAIR_FIXTURE, and LIBXGWX_NATIVE_GENERATED_WIRE_REPAIR_FIXTURE"]
+fn xgi_generated_delete_and_wire_repair_matches_native() {
+    let mut generated =
+        XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture"))
+            .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_WIRE_REPAIR_FIXTURE").expect("native wire repair fixture"),
+    )
+    .unwrap();
+    let native_generated = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_GENERATED_WIRE_REPAIR_FIXTURE")
+            .expect("native Save As of generated wire repair"),
+    )
+    .unwrap();
+    generated
+        .delete_iec_ld_no_contact(2, 6825, 13, "현관도어닫힘")
+        .unwrap();
+    generated
+        .repair_iec_ld_horizontal_wire(2, 6825, 13)
+        .unwrap();
+    let generated_programs = generated
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native_programs = native
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let native_generated_programs = native_generated
+        .ladder_programs()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    for index in 0..7 {
+        assert_eq!(
+            generated_programs[index].data, native_generated_programs[index].data,
+            "program {index} after native Save As of generated repair"
+        );
+        let differences = generated_programs[index]
+            .data
+            .iter()
+            .zip(&native_programs[index].data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 2 {
+                vec![169, 407, 687, 972]
+            } else {
+                vec![]
+            },
+            "program {index} differences"
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to the captured XGI smart home file"]
+fn xgi_local_type_change_matches_native_allocation_reset() {
+    let path = env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture path");
+    let source = XgwxDocument::from_path(path).expect("fixture parses");
+    assert_eq!(
+        source.iec_local_symbols()[4].as_ref().unwrap()[18]
+            .data_type
+            .as_deref(),
+        Some("INT")
+    );
+    for (replacement, native_env) in [
+        ("WORD", "LIBXGWX_NATIVE_TYPE_WORD"),
+        ("DINT", "LIBXGWX_NATIVE_TYPE_DINT"),
+    ] {
+        let mut edited = source.clone();
+        let before_programs = edited
+            .ladder_programs()
+            .into_iter()
+            .map(|program| program.unwrap().data)
+            .collect::<Vec<_>>();
+        edited
+            .update_iec_local_symbol_type(4, 18, "메모리값", "INT", replacement)
+            .expect("captured primitive type edit");
+        let saved = XgwxDocument::parse(&edited.to_bytes().unwrap()).unwrap();
+        let saved_symbols = saved.iec_local_symbols();
+        let symbol = &saved_symbols[4].as_ref().unwrap()[18];
+        assert_eq!(symbol.data_type.as_deref(), Some(replacement));
+        assert_eq!(symbol.storage_class, "");
+        assert_eq!(symbol.allocation_number, None);
+        assert_eq!(symbol.allocation_width, None);
+        assert_eq!(
+            saved
+                .ladder_programs()
+                .into_iter()
+                .map(|program| program.unwrap().data)
+                .collect::<Vec<_>>(),
+            before_programs
+        );
+        if let Ok(native_path) = env::var(native_env) {
+            let native = XgwxDocument::from_path(native_path).unwrap();
+            let native_symbols = native.iec_local_symbols();
+            let native_symbol = &native_symbols[4].as_ref().unwrap()[18];
+            assert_eq!(symbol.data_type_code, native_symbol.data_type_code);
+            assert_eq!(symbol.storage_class, native_symbol.storage_class);
+            assert_eq!(symbol.allocation_number, native_symbol.allocation_number);
+            assert_eq!(symbol.allocation_width, native_symbol.allocation_width);
+            assert_eq!(
+                saved
+                    .ladder_programs()
+                    .into_iter()
+                    .map(|program| program.unwrap().data)
+                    .collect::<Vec<_>>(),
+                native
+                    .ladder_programs()
+                    .into_iter()
+                    .map(|program| program.unwrap().data)
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+    let mut mapped = source.clone();
+    let before = mapped.to_bytes().unwrap();
+    assert!(
+        mapped
+            .update_iec_local_symbol_type(0, 5, "ON", "BOOL", "WORD")
+            .is_err()
+    );
+    assert_eq!(mapped.to_bytes().unwrap(), before);
+}
+
+#[test]
 fn formats_xgwx_variable_addresses() {
     assert_eq!(format_ipv4_le(352364736), "192.168.0.21");
     assert_eq!(format_ipv4_le(16820416), "192.168.0.1");
@@ -2884,5 +7135,608 @@ fn base_slot_counts_reject_ambiguous_missing_and_compact_hardware() {
         let mut doc = XgwxDocument::parse(&synthetic_xgwx_bytes(&xml)).unwrap();
         assert!(doc.set_base_slot_count(0, 6).is_err());
         assert_eq!(doc.xml, xml);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE and LIBXGWX_NATIVE_BRANCHED_CONTACT_FIXTURE"]
+fn xgi_branched_row_contact_insertion_survives_native_save_as() {
+    let source =
+        XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("smart home fixture"))
+            .unwrap();
+    let original = source.ladder_programs().remove(0).unwrap();
+    assert!(
+        original
+            .iec_no_contact_insertion_sites()
+            .unwrap()
+            .iter()
+            .any(|site| {
+                site.group_index == 3
+                    && site.row_index == 3
+                    && site.wire_offset == 416
+                    && site.start_x == 7
+                    && site.end_x == 91
+            })
+    );
+
+    let mut edited = source.clone();
+    edited
+        .insert_iec_ld_contact(0, 416, 10, 7, 91, "NO", "ON")
+        .unwrap();
+    let program = edited.ladder_programs().remove(0).unwrap();
+    assert!(program.iec_circuit_graph().is_some());
+    assert!(program.iec_record_frames().unwrap().iter().any(|record| {
+        record.offset == 435
+            && record.kind == IecRecordKind::Contact(6)
+            && record.group_index == 3
+            && record.row_index == 3
+    }));
+
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BRANCHED_CONTACT_FIXTURE")
+            .expect("XG5000 branched contact Save As capture"),
+    )
+    .unwrap();
+    for (index, (edited, native)) in edited
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .enumerate()
+    {
+        assert_eq!(
+            edited.unwrap().data,
+            native.unwrap().data,
+            "program {index}"
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_BRANCHED_CONTACT_FIXTURE and LIBXGWX_NATIVE_BRANCHED_DELETE_FIXTURE and LIBXGWX_BRANCHED_DELETE_RESAVE_FIXTURE"]
+fn xgi_branched_row_contact_delete_matches_native_and_survives_save_as() {
+    let fixture = env::var("LIBXGWX_BRANCHED_CONTACT_FIXTURE").expect("inserted contact fixture");
+    let mut edited = XgwxDocument::from_path(&fixture).unwrap();
+    let original = edited.ladder_programs().remove(0).unwrap();
+    assert!(
+        original
+            .iec_no_contact_deletion_sites()
+            .unwrap()
+            .iter()
+            .any(|site| {
+                site.group_index == 3
+                    && site.row_index == 3
+                    && site.contact_offset == 435
+                    && site.raw_x == 10
+                    && site.contact_code == 6
+            })
+    );
+    edited
+        .delete_iec_ld_contact(0, 435, 10, "NO", "ON")
+        .unwrap();
+    let changed = edited.ladder_programs().remove(0).unwrap();
+    assert!(changed.iec_circuit_graph().is_some());
+    assert_eq!(
+        changed
+            .iec_row_frames()
+            .unwrap()
+            .iter()
+            .find(|row| { row.group_index == 3 && row.row_index == 3 })
+            .unwrap()
+            .record_count,
+        6
+    );
+
+    let native_delete = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BRANCHED_DELETE_FIXTURE").expect("native Delete capture"),
+    )
+    .unwrap();
+    let native_resave = XgwxDocument::from_path(
+        env::var("LIBXGWX_BRANCHED_DELETE_RESAVE_FIXTURE").expect("generated Save As capture"),
+    )
+    .unwrap();
+    for (index, ((edited, native), resaved)) in edited
+        .ladder_programs()
+        .into_iter()
+        .zip(native_delete.ladder_programs())
+        .zip(native_resave.ladder_programs())
+        .enumerate()
+    {
+        let edited = edited.unwrap();
+        let native = native.unwrap();
+        let resaved = resaved.unwrap();
+        let differences = edited
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![0x4a4, 0x58d, 0xc9b, 0xf32, 0x115d]
+            } else {
+                vec![]
+            },
+            "native Delete differences in program {index}"
+        );
+        assert_eq!(
+            edited.data, resaved.data,
+            "generated Save As program {index}"
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_BRANCHED_DELETE_FIXTURE and LIBXGWX_NATIVE_BRANCHED_REPAIR_FIXTURE"]
+fn xgi_branched_gap_f5_repair_matches_native() {
+    let mut document = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BRANCHED_DELETE_FIXTURE").expect("native branched Delete capture"),
+    )
+    .unwrap();
+    let program = document.ladder_programs().remove(0).unwrap();
+    assert!(
+        program
+            .iec_horizontal_wire_repair_sites()
+            .unwrap()
+            .iter()
+            .any(|site| {
+                site.group_index == 3
+                    && site.row_index == 3
+                    && site.insertion_offset == 435
+                    && site.raw_x == 10
+            })
+    );
+    document.repair_iec_ld_horizontal_wire(0, 435, 10).unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BRANCHED_REPAIR_FIXTURE").expect("native F5 repair capture"),
+    )
+    .unwrap();
+    for (index, (generated, native)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .enumerate()
+    {
+        assert_eq!(
+            generated.unwrap().data,
+            native.unwrap().data,
+            "program {index}"
+        );
+    }
+    if let Ok(resaved_path) = env::var("LIBXGWX_LEADING_CONTACT_INSERT_RESAVE_FIXTURE") {
+        let resaved = XgwxDocument::from_path(resaved_path).unwrap();
+        for (index, (generated, resaved)) in document
+            .ladder_programs()
+            .into_iter()
+            .zip(resaved.ladder_programs())
+            .enumerate()
+        {
+            assert_eq!(
+                generated.unwrap().data,
+                resaved.unwrap().data,
+                "Save As program {index}"
+            );
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_BRANCHED_CONTACT_FIXTURE and LIBXGWX_NATIVE_BRANCHED_CELL_DELETE_FIXTURE and LIBXGWX_BRANCHED_CELL_DELETE_RESAVE_FIXTURE"]
+fn xgi_branched_contact_cell_delete_matches_native_and_survives_save_as() {
+    let mut document = XgwxDocument::from_path(
+        env::var("LIBXGWX_BRANCHED_CONTACT_FIXTURE").expect("branched contact fixture"),
+    )
+    .unwrap();
+    let program = document.ladder_programs().remove(0).unwrap();
+    assert!(
+        program
+            .iec_no_contact_cell_deletion_sites()
+            .unwrap()
+            .iter()
+            .any(|site| {
+                site.group_index == 3
+                    && site.row_index == 3
+                    && site.contact_offset == 435
+                    && site.raw_x == 10
+                    && site.contact_code == 6
+            })
+    );
+    document
+        .delete_iec_ld_contact_cell(0, 435, 10, "NO", "ON")
+        .unwrap();
+    let changed = document.ladder_programs().remove(0).unwrap();
+    assert!(changed.iec_circuit_graph().is_some());
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BRANCHED_CELL_DELETE_FIXTURE")
+            .expect("native branched Cell Delete capture"),
+    )
+    .unwrap();
+    let resaved = XgwxDocument::from_path(
+        env::var("LIBXGWX_BRANCHED_CELL_DELETE_RESAVE_FIXTURE")
+            .expect("library-generated Cell Delete Save As capture"),
+    )
+    .unwrap();
+    for (index, ((generated, native), resaved)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .zip(resaved.ladder_programs())
+        .enumerate()
+    {
+        let generated = generated.unwrap();
+        let native = native.unwrap();
+        let resaved = resaved.unwrap();
+        let differences = generated
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![0x4a4, 0x58d, 0x649, 0x753, 0xc9b, 0xf32, 0x115d]
+            } else {
+                vec![]
+            },
+            "native Cell Delete differences in program {index}"
+        );
+        assert_eq!(generated.data, resaved.data, "Save As program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_BRANCHED_CONTACT_FIXTURE, LIBXGWX_NATIVE_SIMPLE_ROW_DELETE_FIXTURE, and LIBXGWX_SIMPLE_ROW_DELETE_RESAVE_FIXTURE"]
+fn xgi_simple_occupied_row_delete_matches_native() {
+    let mut document = XgwxDocument::from_path(
+        env::var("LIBXGWX_BRANCHED_CONTACT_FIXTURE").expect("branched contact fixture"),
+    )
+    .unwrap();
+    let unchanged = document.to_bytes().unwrap();
+    assert!(
+        document
+            .delete_iec_ld_simple_row(0, 2, "RISING", "STALE", "OUTPUT", "시작")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), unchanged);
+    document
+        .delete_iec_ld_simple_row(0, 2, "RISING", "스위치_1", "OUTPUT", "시작")
+        .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_SIMPLE_ROW_DELETE_FIXTURE")
+            .expect("native occupied-row deletion capture"),
+    )
+    .unwrap();
+    let resaved = XgwxDocument::from_path(
+        env::var("LIBXGWX_SIMPLE_ROW_DELETE_RESAVE_FIXTURE")
+            .expect("library occupied-row Save As capture"),
+    )
+    .unwrap();
+    for (index, ((generated, native), resaved)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .zip(resaved.ladder_programs())
+        .enumerate()
+    {
+        let generated = generated.unwrap();
+        let native = native.unwrap();
+        let resaved = resaved.unwrap();
+        let differences = generated
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(generated.data.len(), native.data.len());
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![0x447, 0x530, 0x5ec, 0x6f6, 0x9ff, 0xc3e, 0xed5, 0x1100]
+            } else {
+                vec![]
+            },
+            "native occupied-row differences in program {index}"
+        );
+        assert!(generated.iec_circuit_graph().is_some());
+        assert_eq!(generated.data, resaved.data, "Save As program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_BRANCHED_CONTACT_FIXTURE, LIBXGWX_NATIVE_BRANCH_TOP_ROW_DELETE_FIXTURE, and LIBXGWX_BRANCH_TOP_ROW_DELETE_RESAVE_FIXTURE"]
+fn xgi_branched_upper_row_delete_matches_native() {
+    let mut document = XgwxDocument::from_path(
+        env::var("LIBXGWX_BRANCHED_CONTACT_FIXTURE").expect("branched contact fixture"),
+    )
+    .unwrap();
+    let unchanged = document.to_bytes().unwrap();
+    assert!(document.delete_iec_ld_branch_top_row(0, 3, 4).is_err());
+    assert_eq!(document.to_bytes().unwrap(), unchanged);
+    document.delete_iec_ld_branch_top_row(0, 3, 3).unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_BRANCH_TOP_ROW_DELETE_FIXTURE")
+            .expect("native branch upper-row deletion capture"),
+    )
+    .unwrap();
+    let resaved = XgwxDocument::from_path(
+        env::var("LIBXGWX_BRANCH_TOP_ROW_DELETE_RESAVE_FIXTURE")
+            .expect("library branch upper-row Save As capture"),
+    )
+    .unwrap();
+    for (index, ((generated, native), resaved)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .zip(resaved.ladder_programs())
+        .enumerate()
+    {
+        let generated = generated.unwrap();
+        let native = native.unwrap();
+        let resaved = resaved.unwrap();
+        let differences = generated
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(generated.data.len(), native.data.len());
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![
+                    0x14d, 0x3ea, 0x4d3, 0x58f, 0x699, 0x9a2, 0xbe1, 0xe78, 0x10a3,
+                ]
+            } else {
+                vec![]
+            },
+            "native branch upper-row differences in program {index}"
+        );
+        assert!(generated.iec_circuit_graph().is_some());
+        assert_eq!(generated.data, resaved.data, "Save As program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_BRANCHED_CONTACT_FIXTURE, LIBXGWX_NATIVE_LEADING_CONTACT_DELETE_FIXTURE, and LIBXGWX_LEADING_CONTACT_DELETE_RESAVE_FIXTURE"]
+fn xgi_branched_leading_contact_delete_matches_native() {
+    let mut document = XgwxDocument::from_path(
+        env::var("LIBXGWX_BRANCHED_CONTACT_FIXTURE").expect("branched contact fixture"),
+    )
+    .unwrap();
+    let program = document.ladder_programs().remove(0).unwrap();
+    assert!(
+        program
+            .iec_no_contact_deletion_sites()
+            .unwrap()
+            .iter()
+            .any(|site| {
+                site.group_index == 3
+                    && site.row_index == 3
+                    && site.contact_offset == 339
+                    && site.raw_x == 1
+                    && site.contact_code == 6
+            })
+    );
+    let unchanged = document.to_bytes().unwrap();
+    assert!(
+        document
+            .delete_iec_ld_contact(0, 339, 1, "NO", "STALE")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), unchanged);
+    document
+        .delete_iec_ld_contact(0, 339, 1, "NO", "시작")
+        .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LEADING_CONTACT_DELETE_FIXTURE")
+            .expect("native leading-contact Delete capture"),
+    )
+    .unwrap();
+    let resaved = XgwxDocument::from_path(
+        env::var("LIBXGWX_LEADING_CONTACT_DELETE_RESAVE_FIXTURE")
+            .expect("library leading-contact Save As capture"),
+    )
+    .unwrap();
+    for (index, ((generated, native), resaved)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .zip(resaved.ladder_programs())
+        .enumerate()
+    {
+        let generated = generated.unwrap();
+        let native = native.unwrap();
+        let resaved = resaved.unwrap();
+        let differences = generated
+            .data
+            .iter()
+            .zip(&native.data)
+            .enumerate()
+            .filter_map(|(offset, (left, right))| (left != right).then_some(offset))
+            .collect::<Vec<_>>();
+        assert_eq!(generated.data.len(), native.data.len());
+        assert_eq!(
+            differences,
+            if index == 0 {
+                vec![0x4a4, 0x58d, 0x649, 0x753, 0xa5c, 0xc9b, 0xf32, 0x115d]
+            } else {
+                vec![]
+            },
+            "native leading-contact differences in program {index}"
+        );
+        assert_eq!(generated.data, resaved.data, "Save As program {index}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_LEADING_CONTACT_DELETE_FIXTURE and LIBXGWX_NATIVE_LEADING_CONTACT_INSERT_FIXTURE"]
+fn xgi_branched_leading_contact_insert_matches_native() {
+    let mut document = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LEADING_CONTACT_DELETE_FIXTURE")
+            .expect("native leading-contact Delete capture"),
+    )
+    .unwrap();
+    let program = document.ladder_programs().remove(0).unwrap();
+    assert!(
+        program
+            .iec_leading_contact_insertion_sites()
+            .unwrap()
+            .iter()
+            .any(|site| site.group_index == 3
+                && site.row_index == 3
+                && site.insertion_offset == 339)
+    );
+    let unchanged = document.to_bytes().unwrap();
+    assert!(
+        document
+            .insert_iec_ld_leading_contact(0, 339, "NO", "MISSING_BOOL")
+            .is_err()
+    );
+    assert!(
+        document
+            .insert_iec_ld_leading_contact(0, 340, "NO", "시작")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), unchanged);
+    document
+        .insert_iec_ld_leading_contact(0, 339, "NO", "시작")
+        .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LEADING_CONTACT_INSERT_FIXTURE")
+            .expect("native leading-contact insert capture"),
+    )
+    .unwrap();
+    for (index, (generated, native)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .enumerate()
+    {
+        assert_eq!(
+            generated.unwrap().data,
+            native.unwrap().data,
+            "program {index}"
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_LEADING_CONTACT_INSERT_FIXTURE and LIBXGWX_NATIVE_LEADING_CELL_DELETE_FIXTURE"]
+fn xgi_branched_leading_cell_delete_matches_native() {
+    let mut document = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LEADING_CONTACT_INSERT_FIXTURE")
+            .expect("native leading-contact insertion capture"),
+    )
+    .unwrap();
+    let program = document.ladder_programs().remove(0).unwrap();
+    assert!(
+        program
+            .iec_no_contact_cell_deletion_sites()
+            .unwrap()
+            .iter()
+            .any(|site| site.group_index == 3
+                && site.row_index == 3
+                && site.contact_offset == 339
+                && site.raw_x == 1)
+    );
+    let unchanged = document.to_bytes().unwrap();
+    assert!(
+        document
+            .delete_iec_ld_contact_cell(0, 339, 1, "NC", "시작")
+            .is_err()
+    );
+    assert!(
+        document
+            .delete_iec_ld_contact_cell(0, 339, 1, "NO", "STALE")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), unchanged);
+    document
+        .delete_iec_ld_contact_cell(0, 339, 1, "NO", "시작")
+        .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LEADING_CELL_DELETE_FIXTURE")
+            .expect("native leading Cell Delete capture"),
+    )
+    .unwrap();
+    for (index, (generated, native)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .enumerate()
+    {
+        assert_eq!(
+            generated.unwrap().data,
+            native.unwrap().data,
+            "program {index}"
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_NATIVE_LEADING_CELL_DELETE_FIXTURE and LIBXGWX_NATIVE_SHORT_WIRE_INSERT_FIXTURE"]
+fn xgi_short_wire_contact_insert_matches_native() {
+    let mut document = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_LEADING_CELL_DELETE_FIXTURE")
+            .expect("native leading Cell Delete capture"),
+    )
+    .unwrap();
+    let program = document.ladder_programs().remove(0).unwrap();
+    assert!(
+        program
+            .iec_short_wire_contact_insertion_sites()
+            .unwrap()
+            .iter()
+            .any(|site| site.group_index == 3
+                && site.row_index == 3
+                && site.wire_offset == 366
+                && site.raw_x == 4)
+    );
+    let unchanged = document.to_bytes().unwrap();
+    assert!(
+        document
+            .insert_iec_ld_short_wire_contact(0, 366, 7, "NO", "시작")
+            .is_err()
+    );
+    assert!(
+        document
+            .insert_iec_ld_short_wire_contact(0, 366, 4, "NO", "MISSING_BOOL")
+            .is_err()
+    );
+    assert_eq!(document.to_bytes().unwrap(), unchanged);
+    document
+        .insert_iec_ld_short_wire_contact(0, 366, 4, "NO", "시작")
+        .unwrap();
+    let native = XgwxDocument::from_path(
+        env::var("LIBXGWX_NATIVE_SHORT_WIRE_INSERT_FIXTURE")
+            .expect("native short-wire insertion capture"),
+    )
+    .unwrap();
+    for (index, (generated, native)) in document
+        .ladder_programs()
+        .into_iter()
+        .zip(native.ladder_programs())
+        .enumerate()
+    {
+        assert_eq!(
+            generated.unwrap().data,
+            native.unwrap().data,
+            "program {index}"
+        );
     }
 }
