@@ -36,9 +36,12 @@
 
 #[cfg(feature = "write")]
 mod catalog;
+mod comparison_catalog;
 mod cpu;
 mod document;
 mod error;
+#[cfg(feature = "write")]
+mod iec_function_write;
 mod iec_graph;
 mod iec_ld;
 mod iec_records;
@@ -46,6 +49,7 @@ mod iec_symbols;
 #[cfg(feature = "il")]
 mod il;
 mod instruction_catalog;
+mod instruction_operands;
 mod internal;
 mod ladder_records;
 #[cfg(feature = "write")]
@@ -60,6 +64,7 @@ mod wasm;
 
 #[cfg(feature = "write")]
 pub use catalog::*;
+pub use comparison_catalog::ladder_comparison_catalog;
 pub use cpu::*;
 pub use document::XgwxDocument;
 pub use error::XgwxError;
@@ -81,6 +86,9 @@ pub use iec_symbols::IecLocalSymbol;
 #[cfg(feature = "il")]
 pub use il::*;
 pub use instruction_catalog::{LadderInstructionSpec, ladder_instruction_catalog};
+pub use instruction_operands::{
+    LadderOperandSpec, ladder_instruction_operand_rules, ladder_operand_type_matches,
+};
 #[cfg(feature = "write")]
 pub use ladder_records::{LadderEditElement, LadderEditKind};
 #[cfg(feature = "write")]

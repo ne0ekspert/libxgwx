@@ -99,6 +99,9 @@ pub struct IecCircuitGraph {
     pub occupied_areas: Vec<IecCircuitArea>,
     pub function_bindings: Vec<IecFunctionBinding>,
     pub power_components: Vec<IecPowerComponent>,
+    /// Vertical endpoints with no second incident edge. Native incomplete
+    /// circuits may contain these; the strict graph API rejects them.
+    pub open_branch_endpoints: Vec<IecCircuitPoint>,
 }
 
 impl LadderProgramData {
@@ -107,6 +110,14 @@ impl LadderProgramData {
     /// a branch endpoint is isolated, or a pin/expression coordinate disagrees
     /// with the decoded function body.
     pub fn iec_circuit_graph(&self) -> Option<IecCircuitGraph> {
+        let graph = self.iec_circuit_layout()?;
+        graph.open_branch_endpoints.is_empty().then_some(graph)
+    }
+
+    /// Decode structurally valid geometry, including native incomplete circuits.
+    /// Overlaps, unmatched branch records and invalid pin bindings still fail.
+    /// Open endpoints are reported separately from structural failures.
+    pub fn iec_circuit_layout(&self) -> Option<IecCircuitGraph> {
         circuit_graph(self)
     }
 }
@@ -265,7 +276,7 @@ fn circuit_graph(program: &LadderProgramData) -> Option<IecCircuitGraph> {
     }
 
     validate_occupied_areas(&occupied_areas)?;
-    validate_branch_endpoints(&edges)?;
+    let open_branch_endpoints = open_branch_endpoints(&edges);
 
     let mut function_bindings = Vec::with_capacity(references.len());
     for reference in &references {
@@ -320,6 +331,7 @@ fn circuit_graph(program: &LadderProgramData) -> Option<IecCircuitGraph> {
         occupied_areas,
         function_bindings,
         power_components,
+        open_branch_endpoints,
     })
 }
 
@@ -406,7 +418,7 @@ fn validate_occupied_areas(areas: &[IecCircuitArea]) -> Option<()> {
     Some(())
 }
 
-fn validate_branch_endpoints(edges: &[IecCircuitEdge]) -> Option<()> {
+fn open_branch_endpoints(edges: &[IecCircuitEdge]) -> Vec<IecCircuitPoint> {
     let mut incident = HashMap::<IecCircuitPoint, usize>::new();
     for edge in edges {
         *incident.entry(edge.start).or_default() += 1;
@@ -415,11 +427,11 @@ fn validate_branch_endpoints(edges: &[IecCircuitEdge]) -> Option<()> {
     edges
         .iter()
         .filter(|edge| edge.kind == IecCircuitEdgeKind::VerticalBranch)
-        .all(|edge| {
-            incident.get(&edge.start).copied().unwrap_or_default() >= 2
-                && incident.get(&edge.end).copied().unwrap_or_default() >= 2
-        })
-        .then_some(())
+        .flat_map(|edge| [edge.start, edge.end])
+        .filter(|point| incident.get(point).copied().unwrap_or_default() < 2)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 fn pin_for_ordinal(block: &crate::IecFunctionBlock, ordinal: u8) -> Option<&IecFunctionPin> {

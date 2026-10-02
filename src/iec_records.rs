@@ -1060,7 +1060,7 @@ impl LadderProgramData {
             {
                 let bytes = self.data.get(wire.offset..wire.end)?;
                 if !matches!(&bytes[9..15], [0, 0, 4, 0, 0, 0] | [0, 0, 0, 0, 0, 0])
-                    || bytes[5].saturating_add(6) > bytes[15]
+                    || bytes[5].saturating_add(3) > bytes[15]
                 {
                     continue;
                 }

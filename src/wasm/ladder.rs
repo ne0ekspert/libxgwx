@@ -39,7 +39,8 @@ pub(super) struct WasmLadderProgramSummary {
     pub(super) iec_circuit_graph: Option<WasmIecCircuitGraphSummary>,
     pub(super) source_strings: Vec<WasmLadderStringSummary>,
     pub(super) structural_editing: bool,
-    pub(super) instruction_choices: &'static [LadderInstructionSpec],
+    pub(super) instruction_choices: Vec<WasmLadderInstructionChoice>,
+    pub(super) comparison_choices: Vec<WasmLadderInstructionChoice>,
     pub(super) branch_connections: Vec<WasmLadderVerticalLineSummary>,
     pub(super) rungs: Vec<WasmLadderRungSummary>,
     pub(super) cells: Vec<WasmLadderCellSummary>,
@@ -162,7 +163,7 @@ impl WasmLadderProgramSummary {
             .iec_horizontal_wire_deletion_sites()
             .unwrap_or_default();
         let iec_geometry = program.iec_geometry();
-        let iec_circuit_graph = program.iec_circuit_graph();
+        let iec_circuit_graph = program.iec_circuit_layout();
         let iec_comment_offsets = crate::iec_ld::comments(program)
             .into_iter()
             .map(|item| item.offset)
@@ -350,7 +351,22 @@ impl WasmLadderProgramSummary {
                     false
                 }
             },
-            instruction_choices: crate::ladder_instruction_catalog(),
+            instruction_choices: if program.project_type == Some(1) {
+                crate::ladder_instruction_catalog()
+                    .iter()
+                    .map(WasmLadderInstructionChoice::from)
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            comparison_choices: if program.project_type == Some(1) {
+                crate::ladder_comparison_catalog()
+                    .iter()
+                    .map(WasmLadderInstructionChoice::from)
+                    .collect()
+            } else {
+                Vec::new()
+            },
             branch_connections: {
                 #[cfg(feature = "write")]
                 {
@@ -1048,11 +1064,18 @@ pub(super) struct WasmIecCircuitGraphSummary {
     occupied_areas: Vec<WasmIecCircuitAreaSummary>,
     function_bindings: Vec<WasmIecFunctionBindingSummary>,
     power_components: Vec<WasmIecPowerComponentSummary>,
+    open_branch_endpoints: Vec<WasmIecCircuitPointSummary>,
 }
 
 impl WasmIecCircuitGraphSummary {
     fn from_graph(graph: &IecCircuitGraph) -> Self {
         Self {
+            open_branch_endpoints: graph
+                .open_branch_endpoints
+                .iter()
+                .copied()
+                .map(WasmIecCircuitPointSummary::from_point)
+                .collect(),
             edges: graph
                 .edges
                 .iter()
@@ -1560,5 +1583,21 @@ fn wasm_ladder_coil_label(coil: LadderCoil) -> &'static str {
         LadderCoil::Reset => "Reset",
         LadderCoil::RisingPulse => "P_COIL",
         LadderCoil::FallingPulse => "N_COIL",
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WasmLadderInstructionChoice {
+    #[serde(flatten)]
+    spec: LadderInstructionSpec,
+    operand_rules: &'static [LadderOperandSpec],
+}
+impl From<&LadderInstructionSpec> for WasmLadderInstructionChoice {
+    fn from(spec: &LadderInstructionSpec) -> Self {
+        Self {
+            spec: *spec,
+            operand_rules: crate::ladder_instruction_operand_rules(spec.mnemonic),
+        }
     }
 }

@@ -412,7 +412,7 @@ fn parse_record(bytes: &[u8], pos: usize, y: u8) -> Result<(Record, usize), Xgwx
             bytes.get(next..next + 8).ok_or_else(unsupported)?;
             end = next + 8;
         } else if marker == [0, 34] {
-            if head[9..15] != [1, 0, 32, 0, 0, 0] {
+            if !matches!(head[9..15], [1, 0, 0, 0, 0, 0] | [1, 0, 32, 0, 0, 0]) {
                 return Err(unsupported());
             }
             let (_, next) = string_at(bytes, pos + 19)?;

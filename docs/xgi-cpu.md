@@ -200,6 +200,14 @@ code change therefore have native evidence. Combined insertion captures for
 rising-edge and negated rising-edge remain to be collected.
 
 The insertion site decoder and writer now also support linear rows containing
+adjacent contacts. Inserting at the first cell of a long wire replaces that
+cell with the contact and retains only the wire to its right. The row gains
+one record, and the captured contact flags are preserved. A fixture regression
+reconstructs 26 original native adjacent-contact layouts byte-for-byte and
+checks successive insertions at x4 and x7 after the existing x1 contact.
+This regression uses existing native payloads; it is not a new VM Save As run.
+
+The insertion site decoder and writer also support linear rows containing
 more than one contact, with alternating contact and long-wire records followed
 by a coil. Program 2 row L40 has two contacts and two wires. Inserting the
 existing BOOL `도어열림` at x=19 split its second wire, grew the row from five to
@@ -537,8 +545,8 @@ normalizes during other structural edits.
 contact kind, long wire, coil kind, coordinates, flags, and operand text. It
 removes the group, decrements later group ordinals, and restores the generated
 blank-row source byte-for-byte. All 36 contact/coil combinations pass generated
-create/delete round trips. The extension exposes both kind selectors and both
-operations in the blank-row inspector.
+create/delete round trips. The extension's blank-cell picker now inserts an
+individual contact or coil using `insert_iec_ld_single_element` below.
 
 XG5000 4.82.1 rendered the generated rail-to-rail rung and Check Program
 reported the project baseline: 0 errors, 1 warning category, 27 warning
@@ -554,6 +562,39 @@ supported record codes. XG5000 rendered every symbol, each all-program check
 returned the same baseline diagnostics, and every native Save As preserved all
 seven ProgramData payloads byte-for-byte. Evidence is under
 `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-rung-kinds/`.
+
+## IEC standalone contact or coil in an empty cell
+
+`insert_iec_ld_single_element` uses the guarded empty-row group insertion to
+create exactly one addressed contact or coil record at a specified contact-grid
+coordinate. It creates no wire or other element. The six contact and six coil
+kinds share the existing rung opcode mappings. Operands must resolve to BOOL;
+coil destinations must also be writable. The row may be an implicit gap, the
+first row after the stored program range, or an existing row with an unoccupied
+cell. Insertion preserves the
+row group and other records, including function-reference ordinals. It rejects
+wires, contacts, coils, function bodies, operand cells, comments and branch
+connections occupying the requested cell.
+
+The extension accepts contact and coil commands in its native blank-cell text
+prompt. Both contacts and coils use the selected cell. The row
+can be an incomplete circuit until additional supported edits connect it.
+
+The fixture test `xgi_empty_row_inserts_only_the_requested_element` checks all
+12 kinds, atomic rejection, and preservation of other programs. A generated
+project adds one standalone element after each of the seven programs. XG5000
+4.82.1 opened it, rendered the contact-only and coil-only rows, and saved it as
+SINGLEROUND. All seven ProgramData payloads and parsed IEC local symbols were
+preserved byte-for-byte. This establishes open/render/save acceptance, not a
+successful program check for the intentionally incomplete circuits. Evidence:
+`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-single-element/`.
+
+Consecutive insertion on an existing row was validated with 31 contacts and one
+coil entered from right to left at every grid position. XG5000 4.82.1 opened the
+generated project and checked all programs with strict type checking: zero
+errors and the original 27 warnings. Native Save As preserved all seven decoded
+ProgramData payloads byte for byte. Generated and saved files are in
+`/home/ne0ekspert/VMs/xg5000-win10/captures/iec-editor-cells-20261002/`.
 
 ## IEC parallel contact on a simple rung
 
@@ -1145,3 +1186,45 @@ function replacement, followed by generated-file open, Check Program, and
 Save As comparisons. A complete IEC expression parser
 is still needed for compound expressions. Function instance type changes and
 mapped-variable type transitions remain undecoded.
+
+
+## Terminal IEC feed deletion and open-tail cleanup
+
+`edit_iec_ld_branch_segment` accepts a terminal row containing a contact and
+contiguous decoded wires, ending in one incoming branch. Its preceding row must
+contain only the incoming and outgoing branch records. Earlier function rows
+and their reference ordinals remain unchanged. Removing the final segment
+reproduces native Delete Line: it removes the feed row, its branch-start record
+on the preceding row, and shifts later rows upward.
+
+The native program 2 L29 capture keeps an open endpoint at L28 x18. This is a
+structurally decodable intermediate circuit; native Check Program reports one
+connection error. `iec_circuit_graph` still rejects open endpoints. The separate
+`iec_circuit_layout` reader reports them in `open_branch_endpoints`, while still
+rejecting overlaps, unmatched branch records and invalid function bindings.
+WASM uses the layout reader so the incomplete native circuit stays visible.
+
+Selecting the last segment of a single, unambiguous open tail removes its
+vertical chain back to the first horizontal connection. Function descriptors,
+pins and expression cells are retained, and the result must pass the strict
+circuit graph validator. Whole-network deletion also accepts a structurally
+valid incomplete source, but its result must pass that strict validator.
+
+The extension's branch operation applies feed deletion and tail cleanup as one
+undoable edit, labelled "Remove terminal feed and tail". Existing open tails use
+"Remove open branch tail". The first repaired project passes XG5000 4.82.1
+all-program strict checking with zero errors and the source's 27 warnings.
+Native Save As preserves all seven decoded ProgramData payloads byte for byte.
+The browser-emitted result matches the generated payloads exactly; its source
+row-height caches differ from the native-normalized result at only three bytes.
+Evidence and the reproducible acceptance tool are under
+`/home/ne0ekspert/VMs/xg5000-win10/captures/iec-terminal-feed-20261002/` and
+`examples/iec_terminal_feed_acceptance.rs`.
+
+This does not enable general group splitting, forked/open branches, or deletion
+of terminal feeds whose preceding row also carries function references.
+
+The combined suite also removes and cleans the long-wire feed at original program
+2 L22 x21. XG5000 checked both terminal feed edits together with zero errors and
+the baseline 27 warnings. Native Save As preserved all seven decoded program
+payloads byte for byte (`TAILSUITE.xgwx` / `SUITEROUND.xgwx`).

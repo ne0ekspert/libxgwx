@@ -18,6 +18,26 @@ const MAX_WASM_LADDER_PROGRAMS: usize = 64;
 const MAX_WASM_LADDER_DECODED_BYTES: usize = 32 * 1024 * 1024;
 const MAX_WASM_LADDER_ITEMS: usize = 100_000;
 
+/// Place one verified scalar IEC function with operands in reference order.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = insert_xgwx_iec_ld_function)]
+pub fn insert_xgwx_iec_ld_function_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    row_index: u16,
+    raw_x: u8,
+    name: &str,
+    operands_json: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let operands: Vec<String> =
+        serde_json::from_str(operands_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.insert_iec_ld_function(program_index, row_index, raw_x, name, &operands)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
 #[wasm_bindgen]
 pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
@@ -97,6 +117,64 @@ pub fn edit_xgwx_ladder_cell_wasm(
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.edit_ladder_cell(program_index, &edit)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Insert a catalog application instruction at an XGK output position.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = insert_xgwx_ladder_instruction)]
+pub fn insert_xgwx_ladder_instruction_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    raw_y: u8,
+    mnemonic: &str,
+    operands_json: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let operands: Vec<String> = serde_json::from_str(operands_json)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.insert_ladder_instruction(program_index, raw_y, mnemonic, &operands)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Insert a native comparison contact at an XGK contact position.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = insert_xgwx_ladder_comparison)]
+pub fn insert_xgwx_ladder_comparison_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    raw_y: u8,
+    column: u8,
+    mnemonic: &str,
+    operands_json: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let operands: Vec<String> = serde_json::from_str(operands_json)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.insert_ladder_comparison(program_index, raw_y, column, mnemonic, &operands)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Delete a verified XGK comparison contact and its operand references.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_ladder_comparison)]
+pub fn delete_xgwx_ladder_comparison_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    offset: usize,
+    expected: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.delete_ladder_comparison(program_index, offset, expected)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -724,6 +802,26 @@ pub fn insert_xgwx_iec_ld_linear_rung_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Insert one contact or coil into an empty IEC cell, without adding other elements.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = insert_xgwx_iec_ld_single_element)]
+pub fn insert_xgwx_iec_ld_single_element_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    row_index: u16,
+    raw_x: u8,
+    category: &str,
+    kind: &str,
+    operand: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.insert_iec_ld_single_element(program_index, row_index, raw_x, category, kind, operand)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Create one addressed-contact to coil rung using decoded IEC element kinds.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = insert_xgwx_iec_ld_rung)]
@@ -1340,6 +1438,8 @@ pub fn replace_xgwx_iec_ld_group_wasm(
 
 /// Replace a network from another IEC program, optionally copying its missing locals.
 #[cfg(feature = "write")]
+// Keep the established positional JavaScript API compatible with existing callers.
+#[allow(clippy::too_many_arguments)]
 #[wasm_bindgen(js_name = replace_xgwx_iec_ld_group_from_program)]
 pub fn replace_xgwx_iec_ld_group_from_program_wasm(
     bytes: &[u8],

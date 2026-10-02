@@ -1,3 +1,4 @@
+#[cfg(feature = "write")]
 use crate::XgwxError;
 
 /// One CPU model selectable in an XG5000 project configuration.
@@ -278,6 +279,7 @@ pub fn cpu_catalog() -> &'static [CpuCatalogEntry] {
     CPU_CATALOG
 }
 
+#[cfg(feature = "write")]
 pub(crate) fn find_cpu(model: &str) -> Result<&'static CpuCatalogEntry, XgwxError> {
     cpu_catalog()
         .iter()

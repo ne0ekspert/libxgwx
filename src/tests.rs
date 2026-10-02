@@ -6870,6 +6870,68 @@ fn append_ladder_string(data: &mut Vec<u8>, value: &str) {
 
 #[cfg(feature = "write")]
 #[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to an IEC project"]
+fn xgi_scalar_function_placement_validates_types_and_preserves_other_programs() {
+    let source = env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap();
+    let mut doc = XgwxDocument::from_path(source).unwrap();
+    let before = doc
+        .ladder_programs()
+        .into_iter()
+        .map(Result::unwrap)
+        .collect::<Vec<_>>();
+    let row = u16::from_le_bytes(before[0].data[4..6].try_into().unwrap());
+    for (name, operands) in [
+        ("MOVE", vec!["1", "%IW100"]),
+        ("MOVE", vec!["TRUE", "%MW100"]),
+        ("ADD", vec!["%MW100", "1", "%MX100"]),
+        ("EQ", vec!["%MW100", "1", "%MW100"]),
+    ] {
+        let snapshot = doc.to_bytes().unwrap();
+        assert!(
+            doc.insert_iec_ld_function(
+                0,
+                row,
+                10,
+                name,
+                &operands.into_iter().map(String::from).collect::<Vec<_>>()
+            )
+            .is_err()
+        );
+        assert_eq!(doc.to_bytes().unwrap(), snapshot);
+    }
+    doc.insert_iec_ld_function(0, row, 10, "MOVE", &["1".into(), "%MW100".into()])
+        .unwrap();
+    doc.insert_iec_ld_function(
+        0,
+        row,
+        22,
+        "ADD",
+        &["%MW100".into(), "1".into(), "%MW102".into()],
+    )
+    .unwrap();
+    let after = doc
+        .ladder_programs()
+        .into_iter()
+        .map(Result::unwrap)
+        .collect::<Vec<_>>();
+    for (old, new) in before.iter().zip(after.iter()).skip(1) {
+        assert_eq!(old.data, new.data);
+    }
+    let blocks = after[0].iec_function_blocks().unwrap();
+    assert!(
+        blocks
+            .iter()
+            .any(|b| b.row_index == row && b.raw_x == 10 && b.name.value == "MOVE")
+    );
+    assert!(
+        blocks
+            .iter()
+            .any(|b| b.row_index == row && b.raw_x == 22 && b.name.value == "ADD")
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
 fn compact_cpu_guards_preserve_document_and_allow_comments() {
     let source = std::fs::read("fixtures/XGB_Enet01.xgwx").unwrap();
     let mut doc = XgwxDocument::parse(&source).unwrap();
@@ -7739,4 +7801,298 @@ fn xgi_short_wire_contact_insert_matches_native() {
             "program {index}"
         );
     }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to a native IEC project"]
+fn xgi_empty_row_inserts_only_the_requested_element() {
+    let source = XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap()).unwrap();
+    for (category, kinds, raw_x) in [
+        (
+            "contact",
+            &[
+                "NO",
+                "NC",
+                "RISING",
+                "FALLING",
+                "NEGATED_RISING",
+                "NEGATED_FALLING",
+            ][..],
+            1,
+        ),
+        (
+            "coil",
+            &["OUTPUT", "INVERSE", "SET", "RESET", "RISING", "FALLING"][..],
+            94,
+        ),
+    ] {
+        for kind in kinds {
+            let mut edited = source.clone();
+            let before = edited.to_bytes().unwrap();
+            assert!(
+                edited
+                    .insert_iec_ld_single_element(
+                        1,
+                        13,
+                        raw_x,
+                        category,
+                        kind,
+                        if category == "coil" { "%IX0" } else { "%MW0" }
+                    )
+                    .is_err()
+            );
+            assert_eq!(edited.to_bytes().unwrap(), before);
+            edited
+                .insert_iec_ld_single_element(1, 13, raw_x, category, kind, "%MX1000")
+                .unwrap();
+            let programs = edited.ladder_programs();
+            let program = programs[1].as_ref().unwrap();
+            let records = program
+                .iec_record_frames()
+                .unwrap()
+                .into_iter()
+                .filter(|record| record.row_index == 13)
+                .collect::<Vec<_>>();
+            assert_eq!(records.len(), 1);
+            assert_eq!(program.data[records[0].offset + 5], raw_x);
+            assert!(program.iec_circuit_graph().is_some());
+            assert!(
+                matches!(records[0].kind, IecRecordKind::Contact(_)) == (category == "contact")
+            );
+            for index in [0, 2, 3, 4, 5, 6] {
+                assert_eq!(
+                    programs[index].as_ref().unwrap().data,
+                    source.ladder_programs()[index].as_ref().unwrap().data
+                );
+            }
+            let before = edited.to_bytes().unwrap();
+            assert!(
+                edited
+                    .insert_iec_ld_single_element(1, 13, raw_x, category, kind, "%MX1001")
+                    .is_err()
+            );
+            assert_eq!(edited.to_bytes().unwrap(), before);
+        }
+    }
+    let mut generated = source.clone();
+    for program_index in 0..7 {
+        let original = generated.ladder_programs()[program_index]
+            .as_ref()
+            .unwrap()
+            .clone();
+        let row_index = original
+            .iec_row_frames()
+            .unwrap()
+            .iter()
+            .map(|row| row.row_index)
+            .max()
+            .unwrap()
+            + 1;
+        let (category, kind, raw_x) = if program_index % 2 == 0 {
+            ("contact", "NO", 1)
+        } else {
+            ("coil", "OUTPUT", 94)
+        };
+        generated
+            .insert_iec_ld_single_element(
+                program_index,
+                row_index,
+                raw_x,
+                category,
+                kind,
+                &format!("%MX{}", 1000 + program_index),
+            )
+            .unwrap();
+    }
+    if let Ok(path) = env::var("LIBXGWX_SINGLE_OUTPUT") {
+        generated.write_to(path).unwrap();
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to a native IEC project"]
+fn xgi_existing_empty_cells_allow_consecutive_entry_and_guard_conversion() {
+    let source = XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap()).unwrap();
+    let mut edited = source.clone();
+    let program = source.ladder_programs().remove(0).unwrap();
+    let row = u16::from_le_bytes(program.data[4..6].try_into().unwrap());
+    for (x, category, kind, operand) in [
+        (1, "contact", "NO", "%MX1000"),
+        (4, "contact", "NC", "%MX1001"),
+        (94, "coil", "OUTPUT", "%MX1002"),
+    ] {
+        edited
+            .insert_iec_ld_single_element(0, row, x, category, kind, operand)
+            .unwrap();
+    }
+    let records = edited.ladder_programs()[0]
+        .as_ref()
+        .unwrap()
+        .iec_record_frames()
+        .unwrap();
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| record.row_index == row)
+            .count(),
+        3
+    );
+    let before = edited.to_bytes().unwrap();
+    assert!(
+        edited
+            .insert_iec_ld_single_element(0, row, 7, "coil", "OUTPUT", "%IX0")
+            .is_err()
+    );
+    assert_eq!(edited.to_bytes().unwrap(), before);
+    for index in 1..7 {
+        assert_eq!(
+            edited.ladder_programs()[index].as_ref().unwrap().data,
+            source.ladder_programs()[index].as_ref().unwrap().data
+        );
+    }
+    let program = source.ladder_programs().remove(2).unwrap();
+    let row = u16::from_le_bytes(program.data[4..6].try_into().unwrap());
+    let mut converted = source.clone();
+    for operands in [["%MX100", "변환"], ["%MW100", "%MX101"], ["%MW100", "1"]] {
+        assert!(
+            converted
+                .insert_iec_ld_function(2, row, 10, "WORD_TO_UDINT", &operands.map(String::from))
+                .is_err()
+        );
+        assert_eq!(converted.to_bytes().unwrap(), source.to_bytes().unwrap());
+    }
+    assert!(
+        converted
+            .insert_iec_ld_function(
+                2,
+                row,
+                10,
+                "WORD_TO_UDINT",
+                &["%MW100".into(), "변환".into()],
+            )
+            .is_err()
+    );
+    assert_eq!(converted.to_bytes().unwrap(), source.to_bytes().unwrap());
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn unverified_general_conversion_placement_is_atomic() {
+    let mut doc = XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx")).unwrap();
+    let original = doc.to_bytes().unwrap();
+    let error = doc
+        .insert_iec_ld_function(
+            0,
+            0,
+            4,
+            "WORD_TO_UDINT",
+            &["%MW100".into(), "Result".into()],
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("not native-validated"));
+    assert_eq!(doc.to_bytes().unwrap(), original);
+}
+
+#[cfg(feature = "write")]
+#[test]
+#[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to a native IEC project"]
+fn xgi_terminal_feed_and_tail_cleanup_preserve_functions_and_other_programs() {
+    let source = XgwxDocument::from_path(env::var("LIBXGWX_SMARTHOME_FIXTURE").unwrap()).unwrap();
+    let mut edited = source.clone();
+    for (p, g, start, end, x) in [(2, 8, 28, 29, 18), (2, 7, 21, 22, 21)] {
+        let original_count = edited.ladder_programs()[p]
+            .as_ref()
+            .unwrap()
+            .iec_function_blocks()
+            .unwrap()
+            .len();
+        edited
+            .edit_iec_ld_branch_segment(p, g, start, end, x, true, false)
+            .unwrap();
+        let program = edited.ladder_programs().remove(p).unwrap();
+        assert!(program.iec_circuit_graph().is_none());
+        let layout = program.iec_circuit_layout().unwrap();
+        assert_eq!(
+            layout.open_branch_endpoints,
+            [IecCircuitPoint {
+                group_index: g,
+                row_index: start,
+                x
+            }]
+        );
+        let segment = program
+            .iec_geometry()
+            .unwrap()
+            .vertical
+            .into_iter()
+            .find(|b| b.group_index == g && b.end_row_index == start && b.x == x)
+            .unwrap();
+        let before = edited.to_bytes().unwrap();
+        assert!(
+            edited
+                .edit_iec_ld_branch_segment(
+                    p,
+                    g,
+                    segment.start_row_index,
+                    segment.end_row_index,
+                    segment.x,
+                    false,
+                    false
+                )
+                .is_err()
+        );
+        assert_eq!(edited.to_bytes().unwrap(), before);
+        edited
+            .edit_iec_ld_branch_segment(
+                p,
+                g,
+                segment.start_row_index,
+                segment.end_row_index,
+                segment.x,
+                true,
+                false,
+            )
+            .unwrap();
+        let program = edited.ladder_programs().remove(p).unwrap();
+        assert!(program.iec_circuit_graph().is_some());
+        assert_eq!(program.iec_function_blocks().unwrap().len(), original_count);
+        assert!(
+            program
+                .iec_geometry()
+                .unwrap()
+                .vertical
+                .iter()
+                .all(|b| b.group_index != g)
+        );
+    }
+    let mut unsupported = source.clone();
+    assert!(
+        unsupported
+            .edit_iec_ld_branch_segment(3, 24, 72, 73, 18, true, false)
+            .is_err()
+    );
+    assert_eq!(unsupported.to_bytes().unwrap(), source.to_bytes().unwrap());
+    for p in [0, 1, 3, 4, 5, 6] {
+        assert_eq!(
+            edited.ladder_programs()[p].as_ref().unwrap().data,
+            source.ladder_programs()[p].as_ref().unwrap().data
+        );
+    }
+    if let Ok(path) = env::var("LIBXGWX_TERMINAL_SUITE_OUTPUT") {
+        edited.write_to(path).unwrap();
+    }
+    let mut recovery = source.clone();
+    recovery
+        .edit_iec_ld_branch_segment(2, 8, 28, 29, 18, true, false)
+        .unwrap();
+    recovery.delete_iec_ld_group(2, 8, 23).unwrap();
+    assert!(
+        recovery.ladder_programs()[2]
+            .as_ref()
+            .unwrap()
+            .iec_circuit_graph()
+            .is_some()
+    );
 }

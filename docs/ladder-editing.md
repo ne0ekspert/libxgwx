@@ -12,7 +12,7 @@ negated edge contacts; operandless INV, PUP and PDN operations; output, inverse,
 set/reset and rising/falling-edge coils; horizontal wires; and preserved END
 instructions. Recognized comments and application instructions are preserved,
 allowing structural edits elsewhere in the same program. Instruction operand
-text is editable as described below; instruction insertion and deletion remain
+text and insertion are supported as described below; instruction deletion remains
 protected. The entire program is validated before editing; unknown record
 layouts and malformed or truncated records reject the structural operation.
 
@@ -241,6 +241,56 @@ Full local evidence is retained under
 `target/xg5000-instruction-acceptance-20260909` (ignored by Git).
 
 
+### Function insertion
+
+`insert_ladder_instruction` places a fixed-arity application instruction at the
+XGK output end of a row. It uses the existing catalog, including MOV and I2R,
+and validates arity, text, and occupied spans. `insert_ladder_comparison` places
+the captured `=`, `>`, `<`, `>=`, `<=`, and `<>` contact forms in three adjacent contact cells. Their
+native opcodes are 1254, 1256, 1258, 1260, 1262, and 1264 respectively; their record flags remain contact flags when
+changing the comparison or its operands.
+`delete_ladder_comparison` checks the expected full source text and native
+comparison opcode before removing the comparison and its two operand references.
+It leaves the three-cell gap and preserves other elements and row coordinates. Native Check Program still determines
+CPU availability and whether the completed rung has a valid input condition.
+
+IEC `insert_iec_ld_function` places MOVE, ADD/SUB/MUL/DIV, or EQ/GT/GE/LT/LE at
+an available grid position. Inputs and the output are supplied in reference
+order, with the output last. The block requires room for its body and adjacent
+operand fields; the selected block anchor must be `4, 7, ... 91`. Existing
+contacts, coils, comments, function bodies, operand fields, and branches are
+protected from overlap. Known scalar types must be compatible, and the output
+must be writable. Array operands and stateful instances are outside this API.
+Existing row groups and unrelated programs are preserved; pin references and
+the circuit graph are validated before applying the edit.
+
+The VS Code editor uses its built-in insertion picker on double-click or Enter
+in a blank cell. XGK offers comparisons in contact columns and application
+instructions in the output column. IEC offers the scalar functions above at
+positions with room for operand cells. The native command picker accepts spaces
+between the instruction and operands, for example `MOV 1 D100`. Existing inspector
+Source text editing retains comma-separated operands.
+
+Native XG5000 4.82.1 captures verify the XGK MOV, I2R, `=`, and `>=` records.
+The generated XGK suite with complete input conditions compiled with 0 errors
+and 0 warnings; native Save As preserved its 3187-byte ProgramData payload
+byte-for-byte.
+The six-operator comparison suite also compiled with 0 errors and 0 warnings
+on 2026-10-01. Native Save As preserved its 4213-byte ProgramData payload
+byte-for-byte; evidence is retained in `target/xgk-comparisons-20261001`.
+Small pin-descriptor fixtures under `fixtures/function-bodies` contain native
+MOVE/ADD/EQ bodies and XGK comparison records, without project logic. The
+generated IEC suite containing all ten functions compiled with 0 errors and
+preserved all seven decoded ProgramData payloads byte-for-byte on Save As.
+The test suite writes five comparison results to one BOOL address; native
+double-coil checking therefore reports warnings. This is format and compiler
+acceptance, not PLC execution validation.
+
+`examples/function_placement.rs` generates placements from a caller-supplied
+source; `examples/native_function_compare.rs` compares native Save As payloads.
+Full local capture evidence is kept outside Git under
+`VMs/xg5000-win10/captures/function-placement-20260930`.
+
 ### Instruction replacement catalog
 
 The Instruction selector exposes 859 fixed-arity LD application instructions.
@@ -272,3 +322,60 @@ The real JS/WASM ran with a mocked VS Code bridge at 1440×1000 and 900×800;
 no browser console errors occurred. PLC execution and CPU-specific validation of
 the complete catalog were not performed. Evidence:
 `target/xg5000-instruction-types-20260909` (ignored by Git).
+
+### XGK operand rules
+
+`ladder_instruction_operand_rules` exposes factual type, constant and device-area
+permissions extracted from `XGK(B)InstructionHelp_Kr_V3.5.chm` (SHA-256
+`b866d589d800addcb039f9f09b182592464d6367faa55abf6dde9ac34a1580e0`).
+Regenerate with `scripts/generate-operand-rules.py` after locally extracting the
+CHM with 7-Zip; the manual text and images are not included in the repository.
+Use `--check` to verify regeneration without modifying the generated file. Missing
+or unrecognized manual input is rejected before writing the catalog.
+714 of the 865 application/comparison entries have matching operand tables.
+Arity mismatches, absent pages and unrecognized type tables have no inferred rule.
+Each operand retains its manual page for review. Missing permission tables are
+represented as unknown rather than prohibited.
+
+Some shared tables are imprecise or contain errors: the I2R/I2L table labels both
+operands WORD/DWORD despite its conversion explanation, and the DEC table says
+NIBBLE/BYTE despite describing signed word decrement. Reviewed overrides separate
+MOV/DMOV, real moves, integer/real conversions, arithmetic widths, increment and
+decrement variants, and nibble/byte moves. Other shared tables retain their unions;
+these are not a complete per-CPU instruction checker.
+
+WASM instruction choices include `operandRules`. The command picker displays
+expected types and filters declared variable suggestions. XGK integer symbols use
+storage names (WORD/DWORD/LWORD), so INT/UINT, DINT/UDINT and LINT/ULINT match the
+corresponding storage width. REAL/LREAL remain distinct. Raw device addresses are
+starting addresses, not typed IEC variables: D100 can be used for a multiword REAL
+operand without declaring a REAL symbol there. The writer rejects decoded
+constant/device-area violations in insertion and instruction text replacement.
+Literal values are checked against the decoded operand types with exact integer
+parsing. Signed decimal operands use signed bounds; hexadecimal/binary values
+may express full-width bit patterns. WORD/DWORD/LWORD storage operands accept
+signed values or unsigned bit patterns. REAL/LREAL reject non-finite values and
+values outside their representable magnitude. Shared tables accept the union
+of their listed types. Alignment, complete spans, indexed-device syntax and PLC
+model-specific restrictions still require XG5000 Check Program. The serializers
+are unchanged by these checks; the native insertion acceptance described above
+continues to cover their record layouts.
+
+The operand boundary suite adds `MOV 65535`, `MOV -32768`, signed-decimal ADD,
+hexadecimal ADD and `RADD 3.4E38`. XG5000 4.82.1 checked the generated XGK project
+with zero errors and zero warnings. Native Save As preserved its decoded program
+payload byte for byte. Evidence is in
+`/home/ne0ekspert/VMs/xg5000-win10/captures/iec-editor-cells-20261002/`.
+
+### Maintained acceptance tools
+
+- `function_placement`: generates the supported placement suites or one placement
+  from a caller-supplied workspace. It rejects overflowing row coordinates.
+- `block_insertion_acceptance`: dumps native function records and optional fixture
+  bodies from a caller-selected program.
+- `native_function_compare`: checks all decoded program payloads after native
+  Save As. A changed program count, payload byte, payload length, function shape
+  or decoded IEC graph causes a nonzero exit status.
+
+Local `iec_*_probe`, inventory and group-analysis examples are investigative tools;
+they are not general editor APIs or evidence that unsupported edits are enabled.

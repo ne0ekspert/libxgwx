@@ -2846,8 +2846,9 @@ impl XgwxDocument {
     /// Add or remove one captured IEC LD vertical branch segment between two
     /// adjacent rows that already belong to the same native row group.
     ///
-    /// Removal is accepted only while another segment still connects the same
-    /// row pair, because splitting and rebuilding row groups is not decoded yet.
+    /// Removal preserves another connection between the rows, or deletes a
+    /// supported lower branch row and shifts later rows as in native Delete Line.
+    /// General group splitting remains unsupported.
     /// Addition is limited to rows without comments or function records and
     /// preserves the group's existing row envelope.
     #[allow(clippy::too_many_arguments)]
@@ -2877,15 +2878,39 @@ impl XgwxDocument {
             expected,
             present,
         )?;
-        self.edit_program_payload(program_index, "2", |payload| {
-            if payload != program.data {
-                return Err(XgwxError::LadderCellChanged {
-                    program_index,
-                    offset: 0,
-                });
-            }
-            Ok(updated)
-        })
+        let mut result = program.clone();
+        result.data = updated.clone();
+        result.decoded_len = updated.len();
+        let layout = result
+            .iec_circuit_layout()
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
+        if !layout.open_branch_endpoints.is_empty()
+            && (present
+                || layout.open_branch_endpoints
+                    != [crate::IecCircuitPoint {
+                        group_index,
+                        row_index: start_row_index,
+                        x,
+                    }])
+        {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        let require_valid_result = result.iec_circuit_graph().is_some();
+        self.edit_program_payload_with_validation(
+            program_index,
+            "2",
+            program.iec_circuit_graph().is_some(),
+            require_valid_result,
+            |payload| {
+                if payload != program.data {
+                    return Err(XgwxError::LadderCellChanged {
+                        program_index,
+                        offset: 0,
+                    });
+                }
+                Ok(updated)
+            },
+        )
     }
 
     /// Insert one implicit blank IEC LD row after `after_row_index`, matching
@@ -3097,7 +3122,92 @@ impl XgwxDocument {
             contact_variable,
             coil_code,
             coil_variable,
+            None,
         )?;
+        self.edit_program_payload(program_index, "2", |payload| {
+            if payload != program.data {
+                return Err(XgwxError::LadderCellChanged {
+                    program_index,
+                    offset: 0,
+                });
+            }
+            Ok(updated)
+        })
+    }
+
+    /// Insert one addressed contact or coil into an unoccupied IEC grid cell.
+    /// No other element or wire is created. The resulting row may be incomplete.
+    pub fn insert_iec_ld_single_element(
+        &mut self,
+        program_index: usize,
+        row_index: u16,
+        raw_x: u8,
+        category: &str,
+        kind: &str,
+        operand: &str,
+    ) -> Result<(), XgwxError> {
+        let is_coil = match category {
+            "contact" => false,
+            "coil" => true,
+            _ => {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "IEC element category must be contact or coil",
+                });
+            }
+        };
+        if !(1..=94).contains(&raw_x) || !(raw_x - 1).is_multiple_of(3) {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "IEC element position must be a contact-grid cell",
+            });
+        }
+        let code = if is_coil {
+            iec_rung_coil_code(kind)?
+        } else {
+            iec_rung_contact_code(kind)?
+        };
+        let units = operand.encode_utf16().count();
+        if units == 0 || units > 255 || operand.chars().any(char::is_control) {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "IEC operand must be 1 to 255 UTF-16 units without controls",
+            });
+        }
+        let program = self
+            .ladder_programs()
+            .into_iter()
+            .nth(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })??;
+        let symbols = self
+            .iec_local_symbols()
+            .into_iter()
+            .nth(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })??;
+        if !classify_iec_bool_expression(operand, &symbols, &program).is_some_and(|expression| {
+            expression.data_type_mask & 1 != 0 && (!is_coil || expression.writable)
+        }) {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "IEC element requires a BOOL operand; coil destinations must be writable",
+            });
+        }
+        let updated = if program
+            .iec_row_frames()
+            .is_some_and(|rows| rows.iter().any(|row| row.row_index == row_index))
+        {
+            insert_iec_ld_empty_cell_bytes(&program, row_index, raw_x, code, operand)?
+        } else {
+            insert_iec_ld_linear_rung_bytes(
+                &program,
+                row_index,
+                6,
+                "%MX0",
+                14,
+                "%MX1",
+                Some((code, raw_x, operand)),
+            )?
+        };
         self.edit_program_payload(program_index, "2", |payload| {
             if payload != program.data {
                 return Err(XgwxError::LadderCellChanged {
@@ -3853,7 +3963,7 @@ impl XgwxDocument {
             });
         }
         if !matches!(&old[9..15], [0, 0, 4, 0, 0, 0] | [0, 0, 0, 0, 0, 0])
-            || raw_x < old[5].saturating_add(3)
+            || raw_x < old[5]
             || raw_x.saturating_add(3) > old[15]
             || !(raw_x - old[5]).is_multiple_of(3)
         {
@@ -3896,8 +4006,13 @@ impl XgwxDocument {
                     offset: wire_offset,
                 });
             }
-            let mut left = old.to_vec();
-            left[15] = raw_x - 3;
+            let left = if raw_x == old[5] {
+                Vec::new()
+            } else {
+                let mut left = old.to_vec();
+                left[15] = raw_x - 3;
+                left
+            };
             let mut right = old.to_vec();
             right[5] = raw_x + 3;
             let y = (row.row_index * 4).to_le_bytes();
@@ -3922,6 +4037,9 @@ impl XgwxDocument {
                 0xff,
                 utf16.len() as u8,
             ];
+            if left.is_empty() {
+                contact[11] = old[11];
+            }
             for unit in &utf16 {
                 contact.extend_from_slice(&unit.to_le_bytes());
             }
@@ -3932,7 +4050,9 @@ impl XgwxDocument {
             updated.extend_from_slice(&right);
             updated.extend_from_slice(&payload[wire.end..]);
             updated[row_start + 29] = updated[row_start + 29].max(raw_x);
-            updated[row_start + 33..row_start + 35].copy_from_slice(&(row_count + 2).to_le_bytes());
+            let added_records = if left.is_empty() { 1 } else { 2 };
+            updated[row_start + 33..row_start + 35]
+                .copy_from_slice(&(row_count + added_records).to_le_bytes());
             Ok(updated)
         })
     }
@@ -5242,7 +5362,7 @@ impl XgwxDocument {
             .ok_or(XgwxError::UnsupportedLadderLayout)?;
         if program.iec_function_references().is_none()
             || program.iec_function_operand_links().is_none()
-            || program.iec_circuit_graph().is_none()
+            || program.iec_circuit_layout().is_none()
         {
             return Err(XgwxError::UnsupportedLadderLayout);
         }
@@ -5355,7 +5475,7 @@ impl XgwxDocument {
         {
             return Err(XgwxError::UnsupportedLadderLayout);
         }
-        self.edit_program_payload(program_index, "2", |payload| {
+        self.edit_program_payload_repair(program_index, "2", |payload| {
             if payload.get(start..end) != Some(removed.as_slice()) {
                 return Err(XgwxError::LadderCellChanged {
                     program_index,
@@ -5601,16 +5721,16 @@ impl XgwxDocument {
             .filter(|block| block.group_index == group_index)
             .collect::<Vec<_>>();
         for block in &group_blocks {
-            if let Some(instance) = &block.instance {
-                if !symbols.iter().any(|symbol| {
+            if let Some(instance) = &block.instance
+                && !symbols.iter().any(|symbol| {
                     symbol.name.eq_ignore_ascii_case(&instance.value)
                         && symbol.is_instance
                         && symbol.type_reference.as_deref() == Some(block.name.value.as_str())
-                }) {
-                    return Err(XgwxError::InvalidLadderEdit {
-                        reason: "copied IEC function instance needs a matching destination declaration",
-                    });
-                }
+                })
+            {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "copied IEC function instance needs a matching destination declaration",
+                });
             }
         }
         for string in source_strings.iter().filter(|string| {
@@ -5627,17 +5747,16 @@ impl XgwxDocument {
             if let Some(local) = source_symbols
                 .iter()
                 .find(|symbol| symbol.name.eq_ignore_ascii_case(&string.value))
-            {
-                if !symbols.iter().any(|destination_symbol| {
+                && !symbols.iter().any(|destination_symbol| {
                     destination_symbol.name.eq_ignore_ascii_case(&local.name)
                         && destination_symbol.data_type_code == local.data_type_code
                         && destination_symbol.is_instance == local.is_instance
                         && destination_symbol.type_reference == local.type_reference
-                }) {
-                    return Err(XgwxError::InvalidLadderEdit {
-                        reason: "copied IEC network refers to a missing or incompatible destination local symbol",
-                    });
-                }
+                })
+            {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "copied IEC network refers to a missing or incompatible destination local symbol",
+                });
             }
         }
         for binding in source_graph
@@ -6484,6 +6603,105 @@ impl XgwxDocument {
                 });
             }
             Ok(updated)
+        })
+    }
+
+    /// Place a scalar MOVE, arithmetic, or comparison function in available IEC cells.
+    pub fn insert_iec_ld_function(
+        &mut self,
+        program_index: usize,
+        row_index: u16,
+        raw_x: u8,
+        function_name: &str,
+        operands: &[String],
+    ) -> Result<(), XgwxError> {
+        // Generalized conversion placement still fails native open acceptance.
+        // Keep the separately verified standalone API available.
+        if function_name == "WORD_TO_UDINT" {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "general WORD_TO_UDINT placement is not native-validated; use a verified standalone insertion site",
+            });
+        }
+        let (family, _, count) =
+            crate::iec_function_write::spec(function_name).ok_or(XgwxError::InvalidLadderEdit {
+                reason: "unknown IEC function",
+            })?;
+        if operands.len() != usize::from(count)
+            || operands.iter().any(|value| {
+                value.is_empty()
+                    || value.encode_utf16().count() > 255
+                    || value.chars().any(char::is_control)
+            })
+        {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "IEC function operand count or text is invalid",
+            });
+        }
+        let program = self
+            .ladder_programs()
+            .into_iter()
+            .nth(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })??;
+        let symbols = self
+            .iec_local_symbols()
+            .into_iter()
+            .nth(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })??;
+        let mask = if function_name == "MOVE" || family == 0x28 {
+            0xfffff
+        } else {
+            0x7fe0
+        };
+        let mut common = mask;
+        for (index, value) in operands.iter().enumerate() {
+            let output = index + 1 == operands.len();
+            let classified = if output && family == 0x28 {
+                classify_iec_bool_expression(value, &symbols, &program)
+            } else {
+                classify_iec_expression(value, &symbols, &program)
+            }
+            .ok_or(XgwxError::InvalidLadderEdit {
+                reason: "IEC function operand requires a known scalar expression or device address",
+            })?;
+            if output && !classified.writable {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "IEC function output requires a writable variable or device address",
+                });
+            }
+            if function_name == "WORD_TO_UDINT" {
+                let required = if output { 0x800 } else { 4 };
+                if classified.data_type_mask & required == 0 {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "WORD_TO_UDINT requires a WORD source and a writable UDINT destination",
+                    });
+                }
+            } else if output && family == 0x28 {
+                if classified.data_type_mask & 1 == 0 {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "comparison output requires BOOL",
+                    });
+                }
+            } else {
+                common &= classified.data_type_mask;
+            }
+        }
+        if common == 0 {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "IEC function operands have incompatible scalar types",
+            });
+        }
+        self.edit_program_payload(program_index, "2", |payload| {
+            if payload != program.data {
+                return Err(XgwxError::LadderCellChanged {
+                    program_index,
+                    offset: 0,
+                });
+            }
+            crate::iec_function_write::insert(&program, row_index, raw_x, function_name, operands)
         })
     }
 
@@ -8685,6 +8903,47 @@ impl XgwxDocument {
         })
     }
 
+    /// Insert a fixed-arity catalog instruction at an XGK row's output end.
+    pub fn insert_ladder_instruction(
+        &mut self,
+        program_index: usize,
+        raw_y: u8,
+        mnemonic: &str,
+        operands: &[String],
+    ) -> Result<(), XgwxError> {
+        self.edit_ladder_payload(program_index, |payload| {
+            crate::ladder_write::insert_ladder_instruction(payload, raw_y, mnemonic, operands)
+        })
+    }
+
+    /// Insert a comparison contact spanning three cells at the selected column.
+    pub fn insert_ladder_comparison(
+        &mut self,
+        program_index: usize,
+        raw_y: u8,
+        column: u8,
+        mnemonic: &str,
+        operands: &[String],
+    ) -> Result<(), XgwxError> {
+        self.edit_ladder_payload(program_index, |payload| {
+            crate::ladder_write::insert_ladder_comparison(
+                payload, raw_y, column, mnemonic, operands,
+            )
+        })
+    }
+
+    /// Delete a verified XGK comparison contact, leaving its three-cell wiring gap.
+    pub fn delete_ladder_comparison(
+        &mut self,
+        program_index: usize,
+        offset: usize,
+        expected: &str,
+    ) -> Result<(), XgwxError> {
+        self.edit_ladder_payload(program_index, |payload| {
+            crate::ladder_write::delete_ladder_comparison(payload, offset, expected)
+        })
+    }
+
     /// Create or edit a native rung/output comment record.
     pub fn edit_ladder_comment(
         &mut self,
@@ -10102,6 +10361,128 @@ fn iec_rung_coil_code(kind: &str) -> Result<u8, XgwxError> {
     }
 }
 
+/// Add a record to an existing row without rebuilding its group or adding wires.
+fn insert_iec_ld_empty_cell_bytes(
+    program: &LadderProgramData,
+    row_index: u16,
+    raw_x: u8,
+    code: u8,
+    operand: &str,
+) -> Result<Vec<u8>, XgwxError> {
+    if program.project_type != Some(2) || program.version.as_deref() != Some("LD VER 1.1") {
+        return Err(XgwxError::UnsupportedLadderLayout);
+    }
+    let rows = program
+        .iec_row_frames()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    let records = program
+        .iec_record_frames()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    let graph = program
+        .iec_circuit_graph()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    let row = rows
+        .iter()
+        .find(|row| row.row_index == row_index)
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    let new_count = row
+        .record_count
+        .checked_add(1)
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    if graph.occupied_areas.iter().any(|area| {
+        row_index >= area.start_row_index
+            && row_index <= area.end_row_index
+            && raw_x >= area.start_x
+            && raw_x <= area.end_x
+    }) || records
+        .iter()
+        .any(|record| record.row_index == row_index && record.kind == IecRecordKind::Comment)
+        || graph.edges.iter().any(|edge| {
+            edge.kind == IecCircuitEdgeKind::VerticalBranch
+                && row_index >= edge.start.row_index
+                && row_index <= edge.end.row_index
+                && edge.start.x >= raw_x.saturating_sub(1)
+                && edge.start.x <= raw_x + 2
+        })
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "IEC element would overlap an occupied cell or branch",
+        });
+    }
+    // Preserve all existing record order, including function-reference ordinals.
+    let insertion = records
+        .iter()
+        .find(|record| {
+            record.group_index == row.group_index
+                && record.row_index == row_index
+                && matches!(
+                    record.kind,
+                    IecRecordKind::Contact(_)
+                        | IecRecordKind::Coil(_)
+                        | IecRecordKind::LongWire
+                        | IecRecordKind::ShortWire
+                        | IecRecordKind::FunctionBlock
+                        | IecRecordKind::FunctionOperand
+                )
+                && program.data[record.offset + 5] > raw_x
+        })
+        .map_or(row.end, |record| record.offset);
+    let y = row_index
+        .checked_mul(4)
+        .ok_or(XgwxError::UnsupportedLadderLayout)?
+        .to_le_bytes();
+    let units = operand.encode_utf16().collect::<Vec<_>>();
+    let mut record = vec![
+        0xff,
+        code,
+        0,
+        0,
+        0,
+        raw_x,
+        y[0],
+        y[1],
+        0,
+        1,
+        0,
+        if code >= 14 { 0x20 } else { 0 },
+        0,
+        0,
+        0,
+        0xff,
+        0xfe,
+        0xff,
+        units.len() as u8,
+    ];
+    for unit in units {
+        record.extend_from_slice(&unit.to_le_bytes());
+    }
+    let mut updated = program.data.clone();
+    updated[row.records_start - 2..row.records_start].copy_from_slice(&new_count.to_le_bytes());
+    updated.splice(insertion..insertion, record);
+    let mut verified = program.clone();
+    verified.decoded_len = updated.len();
+    verified.data = updated.clone();
+    let valid_rows = verified
+        .iec_row_frames()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    let valid_records = verified
+        .iec_record_frames()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    if valid_rows.len() != rows.len()
+        || valid_records.len() != records.len() + 1
+        || !valid_rows.iter().any(|candidate| {
+            candidate.group_index == row.group_index
+                && candidate.row_index == row_index
+                && candidate.record_count == new_count
+        })
+        || verified.iec_circuit_graph().is_none()
+        || verified.iec_function_operand_links().is_none()
+    {
+        return Err(XgwxError::UnsupportedLadderLayout);
+    }
+    Ok(updated)
+}
+
 fn insert_iec_ld_linear_rung_bytes(
     program: &LadderProgramData,
     blank_row_index: u16,
@@ -10109,6 +10490,7 @@ fn insert_iec_ld_linear_rung_bytes(
     contact_variable: &str,
     coil_code: u8,
     coil_variable: &str,
+    single_element: Option<(u8, u8, &str)>,
 ) -> Result<Vec<u8>, XgwxError> {
     if program.project_type != Some(2) || program.version.as_deref() != Some("LD VER 1.1") {
         return Err(XgwxError::UnsupportedLadderLayout);
@@ -10205,9 +10587,39 @@ fn insert_iec_ld_linear_rung_bytes(
     inserted.extend_from_slice(&0u32.to_le_bytes());
     inserted.extend_from_slice(&1u16.to_le_bytes());
     inserted.extend_from_slice(&u32::from(blank_row_index).to_le_bytes());
+    let element_count: u16 = if single_element.is_some() { 1 } else { 3 };
     inserted.extend_from_slice(&[
-        0xff, 0x43, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x27, 0, 0, 0, 94, y[0], y[1], 0, 94, y[0],
-        y[1], 0, 1, y[0], y[1], 0, 3, 0,
+        0xff,
+        0x43,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0x27,
+        0,
+        0,
+        0,
+        94,
+        y[0],
+        y[1],
+        0,
+        94,
+        y[0],
+        y[1],
+        0,
+        1,
+        y[0],
+        y[1],
+        0,
+        element_count as u8,
+        0,
     ]);
     fn append_element(
         output: &mut Vec<u8>,
@@ -10243,25 +10655,34 @@ fn insert_iec_ld_linear_rung_bytes(
             output.extend_from_slice(&unit.to_le_bytes());
         }
     }
-    append_element(
-        &mut inserted,
-        y,
-        contact_code,
-        1,
-        [1, 0, 0, 0, 0, 0],
-        contact_variable,
-    );
-    inserted.extend_from_slice(&[
-        0xff, 0x02, 0, 0, 0, 4, y[0], y[1], 0, 0, 0, 0, 0, 0, 0, 91, y[0], y[1], 0,
-    ]);
-    append_element(
-        &mut inserted,
-        y,
-        coil_code,
-        94,
-        [1, 0, 0x20, 0, 0, 0],
-        coil_variable,
-    );
+    if let Some((code, raw_x, operand)) = single_element {
+        let flags = if code >= 14 {
+            [1, 0, 0x20, 0, 0, 0]
+        } else {
+            [1, 0, 0, 0, 0, 0]
+        };
+        append_element(&mut inserted, y, code, raw_x, flags, operand);
+    } else {
+        append_element(
+            &mut inserted,
+            y,
+            contact_code,
+            1,
+            [1, 0, 0, 0, 0, 0],
+            contact_variable,
+        );
+        inserted.extend_from_slice(&[
+            0xff, 0x02, 0, 0, 0, 4, y[0], y[1], 0, 0, 0, 0, 0, 0, 0, 91, y[0], y[1], 0,
+        ]);
+        append_element(
+            &mut inserted,
+            y,
+            coil_code,
+            94,
+            [1, 0, 0x20, 0, 0, 0],
+            coil_variable,
+        );
+    }
 
     let mut updated = program.data.clone();
     updated[4..6].copy_from_slice(&max_rows.max(blank_row_index + 1).to_le_bytes());
@@ -10305,19 +10726,28 @@ fn insert_iec_ld_linear_rung_bytes(
             reason: "IEC rung creation did not preserve the circuit graph",
         })?;
     if verified_rows.len() != rows.len() + 1
-        || verified_records.len() != records.len() + 3
-        || created.record_count != 3
+        || verified_records.len() != records.len() + usize::from(element_count)
+        || created.record_count != element_count
         || created_kinds
-            != [
-                IecRecordKind::Contact(contact_code),
-                IecRecordKind::LongWire,
-                IecRecordKind::Coil(coil_code),
-            ]
-        || !verified_graph.power_components.iter().any(|component| {
-            component.group_index == insertion_group
-                && component.touches_left_rail
-                && component.touches_right_rail
-        })
+            != if let Some((code, _, _)) = single_element {
+                vec![if code < 14 {
+                    IecRecordKind::Contact(code)
+                } else {
+                    IecRecordKind::Coil(code)
+                }]
+            } else {
+                vec![
+                    IecRecordKind::Contact(contact_code),
+                    IecRecordKind::LongWire,
+                    IecRecordKind::Coil(coil_code),
+                ]
+            }
+        || (single_element.is_none()
+            && !verified_graph.power_components.iter().any(|component| {
+                component.group_index == insertion_group
+                    && component.touches_left_rail
+                    && component.touches_right_rail
+            }))
         || verified.iec_function_blocks().is_none()
         || verified.iec_function_references().is_none()
         || verified.iec_function_operand_links().is_none()
@@ -10959,6 +11389,13 @@ fn edit_iec_ld_branch_segment_bytes(
         return Ok(program.data.clone());
     }
 
+    if program.iec_circuit_graph().is_none() {
+        if present {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        return remove_iec_ld_open_branch_tail(program, connection.expect("state checked"));
+    }
+
     let start_records = records
         .iter()
         .filter(|record| record.group_index == group_index && record.row_index == start_row_index)
@@ -11123,6 +11560,16 @@ fn remove_iec_ld_final_branch_row(
         .ok_or(XgwxError::UnsupportedLadderLayout)?;
     if group_rows.len() > 2 {
         return if end_row.row_index == group_rows.last().unwrap().row_index {
+            if let Some(updated) = remove_iec_ld_terminal_feed_branch_row(
+                program,
+                rows,
+                records,
+                geometry,
+                connection,
+                &group_rows,
+            )? {
+                return Ok(updated);
+            }
             remove_iec_ld_terminal_contact_branch_row(
                 program,
                 rows,
@@ -11527,6 +11974,283 @@ fn remove_iec_ld_final_branch_row(
         return Err(XgwxError::UnsupportedLadderLayout);
     }
     Ok(updated)
+}
+
+/// Remove a uniquely decoded vertical tail from its isolated terminal point
+/// back to the first horizontal connection, preserving all typed function rows.
+fn remove_iec_ld_open_branch_tail(
+    program: &LadderProgramData,
+    selected: &crate::IecVerticalConnection,
+) -> Result<Vec<u8>, XgwxError> {
+    let invalid = || XgwxError::InvalidLadderEdit {
+        reason: "IEC branch cleanup requires one unambiguous open terminal tail",
+    };
+    let graph = program.iec_circuit_layout().ok_or_else(invalid)?;
+    let [endpoint] = graph.open_branch_endpoints.as_slice() else {
+        return Err(invalid());
+    };
+    if endpoint.group_index != selected.group_index
+        || endpoint.row_index != selected.end_row_index
+        || endpoint.x != selected.x
+    {
+        return Err(invalid());
+    }
+    let mut point = *endpoint;
+    let mut removed = std::collections::BTreeSet::new();
+    loop {
+        let incident = graph
+            .edges
+            .iter()
+            .filter(|edge| edge.start == point || edge.end == point)
+            .filter(|edge| !removed.contains(&edge.record_offset))
+            .collect::<Vec<_>>();
+        if incident
+            .iter()
+            .any(|edge| edge.kind != IecCircuitEdgeKind::VerticalBranch)
+        {
+            break;
+        }
+        let [edge] = incident.as_slice() else {
+            return Err(invalid());
+        };
+        if edge.kind != IecCircuitEdgeKind::VerticalBranch
+            || edge.end != point
+            || edge.start.x != selected.x
+            || edge.start.group_index != selected.group_index
+            || edge.start.row_index.checked_add(1) != Some(point.row_index)
+        {
+            return Err(invalid());
+        }
+        removed.insert(edge.record_offset);
+        removed.insert(edge.paired_record_offset.ok_or_else(invalid)?);
+        point = edge.start;
+    }
+    if !removed.contains(&selected.start_offset) || !removed.contains(&selected.end_offset) {
+        return Err(invalid());
+    }
+    let rows = program.iec_row_frames().ok_or_else(invalid)?;
+    let records = program.iec_record_frames().ok_or_else(invalid)?;
+    let mut updated = program.data[..8].to_vec();
+    let group_count = usize::from(u16::from_le_bytes(program.data[6..8].try_into().unwrap()));
+    for group in 0..group_count {
+        let group_rows = rows
+            .iter()
+            .filter(|row| row.group_index == group)
+            .collect::<Vec<_>>();
+        let first = group_rows.first().copied().ok_or_else(invalid)?;
+        let mut retained_rows = Vec::new();
+        let mut retained_count = 0u16;
+        for row in group_rows {
+            let original = records
+                .iter()
+                .filter(|r| r.group_index == group && r.row_index == row.row_index)
+                .collect::<Vec<_>>();
+            let retained = original
+                .iter()
+                .filter(|r| !removed.contains(&r.offset))
+                .copied()
+                .collect::<Vec<_>>();
+            if retained.is_empty() && retained.len() != original.len() {
+                continue;
+            }
+            let mut header = program.data[row.start..row.records_start].to_vec();
+            let changed = retained.len() != original.len();
+            if changed {
+                // The captured tail rows cache the last non-wire anchor. The
+                // remaining function/reference and expression anchors are kept.
+                header[29] = retained
+                    .iter()
+                    .filter_map(|r| match r.kind {
+                        IecRecordKind::BranchStart => Some(program.data[r.offset + 7]),
+                        IecRecordKind::LongWire | IecRecordKind::Coil(_) => None,
+                        _ => Some(program.data[r.offset + 5]),
+                    })
+                    .max()
+                    .unwrap_or(1);
+                header[33..35].copy_from_slice(
+                    &u16::try_from(retained.len())
+                        .map_err(|_| invalid())?
+                        .to_le_bytes(),
+                );
+            }
+            retained_rows.extend(header);
+            for record in retained {
+                retained_rows.extend_from_slice(&program.data[record.offset..record.end]);
+            }
+            retained_count = retained_count.checked_add(1).ok_or_else(invalid)?;
+        }
+        if retained_count == 0 {
+            return Err(invalid());
+        }
+        updated.extend_from_slice(&program.data[first.start - 10..first.start - 2]);
+        updated.extend_from_slice(&retained_count.to_le_bytes());
+        updated.extend(retained_rows);
+    }
+    let mut verified = program.clone();
+    verified.data = updated.clone();
+    verified.decoded_len = updated.len();
+    let after = verified.iec_circuit_graph().ok_or_else(invalid)?;
+    // Offsets are storage locations; compare decoded block/pin semantics.
+    let semantics = |g: &crate::IecCircuitGraph| {
+        g.function_bindings
+            .iter()
+            .map(|b| {
+                (
+                    b.group_index,
+                    b.ordinal,
+                    b.direction,
+                    b.function_name.clone(),
+                    b.pin_name.clone(),
+                    b.pin_point,
+                    b.expression_cell_x,
+                    b.data_type_mask,
+                    b.is_array,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    if after.edges.len() + removed.len() / 2 != graph.edges.len()
+        || semantics(&after) != semantics(&graph)
+    {
+        return Err(invalid());
+    }
+    Ok(updated)
+}
+
+/// Native Delete Line on a terminal contact/wire feed below a branch-only row.
+/// Earlier function rows stay in their existing group with unchanged ordinals.
+fn remove_iec_ld_terminal_feed_branch_row(
+    program: &LadderProgramData,
+    rows: &[crate::IecRowFrame],
+    records: &[crate::IecRecordFrame],
+    geometry: &crate::IecGeometry,
+    connection: &crate::IecVerticalConnection,
+    group_rows: &[&crate::IecRowFrame],
+) -> Result<Option<Vec<u8>>, XgwxError> {
+    if program.iec_circuit_graph().is_none() {
+        return Ok(None);
+    }
+    let Some([upper, lower]) = group_rows.get(group_rows.len().saturating_sub(2)..) else {
+        return Ok(None);
+    };
+    if upper.row_index != connection.start_row_index
+        || lower.row_index != connection.end_row_index
+        || group_rows.len() < 3
+    {
+        return Ok(None);
+    }
+    let row_records = |row_index| {
+        records
+            .iter()
+            .filter(|record| {
+                record.group_index == connection.group_index && record.row_index == row_index
+            })
+            .collect::<Vec<_>>()
+    };
+    let upper_records = row_records(upper.row_index);
+    let lower_records = row_records(lower.row_index);
+    let [incoming_end, outgoing_start] = upper_records.as_slice() else {
+        return Ok(None);
+    };
+    let Some((outgoing_end, feed)) = lower_records.split_last() else {
+        return Ok(None);
+    };
+    let x = connection.x;
+    if incoming_end.kind != IecRecordKind::BranchEnd
+        || outgoing_start.kind != IecRecordKind::BranchStart
+        || outgoing_start.offset != connection.start_offset
+        || outgoing_end.kind != IecRecordKind::BranchEnd
+        || outgoing_end.offset != connection.end_offset
+        || program.data[incoming_end.offset + 5] != x
+        || program.data[upper.start + 29] != x
+        || program.data[lower.start + 29] != x - 1
+        || feed.is_empty()
+        || !matches!(feed[0].kind, IecRecordKind::Contact(0x06..=0x0b))
+        || !geometry.vertical.iter().any(|branch| {
+            branch.group_index == connection.group_index
+                && branch.end_row_index == upper.row_index
+                && branch.x == x
+                && branch.end_offset == incoming_end.offset
+        })
+        || geometry
+            .vertical
+            .iter()
+            .filter(|branch| {
+                branch.group_index == connection.group_index
+                    && (branch.start_row_index == lower.row_index
+                        || branch.end_row_index == lower.row_index)
+            })
+            .count()
+            != 1
+    {
+        return Ok(None);
+    }
+    // Every occupied cell on the removed feed is explicitly decoded. Reject
+    // gaps, additional branches, outputs and function continuation records.
+    let mut next_x = 1u16;
+    for record in feed {
+        if u16::from(program.data[record.offset + 5]) != next_x {
+            return Ok(None);
+        }
+        match record.kind {
+            IecRecordKind::Contact(0x06..=0x0b) | IecRecordKind::ShortWire => next_x += 3,
+            IecRecordKind::LongWire => {
+                let end_x = u16::from(program.data[record.offset + 15]);
+                if end_x < next_x || !(end_x - next_x).is_multiple_of(3) {
+                    return Ok(None);
+                }
+                next_x = end_x + 3;
+            }
+            _ => return Ok(None),
+        }
+    }
+    if next_x != u16::from(x) + 1 {
+        return Ok(None);
+    }
+    let mut updated = program.data.clone();
+    updated[group_rows[0].start - 2..group_rows[0].start].copy_from_slice(
+        &u16::try_from(group_rows.len() - 1)
+            .map_err(|_| XgwxError::UnsupportedLadderLayout)?
+            .to_le_bytes(),
+    );
+    updated[upper.start + 29] = x - 1;
+    updated[upper.start + 33..upper.start + 35].copy_from_slice(&1u16.to_le_bytes());
+    updated.drain(lower.start..lower.end);
+    updated.drain(outgoing_start.offset..outgoing_start.end);
+    let mut intermediate = program.clone();
+    intermediate.decoded_len = updated.len();
+    intermediate.data = updated;
+    let updated = delete_iec_ld_blank_row_bytes(&intermediate, lower.row_index).map_err(|_| {
+        XgwxError::InvalidLadderEdit {
+            reason: "terminal feed deletion could not shift the remaining native rows",
+        }
+    })?;
+    let mut verified = program.clone();
+    verified.decoded_len = updated.len();
+    verified.data = updated.clone();
+    if verified.iec_row_frames().map(|items| items.len() + 1) != Some(rows.len())
+        || verified
+            .iec_record_frames()
+            .map(|items| items.len() + lower_records.len() + 1)
+            != Some(records.len())
+        || verified.iec_geometry().map(|g| g.vertical.len() + 1) != Some(geometry.vertical.len())
+        || verified.iec_circuit_layout().is_none_or(|graph| {
+            graph.open_branch_endpoints
+                != [crate::IecCircuitPoint {
+                    group_index: connection.group_index,
+                    row_index: upper.row_index,
+                    x,
+                }]
+        })
+        || verified.iec_function_blocks().is_none()
+        || verified.iec_function_references().is_none()
+        || verified.iec_function_operand_links().is_none()
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "terminal feed deletion did not preserve the expected open-endpoint layout",
+        });
+    }
+    Ok(Some(updated))
 }
 
 fn remove_iec_ld_terminal_contact_branch_row(
@@ -12074,7 +12798,7 @@ fn delete_iec_ld_chained_branch_row_bytes(
     let middle_index = group_rows
         .iter()
         .position(|row| row.row_index == row_index)
-        .ok_or_else(|| XgwxError::InvalidLadderEdit {
+        .ok_or(XgwxError::InvalidLadderEdit {
             reason: "this IEC row is not a simple chained branch line",
         })?;
     if middle_index == 0 || middle_index + 1 == group_rows.len() {
@@ -12107,8 +12831,7 @@ fn delete_iec_ld_chained_branch_row_bytes(
     let x = program.data[end.offset + 5];
     if end.kind != IecRecordKind::BranchEnd
         || start.kind != IecRecordKind::BranchStart
-        || x < 3
-        || x > 93
+        || !(3..=93).contains(&x)
         || !x.is_multiple_of(3)
         || (contact_only && x != 3)
         || program.data[start.offset + 5] != 2
@@ -12126,7 +12849,7 @@ fn delete_iec_ld_chained_branch_row_bytes(
                 && branch.x == x
                 && branch.end_offset == end.offset
         })
-        .ok_or_else(|| XgwxError::InvalidLadderEdit {
+        .ok_or(XgwxError::InvalidLadderEdit {
             reason: "this IEC row is not a simple chained branch line",
         })?;
     let outgoing = geometry
@@ -12138,7 +12861,7 @@ fn delete_iec_ld_chained_branch_row_bytes(
                 && branch.x == x
                 && branch.start_offset == start.offset
         })
-        .ok_or_else(|| XgwxError::InvalidLadderEdit {
+        .ok_or(XgwxError::InvalidLadderEdit {
             reason: "this IEC row is not a simple chained branch line",
         })?;
     if incoming.start_row_index != upper_row.row_index
@@ -12655,4 +13378,411 @@ fn assemble_workspace(header: &[u8], main_gzip: &[u8], trailer: &[u8]) -> Vec<u8
     bytes.extend_from_slice(main_gzip);
     bytes.extend_from_slice(trailer);
     bytes
+}
+
+#[cfg(test)]
+mod adjacent_contact_tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "set LIBXGWX_SMARTHOME_FIXTURE to a native IEC project"]
+    fn adjacent_contact_insertion_restores_native_records() {
+        let source = XgwxDocument::from_path(
+            std::env::var("LIBXGWX_SMARTHOME_FIXTURE").expect("native fixture path"),
+        )
+        .unwrap();
+        let programs = source.ladder_programs();
+        let mut verified = 0;
+        for (program_index, original) in programs.iter().enumerate() {
+            let original = original.as_ref().unwrap();
+            let records = original.iec_record_frames().unwrap();
+            for parts in records.windows(3) {
+                let (previous, contact, wire) = (&parts[0], &parts[1], &parts[2]);
+                if !matches!(previous.kind, crate::IecRecordKind::Contact(6..=11))
+                    || !matches!(contact.kind, crate::IecRecordKind::Contact(6..=11))
+                    || wire.kind != crate::IecRecordKind::LongWire
+                    || previous.row_index != contact.row_index
+                    || contact.row_index != wire.row_index
+                    || previous.group_index != wire.group_index
+                {
+                    continue;
+                }
+                let raw_x = original.data[contact.offset + 5];
+                if original.data[previous.offset + 5] + 3 != raw_x
+                    || original.data[wire.offset + 5] != raw_x + 3
+                {
+                    continue;
+                }
+                let kind = match contact.kind {
+                    crate::IecRecordKind::Contact(6) => "NO",
+                    crate::IecRecordKind::Contact(7) => "NC",
+                    crate::IecRecordKind::Contact(8) => "RISING",
+                    crate::IecRecordKind::Contact(9) => "FALLING",
+                    crate::IecRecordKind::Contact(10) => "NEGATED_RISING",
+                    crate::IecRecordKind::Contact(11) => "NEGATED_FALLING",
+                    _ => unreachable!(),
+                };
+                let operand = String::from_utf16(
+                    &original.data[contact.offset + 19..contact.end]
+                        .chunks_exact(2)
+                        .map(|unit| u16::from_le_bytes([unit[0], unit[1]]))
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap();
+                let row = original
+                    .iec_row_frames()
+                    .unwrap()
+                    .into_iter()
+                    .find(|row| {
+                        row.group_index == contact.group_index && row.row_index == contact.row_index
+                    })
+                    .unwrap();
+                let mut gap = source.clone();
+                gap.edit_program_payload(program_index, "2", |payload| {
+                    let mut merged = payload[wire.offset..wire.end].to_vec();
+                    merged[5] = raw_x;
+                    let mut updated = payload[..contact.offset].to_vec();
+                    updated.extend_from_slice(&merged);
+                    updated.extend_from_slice(&payload[wire.end..]);
+                    updated[row.start + 33..row.start + 35]
+                        .copy_from_slice(&(row.record_count - 1).to_le_bytes());
+                    Ok(updated)
+                })
+                .unwrap();
+                gap.insert_iec_ld_contact(
+                    program_index,
+                    contact.offset,
+                    raw_x,
+                    raw_x,
+                    original.data[wire.offset + 15],
+                    kind,
+                    &operand,
+                )
+                .unwrap();
+                let restored_programs = gap.ladder_programs();
+                for (index, native) in programs.iter().enumerate() {
+                    assert_eq!(
+                        restored_programs[index].as_ref().unwrap().data,
+                        native.as_ref().unwrap().data,
+                        "native program {index}"
+                    );
+                }
+                verified += 1;
+            }
+        }
+        assert!(
+            verified > 0,
+            "fixture must contain adjacent native contacts followed by a wire"
+        );
+
+        let mut edited = source.clone();
+        for raw_x in [4, 7] {
+            let program = edited.ladder_programs()[0].as_ref().unwrap().clone();
+            let site = program
+                .iec_no_contact_insertion_sites()
+                .unwrap()
+                .into_iter()
+                .find(|site| site.row_index == 2 && site.start_x == raw_x)
+                .unwrap();
+            let before = edited.to_bytes().unwrap();
+            assert!(
+                edited
+                    .insert_iec_ld_contact(
+                        0,
+                        site.wire_offset,
+                        raw_x - 3,
+                        site.start_x,
+                        site.end_x,
+                        "NO",
+                        "ON"
+                    )
+                    .is_err()
+            );
+            assert_eq!(edited.to_bytes().unwrap(), before);
+            edited
+                .insert_iec_ld_contact(
+                    0,
+                    site.wire_offset,
+                    raw_x,
+                    site.start_x,
+                    site.end_x,
+                    "NO",
+                    "ON",
+                )
+                .unwrap();
+            assert!(
+                edited.ladder_programs()[0]
+                    .as_ref()
+                    .unwrap()
+                    .iec_circuit_graph()
+                    .is_some()
+            );
+        }
+        if let Ok(path) = std::env::var("LIBXGWX_ADJACENT_OUTPUT") {
+            edited.write_to(path).unwrap();
+        }
+        eprintln!("Restored {verified} adjacent-contact native layouts byte-for-byte");
+    }
+}
+
+#[cfg(test)]
+mod empty_iec_cell_tests {
+    use super::*;
+
+    fn program() -> LadderProgramData {
+        let mut program = XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx"))
+            .unwrap()
+            .ladder_programs()
+            .remove(0)
+            .unwrap();
+        program.project_type = Some(2);
+        program.version = Some("LD VER 1.1".into());
+        program.data = vec![0, 0, 0, 0, 3, 0, 2, 0];
+        for (group, row) in [(0u32, 0u16), (1, 2)] {
+            program.data.extend_from_slice(&group.to_le_bytes());
+            program.data.extend_from_slice(&0u32.to_le_bytes());
+            program.data.extend_from_slice(&1u16.to_le_bytes());
+            program
+                .data
+                .extend_from_slice(&u32::from(row).to_le_bytes());
+            let y = (row * 4).to_le_bytes();
+            program.data.extend_from_slice(&[
+                0xff, 0x43, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x27, 0, 0, 0, 94, y[0], y[1], 0, 94,
+                y[0], y[1], 0, 1, y[0], y[1], 0, 0, 0,
+            ]);
+        }
+        program.decoded_len = program.data.len();
+        program
+    }
+
+    #[test]
+    fn consecutive_and_out_of_order_elements_preserve_other_groups() {
+        let mut program = program();
+        let tail = program.data[53..].to_vec();
+        for (x, code, operand) in [
+            (7, 8, "%MX3"),
+            (1, 6, "%MX1"),
+            (4, 7, "%MX2"),
+            (94, 14, "%MX4"),
+        ] {
+            program.data = insert_iec_ld_empty_cell_bytes(&program, 0, x, code, operand).unwrap();
+            assert_eq!(&program.data[program.data.len() - tail.len()..], tail);
+            assert!(insert_iec_ld_empty_cell_bytes(&program, 0, x, code, operand).is_err());
+        }
+        let records = program.iec_record_frames().unwrap();
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| program.data[record.offset + 5])
+                .collect::<Vec<_>>(),
+            [1, 4, 7, 94]
+        );
+        assert_eq!(program.iec_row_frames().unwrap()[0].record_count, 4);
+        assert!(program.iec_circuit_graph().is_some());
+    }
+
+    #[test]
+    fn reject_wires_function_bodies_and_operands() {
+        let mut program = program();
+        program.data = crate::iec_function_write::insert(
+            &program,
+            0,
+            10,
+            "MOVE",
+            &["1".into(), "%MW100".into()],
+        )
+        .unwrap();
+        for (row, x) in [(0, 1), (0, 10), (1, 7), (1, 10), (1, 13), (2, 10)] {
+            assert!(
+                insert_iec_ld_empty_cell_bytes(&program, row, x, 6, "%MX1").is_err(),
+                "row {row}, x {x}"
+            );
+        }
+        program.data = insert_iec_ld_empty_cell_bytes(&program, 1, 22, 6, "%MX1").unwrap();
+        assert_eq!(program.iec_function_operand_links().unwrap().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod terminal_feed_tests {
+    use super::*;
+    fn element(row: u16, x: u8, code: u8, text: &str) -> Vec<u8> {
+        let y = (row * 4).to_le_bytes();
+        let mut bytes = vec![
+            0xff,
+            code,
+            0,
+            0,
+            0,
+            x,
+            y[0],
+            y[1],
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0xff,
+            0xfe,
+            0xff,
+            text.len() as u8,
+        ];
+        if (0x0e..=0x13).contains(&code) {
+            bytes[11] = 0x20;
+        }
+        for unit in text.encode_utf16() {
+            bytes.extend(unit.to_le_bytes());
+        }
+        bytes
+    }
+    fn wire(row: u16, x: u8, end: u8) -> Vec<u8> {
+        let y = (row * 4).to_le_bytes();
+        vec![
+            0xff, 2, 0, 0, 0, x, y[0], y[1], 0, 0, 0, 0, 0, 0, 0, end, y[0], y[1], 0,
+        ]
+    }
+    fn start(row: u16) -> Vec<u8> {
+        let mut bytes = vec![0, 0, 0, 0, 0, 2, 0, 18];
+        bytes.extend((row * 4).to_le_bytes());
+        bytes.extend([0; 7]);
+        bytes.push(17);
+        bytes.extend(((row + 1) * 4).to_le_bytes());
+        bytes.extend([0; 7]);
+        bytes
+    }
+    fn end(row: u16) -> Vec<u8> {
+        let y = ((row - 1) * 4).to_le_bytes();
+        vec![1, 0, 0, 0, 0, 18, y[0], y[1], 0]
+    }
+    fn program() -> LadderProgramData {
+        let mut program = XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx"))
+            .unwrap()
+            .ladder_programs()
+            .remove(0)
+            .unwrap();
+        program.project_type = Some(2);
+        program.version = Some("LD VER 1.1".into());
+        program.data = vec![0, 0, 0, 0, 5, 0, 2, 0];
+        let mut feed = vec![element(2, 1, 6, "%MX1")];
+        for x in (4..19).step_by(3) {
+            let mut short = wire(2, x, x);
+            short.truncate(15);
+            short[1] = 1;
+            feed.push(short);
+        }
+        feed.push(end(2));
+        let row_records = [
+            vec![
+                element(0, 1, 6, "%MX1"),
+                wire(0, 4, 16),
+                start(0),
+                wire(0, 19, 91),
+                element(0, 94, 14, "%MX2"),
+            ],
+            vec![end(1), start(1)],
+            feed,
+            vec![],
+        ];
+        for (g, range) in [(0u32, 0..3), (1, 3..4)] {
+            program.data.extend(g.to_le_bytes());
+            program.data.extend(0u32.to_le_bytes());
+            program.data.extend((range.len() as u16).to_le_bytes());
+            for i in range {
+                let row = if i == 3 { 4 } else { i as u16 };
+                let y = (row * 4).to_le_bytes();
+                let mut header = u32::from(row).to_le_bytes().to_vec();
+                header.extend([
+                    0xff,
+                    0x43,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0x27,
+                    0,
+                    0,
+                    0,
+                    94,
+                    y[0],
+                    y[1],
+                    0,
+                    94,
+                    y[0],
+                    y[1],
+                    0,
+                    if i == 2 { 17 } else { 18 },
+                    y[0],
+                    y[1],
+                    0,
+                    0,
+                    0,
+                ]);
+                header[33..35].copy_from_slice(&(row_records[i].len() as u16).to_le_bytes());
+                program.data.extend(header);
+                for record in &row_records[i] {
+                    program.data.extend(record);
+                }
+            }
+        }
+        program.decoded_len = program.data.len();
+        program
+    }
+    #[test]
+    fn terminal_feed_deletion_reports_and_repairs_only_its_open_endpoint() {
+        let mut program = program();
+        assert!(program.iec_circuit_graph().is_some());
+        program.data =
+            edit_iec_ld_branch_segment_bytes(&program, 0, 1, 2, 18, true, false).unwrap();
+        program.decoded_len = program.data.len();
+        assert!(program.iec_circuit_graph().is_none());
+        assert_eq!(
+            program.iec_circuit_layout().unwrap().open_branch_endpoints,
+            [crate::IecCircuitPoint {
+                group_index: 0,
+                row_index: 1,
+                x: 18
+            }]
+        );
+        assert!(edit_iec_ld_branch_segment_bytes(&program, 0, 0, 1, 21, false, true).is_err());
+        program.data =
+            edit_iec_ld_branch_segment_bytes(&program, 0, 0, 1, 18, true, false).unwrap();
+        program.decoded_len = program.data.len();
+        assert!(program.iec_circuit_graph().is_some());
+        assert!(program.iec_geometry().unwrap().vertical.is_empty());
+        assert_eq!(
+            program
+                .iec_row_frames()
+                .unwrap()
+                .iter()
+                .map(|r| r.row_index)
+                .collect::<Vec<_>>(),
+            [0, 3]
+        );
+    }
+    #[test]
+    fn malformed_feed_and_unmatched_branch_records_stay_rejected() {
+        let mut program = program();
+        let records = program.iec_record_frames().unwrap();
+        let coil = records
+            .iter()
+            .find(|r| r.row_index == 2 && r.kind == IecRecordKind::Contact(6))
+            .unwrap();
+        program.data[coil.offset + 1] = 14;
+        assert!(edit_iec_ld_branch_segment_bytes(&program, 0, 1, 2, 18, true, false).is_err());
+        let last = records
+            .iter()
+            .find(|r| r.row_index == 2 && r.kind == IecRecordKind::BranchEnd)
+            .unwrap();
+        program.data[last.offset + 5] = 21;
+        assert!(program.iec_circuit_layout().is_none());
+    }
 }

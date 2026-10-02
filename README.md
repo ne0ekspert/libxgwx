@@ -130,6 +130,13 @@ for program in doc.programs() {
   its text. XG5000 opened, checked, and resaved both a program 0 comment and a
   program 1 comment placed after shifting MOVE; every decoded program and local
   symbol payload was preserved in both Save As files.
+  `insert_iec_ld_single_element(...)` inserts only the requested contact or coil
+  into a validated implicit blank row, including the first row after the stored
+  program range. It accepts the same six contact and six coil kinds, validates
+  BOOL operands and writable coil destinations, and creates no connecting wire
+  or second element. Such a row can represent an incomplete circuit. XG5000
+  4.82.1 rendered standalone contact and coil rows; native Save As preserved
+  all seven program payloads and parsed local symbols in an all-program fixture.
   `insert_iec_ld_rung(...)` fills a validated implicit blank row with a native
   single-row group containing one of six addressed BOOL contact kinds, the
   rail-spanning horizontal wire, and one of six BOOL coil kinds. It updates the
