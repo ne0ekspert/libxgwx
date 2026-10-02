@@ -149,6 +149,33 @@ pub(crate) fn validate_raw_operands(
             continue;
         }
         let tail = &text[1..];
+        if area == "D" && tail.contains('.') {
+            let valid = tail.split_once('.').is_some_and(|(word, bit)| {
+                !word.is_empty()
+                    && word.bytes().all(|c| c.is_ascii_digit())
+                    && bit.len() == 1
+                    && bit.bytes().all(|c| c.is_ascii_hexdigit())
+            });
+            if !valid || text.len() > 32 {
+                return Err(crate::XgwxError::InvalidLadderEdit {
+                    reason: "D register bit address requires a decimal word address and one bit index 0 through F",
+                });
+            }
+            // Some instructions consume words from a bit-position starting address.
+            // Preserve the manual's explicit D.x permission for those operands.
+            if !rule
+                .device_areas
+                .is_some_and(|areas| areas.contains(&"D.x"))
+                && !rule
+                    .data_types
+                    .iter()
+                    .any(|t| matches!(*t, "BIT" | "BOOL" | "NIBBLE" | "BYTE"))
+            {
+                return Err(crate::XgwxError::InvalidLadderEdit {
+                    reason: "D register bit address cannot be used as a word device",
+                });
+            }
+        }
         if matches!(area, "P" | "M" | "K" | "F" | "L")
             && !tail.is_empty()
             && tail.chars().all(|c| c.is_ascii_hexdigit())
@@ -285,6 +312,11 @@ mod tests {
         assert!(validate_raw_operands("MOV", &["M0000A", "D200"]).is_err());
         assert!(validate_raw_operands("MOV4", &["M0000A", "D100.4"]).is_ok());
         assert!(validate_raw_operands("MOV8", &["M00000", "D100.8"]).is_ok());
+        assert!(validate_raw_operands("MOV4", &["D0000.F", "D100.4"]).is_ok());
+        for bad in ["D0000.10", "D0000.G", "D.0"] {
+            assert!(validate_raw_operands("MOV4", &[bad, "D100.4"]).is_err());
+        }
+
         assert!(validate_raw_operands("MOV", &["1.5", "D200"]).is_err());
         assert!(validate_raw_operands("RADD", &["1.5", "D100", "D200"]).is_ok());
     }

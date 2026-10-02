@@ -24,11 +24,18 @@ coordinate, matching native Ctrl+L, and stretches crossing branch connections.
 `edit_ladder_branch` adds or removes a vertical connection between adjacent rows
 at a column boundary. Row deletion and horizontal-wire editing are not implemented.
 
-Addressed elements currently accept uppercase P/M/K/F/L/T/C followed by decimal
-digits (2–32 ASCII bytes total). INV, PUP and PDN use an empty operand. This is a
+Addressed elements accept uppercase P/M/K/F/L/T/C followed by decimal digits,
+or a decimal D register with one hexadecimal bit index (`D0000.0` through
+`D0000.F`), within 2–32 ASCII bytes total. INV, PUP and PDN use an empty operand. This is a
 bounded serialization syntax, not CPU-specific device-range or program
 validation. Symbol names and other addressing forms are not supported by the
 structural API.
+
+The D-register bit syntax is confirmed by `XGK(B)InstructionHelp_Kr_V3.5.chm`,
+sections 2.2.2 (bit data, examples `D0010.1` and `D0011.A`) and 2.3.9
+(D registers). The LOAD/AND and OUT instruction tables explicitly permit `D.x`.
+This manual check confirms the addressing rule; it does not replace native
+XG5000 validation of serialized edits.
 
 ```rust
 use xgwx::{LadderCellEdit, LadderEditElement, LadderEditKind};

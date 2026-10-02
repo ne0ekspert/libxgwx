@@ -818,6 +818,25 @@ pub(crate) fn ladder_connections(bytes: &[u8]) -> Result<Vec<(u8, u8, u8)>, Xgwx
         .collect())
 }
 
+fn valid_bit_device_address(operand: &str) -> bool {
+    let address = operand.as_bytes();
+    if !(2..=32).contains(&address.len()) {
+        return false;
+    }
+    if address[0] == b'D' {
+        return operand[1..].split_once('.').is_some_and(|(word, bit)| {
+            !word.is_empty()
+                && word.bytes().all(|c| c.is_ascii_digit())
+                && bit.len() == 1
+                && bit
+                    .bytes()
+                    .all(|c| c.is_ascii_digit() || matches!(c, b'A'..=b'F'))
+        });
+    }
+    matches!(address[0], b'P' | b'M' | b'K' | b'F' | b'L' | b'T' | b'C')
+        && address[1..].iter().all(u8::is_ascii_digit)
+}
+
 pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Vec<u8>, XgwxError> {
     if edit.column > 9 || !edit.raw_y.is_multiple_of(4) {
         return Err(XgwxError::InvalidLadderEdit {
@@ -826,14 +845,9 @@ pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Ve
     }
     if let Some(element) = &edit.replacement {
         if element.kind.has_operand() {
-            let address = element.operand.as_bytes();
-            if address.len() < 2
-                || address.len() > 32
-                || !matches!(address[0], b'P' | b'M' | b'K' | b'F' | b'L' | b'T' | b'C')
-                || !address[1..].iter().all(u8::is_ascii_digit)
-            {
+            if !valid_bit_device_address(&element.operand) {
                 return Err(XgwxError::InvalidLadderEdit {
-                    reason: "use an uppercase P/M/K/F/L/T/C device address",
+                    reason: "use an uppercase P/M/K/F/L/T/C device address or D register bit D0000.0 through D0000.F",
                 });
             }
         } else if !element.operand.is_empty() {
@@ -1292,6 +1306,16 @@ pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u8) -> Result<Vec<u8>, Xgwx
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn d_register_bits_use_one_hexadecimal_index() {
+        for bit in "0123456789ABCDEF".chars() {
+            assert!(valid_bit_device_address(&format!("D0000.{bit}")));
+        }
+        for bad in ["D0000", "D0000.10", "D0000.G", "D.0", "DA.0", "D0000..0"] {
+            assert!(!valid_bit_device_address(bad), "{bad}");
+        }
+    }
+
     #[test]
     fn inserting_application_instruction_reproduces_native_mov_records() {
         let document = crate::XgwxDocument::from_path("fixtures/elements.xgwx").unwrap();
