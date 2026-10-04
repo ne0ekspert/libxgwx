@@ -23,3 +23,12 @@ Complete local open/Check Program/Save As evidence is retained outside Git in
   extracted from the supplied native IEC project's existing conversion block.
   The serializer reproduces its opcode, flags, pin names and reference ordinals
   exactly before translating coordinates for general placement.
+
+- `iec_int_to_udint.bin`, `iec_udint_to_time.bin`, `iec_time_to_udint.bin`,
+  and `iec_udint_to_int.bin`: unmodified scalar conversion bodies extracted on
+  2026-10-03 from the supplied native IEC project. They contain only function
+  and pin names, type masks, flags, and coordinates; no project variable names.
+  The test preserves the captured connected/terminal state while comparing the
+  canonical prototype. Complete-document restoration outputs reproduce the
+  previously native-validated project byte-for-byte. Native deletion and saved
+  candidate evidence: `VMs/xg5000-win10/captures/iec-mixed-scalar-chain-20261003`.

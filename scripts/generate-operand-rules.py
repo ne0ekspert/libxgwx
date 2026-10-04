@@ -65,34 +65,110 @@ precise = {
     'RSUB': ['REAL']*3, 'LSUB': ['LREAL']*3,
     'RMUL': ['REAL']*3, 'LMUL': ['LREAL']*3,
     'RDIV': ['REAL']*3, 'LDIV': ['LREAL']*3,
-    **{name: ['INT']*2 for name in comparisons},
     'INC': ['INT'], 'DINC': ['DINT'], 'DEC': ['INT'], 'DDEC': ['DINT'],
     'INCU': ['UINT'], 'DINCU': ['UDINT'], 'DECU': ['UINT'], 'DDECU': ['UDINT'],
     'INC4': ['NIBBLE'], 'INC8': ['BYTE'], 'DEC4': ['NIBBLE'], 'DEC8': ['BYTE'],
     'MOV4': ['NIBBLE']*2, 'MOV8': ['BYTE']*2,
+    'SCAL': ['INT']*4, 'DSCAL': ['DINT']*4, 'RSCAL': ['REAL']*4,
+    'SCAL2': ['INT']*5, 'DSCAL2': ['DINT']*5, 'RSCAL2': ['REAL']*5,
+    'BINHA': ['WORD','DWORD'], 'DBINHA': ['DWORD','DWORD'],
 }
+comparison_pages = {}
+for name, count in comparisons.items():
+    if name in ['B', 'BN']:
+        precise[name] = ['WORD', 'WORD']
+        comparison_pages.setdefault('4381loadbloadbn.htm', []).append(name)
+        continue
+    match = re.fullmatch(r'([^<>=]*)([<>=]+)(3?)', name)
+    if not match: raise ValueError('Unknown comparison spelling: '+name)
+    prefix, _, suffix = match.groups()
+    type_name = {'': 'INT', 'D': 'DINT', 'R': 'REAL', 'L': 'LREAL', '$': 'STRING',
+                 'G': 'INT', 'DG': 'DINT', '4': 'NIBBLE', '8': 'BYTE',
+                 'U': 'UINT', 'UD': 'UDINT'}[prefix]
+    precise[name] = [type_name]*count
+    if prefix in ['G', 'DG']: precise[name][-1] = 'WORD'
+    page = ('41513load3xloadd3x.htm' if suffix else {
+        '': '4151loadxloaddx.htm', 'D': '4151loadxloaddx.htm',
+        'R': '4154loadrxloadlx.htm', 'L': '4154loadrxloadlx.htm',
+        '$': '4157loadx.htm', 'G': '41510loadgxloaddgx.htm', 'DG': '41510loadgxloaddgx.htm',
+        '4': '41516load4xload8x.htm', '8': '41516load4xload8x.htm',
+        'U': '41519uloadxuloaddx1.htm', 'UD': '41519uloadxuloaddx1.htm'}[prefix])
+    comparison_pages.setdefault(page, []).append(name)
 result = {}; skipped = []
+# Pages with image-only layouts or demonstrably pasted operand tables. These
+# factual labels/types are reviewed against their usage tables, diagrams and
+# explanations; keep the manual page as provenance for every generated rule.
+reviewed_rows = {
+    '4141cmpcmppdcmpdcmpp.htm': [('S1', '', 'UINT/UDINT'), ('S2', '', 'UINT/UDINT')],
+    '4142cmp4cmp4pcmp8cmp8p.htm': [('S1', '', 'NIBBLE/BYTE'), ('S2', '', 'NIBBLE/BYTE')],
+    '4364ebwrite.htm': [('S1', '', 'WORD'), ('S2', '', 'WORD')],
+    '44121srs1.htm': [('sl', '', 'WORD'), ('ax', '', 'WORD'), ('n1', '', 'WORD')],
+    '44244xswr.htm': [('sl', '', 'WORD'), ('ax', '', 'WORD'), ('S', '', 'WORD'), ('n1', '', 'WORD')],
+}
+# These title typos are independently resolved by the command usage table on
+# the same page and by the native instruction database (no opcode inference).
+reviewed_names = {
+    '4211addbaddcpdaddbdaddbp.htm': ['ADDBP'],
+    '4248betowbtowp.htm': ['BTOW'],
+    '4433xturn.htm': ['XTRUN'],
+}
+precise.update({'CMP': ['UINT']*2, 'DCMP': ['UDINT']*2,
+                'CMP4': ['NIBBLE']*2, 'CMP8': ['BYTE']*2})
 for path in sorted(manual.glob('*.htm')):
     text = path.read_bytes().decode('cp949', errors='replace')
     parser = Tables(); parser.feed(text)
     tables = [t for t in parser.tables if t and len(t[0]) == 3 and t[0][0] == '오퍼랜드']
-    if not tables: continue
+    if not tables and path.name not in reviewed_rows: continue
     title = re.search(r'<title>(.*?)</title>', text, re.S)
     if not title: continue
-    names = [n for n in re.findall(r'[A-Za-z$][A-Za-z0-9$]*', title[1]) if n in catalog]
-    if path.name == '4151loadxloaddx.htm': names.extend(comparisons)
-    rows = [r for r in tables[0][1:] if len(r) == 3]
-    usage = next((t for t in parser.tables if len(t) > 2 and '상수' in t[1]), None)
+    # The manual abbreviates motion-module variants as NAME(EX).
+    expanded_title = re.sub(r'([A-Za-z$][A-Za-z0-9$]*)\(EX\)',
+                            lambda m: m[1] + ', ' + m[1] + 'EX', title[1])
+    names = list(dict.fromkeys(n for n in re.findall(r'[A-Za-z$][A-Za-z0-9$]*', expanded_title)
+                               if n in catalog))
+    names.extend(n for n in reviewed_names.get(path.name, []) if n in catalog and n not in names)
+    names.extend(comparison_pages.get(path.name, []))
+    # S2+1 describes memory addressed relative to S2, not another argument.
+    # Retain short rows: Word's vertically merged cells inherit the type.
+    rows = []
+    inherited_types = ''
+    for row in (tables[0][1:] if tables else []):
+        if len(row) == 3: inherited_types = row[2]
+        elif len(row) == 2: row = row + [inherited_types]
+        else: continue
+        if not re.fullmatch(r'.+\s*\+\s*\d+', row[0]): rows.append(row)
+    if path.name in reviewed_rows: rows = reviewed_rows[path.name]
+    usage = next((t for t in parser.tables if len(t) > 2
+                  and any(h in t[1] for h in ['상수', '문자열'])), None)
     for name in names:
-        if len(rows) != catalog[name]: skipped.append(name); continue
+        instruction_rows = rows
+        if len(rows) != catalog[name] and usage:
+            # Some pages contain stale extra operand-table rows. Only discard
+            # them when the independent usage table identifies every argument.
+            labels = []
+            for row in usage[2:]:
+                if len(row) > 1:
+                    label = row[0] if row[1] in ['O','○','-','X','×'] else row[1]
+                    if label not in labels: labels.append(label)
+            selected = [r for label in labels for r in rows if r[0] == label]
+            if len(labels) == len(selected) == catalog[name]: instruction_rows = selected
+        # PIDINIT's operand table is a pasted GWXNR table. Its usage table and
+        # explanation both specify the single constant PID loop number S.
+        if name == 'PIDINIT' and path.name == '4288pidinit.htm':
+            instruction_rows = [('S', '', '상수')]
+        if len(instruction_rows) != catalog[name]: skipped.append(name); continue
         rules = []
-        for label, _, type_text in rows:
+        for label, _, type_text in instruction_rows:
+            type_text = re.sub(r'BIN\s*32', 'DWORD', type_text)
+            type_text = re.sub(r'BIN\s*16', 'WORD', type_text)
+            if type_text == '상수': type_text = 'WORD'
             allowed = re.findall(r'[A-Z]+', type_text)
             allowed = [t for t in allowed if t in types]
             if not allowed: rules = []; break
             regions = None; constant = None
             if usage:
-                header = usage[1][:usage[1].index('상수') + 1]
+                literal_column = '상수' if '상수' in usage[1] else '문자열'
+                header = usage[1][:usage[1].index(literal_column) + 1]
                 # Remaining device columns after constants are present too.
                 header += [h for h in usage[1][len(header):] if h in ['U','N','D','R']]
                 for row in usage[2:]:
@@ -100,11 +176,15 @@ for path in sorted(manual.glob('*.htm')):
                     if offset is None: continue
                     permissions = row[offset+1:offset+1+len(header)]
                     if len(permissions) != len(header) or any(v not in ['O','○','-','X','×'] for v in permissions): continue
-                    regions = [h for h, v in zip(header, permissions) if h != '상수' and v in ['O','○']]
-                    constant = permissions[header.index('상수')] in ['O','○']
+                    regions = [h for h, v in zip(header, permissions) if h != literal_column and v in ['O','○']]
+                    constant = permissions[header.index(literal_column)] in ['O','○']
                     break
             rules.append((label, allowed, regions, constant))
         if not rules: continue
+        if name in ['B', 'BN']:
+            # The source row has an empty F permission cell. The native B/BN
+            # usage dialog independently excludes F and constants for S.
+            rules[0] = (rules[0][0], rules[0][1], ['PMK', 'L', 'T', 'C', 'Z', 'U', 'N', 'D', 'R'], False)
         base = name[:-1] if name.endswith('P') else name
         refined = precise.get(name, precise.get(base))
         if refined and len(refined) == len(rules):

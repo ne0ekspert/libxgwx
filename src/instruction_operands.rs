@@ -96,10 +96,31 @@ pub(crate) fn validate_raw_operands(
     mnemonic: &str,
     operands: &[&str],
 ) -> Result<(), crate::XgwxError> {
+    if operands.iter().any(|s| s.contains('\''))
+        && ladder_instruction_operand_rules(mnemonic).len() != operands.len()
+    {
+        return Err(crate::XgwxError::InvalidLadderEdit {
+            reason: "string constants require complete manual operand rules",
+        });
+    }
     for (rule, operand) in ladder_instruction_operand_rules(mnemonic)
         .iter()
         .zip(operands)
     {
+        if operand.starts_with('\'') || operand.ends_with('\'') {
+            let body = operand.strip_prefix('\'').and_then(|v| v.strip_suffix('\''));
+            if !rule.data_types.contains(&"STRING") || rule.allows_constant != Some(true) {
+                return Err(crate::XgwxError::InvalidLadderEdit {
+                    reason: "instruction operand does not permit a string constant",
+                });
+            }
+            if body.is_none_or(|v| v.len() > 31 || !v.chars().all(|c| c.is_ascii() && !c.is_ascii_control() && c != '\'')) {
+                return Err(crate::XgwxError::InvalidLadderEdit {
+                    reason: "string constants require single quotes and at most 31 printable ASCII characters",
+                });
+            }
+            continue;
+        }
         let text = operand.to_ascii_uppercase();
         let literal = text.parse::<f64>().is_ok()
             || ['H', 'B'].iter().any(|prefix| {
@@ -114,6 +135,19 @@ pub(crate) fn validate_raw_operands(
                         })
                 })
             });
+        if literal && rule.data_types == ["STRING"] {
+            return Err(crate::XgwxError::InvalidLadderEdit {
+                reason: "string constants require single quotes",
+            });
+        }
+        if !literal
+            && rule.allows_constant == Some(true)
+            && rule.device_areas.is_some_and(|areas| areas.is_empty())
+        {
+            return Err(crate::XgwxError::InvalidLadderEdit {
+                reason: "instruction operand requires a constant rather than a device or variable",
+            });
+        }
         if literal
             && (text.parse::<f64>().is_ok_and(|value| !value.is_finite())
                 || !literal_fits(rule, &text))
@@ -258,8 +292,72 @@ mod tests {
         }
         for spec in crate::ladder_comparison_catalog() {
             let rules = ladder_instruction_operand_rules(spec.mnemonic);
-            assert_eq!(rules.len(), 2, "{}", spec.mnemonic);
-            assert!(rules.iter().all(|rule| rule.data_types == ["INT"]));
+            assert_eq!(rules.len(), spec.operand_count, "{}", spec.mnemonic);
+            assert!(rules.iter().all(|rule| !rule.data_types.is_empty()));
+        }
+    }
+
+    #[test]
+    fn indexed_bit_sources_and_toggle_destinations_follow_manual_permissions() {
+        for name in ["B", "BN"] {
+            let rules = ladder_instruction_operand_rules(name);
+            assert_eq!(rules.len(), 2);
+            assert_eq!(rules[0].data_types, &["WORD"]);
+            assert_eq!(rules[1].data_types, &["WORD"]);
+            assert!(validate_raw_operands(name, &["D100", "D108"]).is_ok());
+            assert!(validate_raw_operands(name, &["D100", "65535"]).is_ok());
+            assert!(validate_raw_operands(name, &["4", "4"]).is_err());
+            assert!(validate_raw_operands(name, &["F110", "4"]).is_err());
+            assert!(validate_raw_operands(name, &["D100.0", "4"]).is_err());
+            assert!(validate_raw_operands(name, &["D100", "65536"]).is_err());
+        }
+        assert!(validate_raw_operands("FF", &["M00030"]).is_ok());
+        assert!(validate_raw_operands("FF", &["D100.F"]).is_ok());
+        assert!(validate_raw_operands("FF", &["D100"]).is_err());
+        assert!(validate_raw_operands("FF", &["F110"]).is_err());
+        assert!(validate_raw_operands("FF", &["1"]).is_err());
+    }
+    #[test]
+    fn abbreviated_motion_variants_and_merged_cells_have_rules() {
+        for name in ["XORG", "XORGEX", "XDST", "XDSTEX", "XGEARIP", "XGEARIPEX"] {
+            let spec = crate::ladder_instruction_catalog()
+                .iter()
+                .find(|spec| spec.mnemonic == name)
+                .unwrap();
+            assert_eq!(
+                ladder_instruction_operand_rules(name).len(),
+                spec.operand_count
+            );
+        }
+        let sr = ladder_instruction_operand_rules("SR");
+        assert_eq!(sr.len(), 4);
+        assert_eq!(sr[1].data_types, ["BIT"]);
+        assert_eq!(sr[2].data_types, ["BIT"]);
+        for (name, ty) in [("SCAL", "INT"), ("DSCALP", "DINT"), ("RSCAL", "REAL")] {
+            let rules = ladder_instruction_operand_rules(name);
+            assert_eq!(
+                rules.iter().map(|r| r.label).collect::<Vec<_>>(),
+                ["S1", "S2", "S3", "D"]
+            );
+            assert!(rules.iter().all(|r| r.data_types == [ty]));
+        }
+    }
+
+    #[cfg(feature = "write")]
+    #[test]
+    fn pid_loop_operands_use_the_constant_only_usage_table() {
+        for name in ["PIDRUN", "PIDINIT", "PIDPAUSE", "PIDAT"] {
+            let rules = ladder_instruction_operand_rules(name);
+            assert_eq!(rules.len(), 1, "{name}");
+            assert_eq!(rules[0].label, "S", "{name}");
+            assert_eq!(rules[0].device_areas, Some(&[][..]), "{name}");
+            assert_eq!(rules[0].allows_constant, Some(true), "{name}");
+            assert!(validate_raw_operands(name, &["0"]).is_ok(), "{name}");
+            assert!(validate_raw_operands(name, &["D100"]).is_err(), "{name}");
+            assert!(
+                validate_raw_operands(name, &["LoopNumber"]).is_err(),
+                "{name}"
+            );
         }
     }
     #[cfg(feature = "write")]

@@ -160,3 +160,21 @@ impl IecLocalSymbol {
         Ok(symbols_out)
     }
 }
+
+/// BOOL user flags documented in XGI(R) Instruction Help, section 부2.4.
+/// Device addresses differ between CPU families; serialize the symbolic name.
+pub const IEC_SYSTEM_BOOL_VARIABLES: &[(&str, &str)] = &[
+    ("_T20MS", "20 ms clock"),
+    ("_T100MS", "100 ms clock"),
+    ("_T200MS", "200 ms clock"),
+    ("_T1S", "1 second clock"),
+    ("_T2S", "2 second clock"),
+    ("_T10S", "10 second clock"),
+    ("_T20S", "20 second clock"),
+    ("_T60S", "60 second clock"),
+    ("_ON", "Always on"),
+    ("_OFF", "Always off"),
+    ("_1ON", "On during the first scan"),
+    ("_1OFF", "Off during the first scan"),
+    ("_STOG", "Alternates each scan"),
+];

@@ -4,26 +4,42 @@ use super::LadderOperandSpec;
 
 pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
     match name {
+        "$<" | "$<=" | "$<>" | "$=" | "$>" | "$>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["STRING"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4157loadx.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["STRING"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4157loadx.htm",
+            },
+        ],
         "$ADD" | "$ADDP" => &[
             LadderOperandSpec {
                 label: "S1",
                 data_types: &["STRING"],
-                device_areas: None,
-                allows_constant: None,
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
                 manual_page: "42013addaddp.htm",
             },
             LadderOperandSpec {
                 label: "S2",
                 data_types: &["STRING"],
-                device_areas: None,
-                allows_constant: None,
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
                 manual_page: "42013addaddp.htm",
             },
             LadderOperandSpec {
                 label: "D",
                 data_types: &["STRING"],
-                device_areas: None,
-                allows_constant: None,
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
                 manual_page: "42013addaddp.htm",
             },
         ],
@@ -31,16 +47,48 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
             LadderOperandSpec {
                 label: "S",
                 data_types: &["STRING"],
-                device_areas: None,
-                allows_constant: None,
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
                 manual_page: "4119movmovp1.htm",
             },
             LadderOperandSpec {
                 label: "D",
                 data_types: &["STRING"],
-                device_areas: None,
-                allows_constant: None,
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
                 manual_page: "4119movmovp1.htm",
+            },
+        ],
+        "4<" | "4<=" | "4<>" | "4=" | "4>" | "4>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["NIBBLE"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(true),
+                manual_page: "41516load4xload8x.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["NIBBLE"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(true),
+                manual_page: "41516load4xload8x.htm",
+            },
+        ],
+        "8<" | "8<=" | "8<>" | "8=" | "8>" | "8>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["BYTE"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(true),
+                manual_page: "41516load4xload8x.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["BYTE"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(true),
+                manual_page: "41516load4xload8x.htm",
             },
         ],
         "<" | "<=" | "<>" | "=" | ">" | ">=" => &[
@@ -57,6 +105,29 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(true),
                 manual_page: "4151loadxloaddx.htm",
+            },
+        ],
+        "<3" | "<=3" | "<>3" | "=3" | ">3" | ">=3" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41513load3xloadd3x.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41513load3xloadd3x.htm",
+            },
+            LadderOperandSpec {
+                label: "S3",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41513load3xloadd3x.htm",
             },
         ],
         "ABAND" | "ABANDP" => &[
@@ -197,7 +268,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4201addaddpdadddaddp.htm",
             },
         ],
-        "ADDB" | "DADDB" | "DADDBP" => &[
+        "ADDB" | "ADDBP" | "DADDB" | "DADDBP" => &[
             LadderOperandSpec {
                 label: "S1",
                 data_types: &["WORD", "DWORD"],
@@ -390,6 +461,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "42414aveavepdavedavep.htm",
             },
         ],
+        "B" | "BN" => &[
+            LadderOperandSpec {
+                label: "S",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4381loadbloadbn.htm",
+            },
+            LadderOperandSpec {
+                label: "n",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4381loadbloadbn.htm",
+            },
+        ],
         "BAND" | "BANDP" => &[
             LadderOperandSpec {
                 label: "S1",
@@ -555,6 +642,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4261bindabindapdbindadbindap.htm",
             },
         ],
+        "BINHA" | "BINHAP" => &[
+            LadderOperandSpec {
+                label: "S",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4262binhabinhapdbinhadbinhap.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["DWORD"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4262binhabinhapdbinhadbinhap.htm",
+            },
+        ],
         "BMOV" | "BMOVP" => &[
             LadderOperandSpec {
                 label: "S",
@@ -700,6 +803,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4189brrbrrp.htm",
             },
         ],
+        "BRST" | "BRSTP" => &[
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["BIT"],
+                device_areas: Some(&["PMK", "L", "D.x", "U"]),
+                allows_constant: Some(false),
+                manual_page: "4242brstbrstp.htm",
+            },
+            LadderOperandSpec {
+                label: "N",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "D"]),
+                allows_constant: Some(true),
+                manual_page: "4242brstbrstp.htm",
+            },
+        ],
         "BSFL" | "BSFLP" | "DBSFL" | "DBSFLP" => &[
             LadderOperandSpec {
                 label: "D",
@@ -796,7 +915,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4241bsumbsumpdbsumdbsump.htm",
             },
         ],
-        "BTOWP" => &[
+        "BTOW" | "BTOWP" => &[
             LadderOperandSpec {
                 label: "S",
                 data_types: &["WORD"],
@@ -946,6 +1065,54 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(false),
                 manual_page: "4113cmovcmovpdcmovdcmovp1.htm",
+            },
+        ],
+        "CMP" | "CMPP" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["UINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4141cmpcmppdcmpdcmpp.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["UINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4141cmpcmppdcmpdcmpp.htm",
+            },
+        ],
+        "CMP4" | "CMP4P" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["NIBBLE"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(true),
+                manual_page: "4142cmp4cmp4pcmp8cmp8p.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["NIBBLE"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(true),
+                manual_page: "4142cmp4cmp4pcmp8cmp8p.htm",
+            },
+        ],
+        "CMP8" | "CMP8P" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["BYTE"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(true),
+                manual_page: "4142cmp4cmp4pcmp8cmp8p.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["BYTE"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(true),
+                manual_page: "4142cmp4cmp4pcmp8cmp8p.htm",
             },
         ],
         "COS" | "COSP" => &[
@@ -1125,6 +1292,45 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4132d2rd2rpd2ld2lp.htm",
             },
         ],
+        "D<" | "D<=" | "D<>" | "D=" | "D>" | "D>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4151loadxloaddx.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4151loadxloaddx.htm",
+            },
+        ],
+        "D<3" | "D<=3" | "D<>3" | "D=3" | "D>3" | "D>=3" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41513load3xloadd3x.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41513load3xloadd3x.htm",
+            },
+            LadderOperandSpec {
+                label: "S3",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41513load3xloadd3x.htm",
+            },
+        ],
         "DABCD" | "DABCDP" | "DDABCD" | "DDABCDP" => &[
             LadderOperandSpec {
                 label: "S",
@@ -1201,6 +1407,38 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
             allows_constant: None,
             manual_page: "4292datewrdatewrp.htm",
         }],
+        "DBINHA" | "DBINHAP" => &[
+            LadderOperandSpec {
+                label: "S",
+                data_types: &["DWORD"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4262binhabinhapdbinhadbinhap.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["DWORD"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4262binhabinhapdbinhadbinhap.htm",
+            },
+        ],
+        "DCMP" | "DCMPP" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["UDINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4141cmpcmppdcmpdcmpp.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["UDINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4141cmpcmppdcmpdcmpp.htm",
+            },
+        ],
         "DDEC" | "DDECP" => &[LadderOperandSpec {
             label: "D",
             data_types: &["DINT"],
@@ -1439,6 +1677,29 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(true),
                 manual_page: "42416detectdetectp1.htm",
+            },
+        ],
+        "DG<" | "DG<=" | "DG<>" | "DG=" | "DG>" | "DG>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "41510loadgxloaddgx.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41510loadgxloaddgx.htm",
+            },
+            LadderOperandSpec {
+                label: "N",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41510loadgxloaddgx.htm",
             },
         ],
         "DHABIN" | "DHABINP" | "HABIN" | "HABINP" => &[
@@ -1763,38 +2024,68 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4173rorrorpdrordrorp.htm",
             },
         ],
-        "DSCAL2" | "DSCAL2P" | "RSCAL2" | "RSCAL2P" | "SCAL2" | "SCAL2P" => &[
+        "DSCAL" | "DSCALP" => &[
             LadderOperandSpec {
                 label: "S1",
-                data_types: &["INT", "DINT", "REAL"],
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "S3",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["DINT"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+        ],
+        "DSCAL2" | "DSCAL2P" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["DINT"],
                 device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(true),
                 manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
             },
             LadderOperandSpec {
                 label: "S2",
-                data_types: &["INT", "DINT", "REAL"],
+                data_types: &["DINT"],
                 device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(true),
                 manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
             },
             LadderOperandSpec {
                 label: "S3",
-                data_types: &["INT", "DINT", "REAL"],
+                data_types: &["DINT"],
                 device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(true),
                 manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
             },
             LadderOperandSpec {
                 label: "S4",
-                data_types: &["INT", "DINT", "REAL"],
+                data_types: &["DINT"],
                 device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(true),
                 manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
             },
             LadderOperandSpec {
                 label: "D",
-                data_types: &["INT", "DINT", "REAL"],
+                data_types: &["DINT"],
                 device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(false),
                 manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
@@ -2279,6 +2570,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4363ebread.htm",
             },
         ],
+        "EBWRITE" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D"]),
+                allows_constant: Some(true),
+                manual_page: "4364ebwrite.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D"]),
+                allows_constant: Some(true),
+                manual_page: "4364ebwrite.htm",
+            },
+        ],
         "ECLR" => &[
             LadderOperandSpec {
                 label: "sl",
@@ -2463,6 +2770,13 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44018fcs.htm",
             },
         ],
+        "FF" => &[LadderOperandSpec {
+            label: "D",
+            data_types: &["BIT"],
+            device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+            allows_constant: Some(false),
+            manual_page: "455ff.htm",
+        }],
         "FIDEL" | "FIDELP" => &[
             LadderOperandSpec {
                 label: "S",
@@ -2661,6 +2975,29 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: Some(&["F"]),
                 allows_constant: Some(false),
                 manual_page: "4373fwrite.htm",
+            },
+        ],
+        "G<" | "G<=" | "G<>" | "G=" | "G>" | "G>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "41510loadgxloaddgx.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41510loadgxloaddgx.htm",
+            },
+            LadderOperandSpec {
+                label: "N",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41510loadgxloaddgx.htm",
             },
         ],
         "GADD" | "GADDP" | "GSUB" | "GSUBP" => &[
@@ -3276,6 +3613,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "42613hexhexp.htm",
             },
         ],
+        "HOUR" | "HOURP" => &[
+            LadderOperandSpec {
+                label: "S",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4296hourhourp.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4296hourhourp.htm",
+            },
+        ],
         "I2L" | "I2LP" => &[
             LadderOperandSpec {
                 label: "S",
@@ -3467,6 +3820,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: Some(&["PMK", "L", "T", "C", "U", "N", "D", "R"]),
                 allows_constant: Some(false),
                 manual_page: "41310l2ul2upl2udl2udp.htm",
+            },
+        ],
+        "L<" | "L<=" | "L<>" | "L=" | "L>" | "L>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["LREAL"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "4154loadrxloadlx.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["LREAL"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "4154loadrxloadlx.htm",
             },
         ],
         "LADD" | "LADDP" => &[
@@ -3814,6 +4183,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44012mnetinfo.htm",
             },
         ],
+        "MOF" => &[
+            LadderOperandSpec {
+                label: "sl",
+                data_types: &["WORD"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "44122mof.htm",
+            },
+            LadderOperandSpec {
+                label: "ax",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "44122mof.htm",
+            },
+        ],
         "MOV" | "MOVP" => &[
             LadderOperandSpec {
                 label: "S",
@@ -4155,6 +4540,82 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4403p2pwwrword.htm",
             },
         ],
+        "PIDAT" => &[LadderOperandSpec {
+            label: "S",
+            data_types: &["WORD"],
+            device_areas: Some(&[]),
+            allows_constant: Some(true),
+            manual_page: "4289pidat.htm",
+        }],
+        "PIDCAS" => &[
+            LadderOperandSpec {
+                label: "M",
+                data_types: &["WORD"],
+                device_areas: Some(&[]),
+                allows_constant: Some(true),
+                manual_page: "42811pidcas.htm",
+            },
+            LadderOperandSpec {
+                label: "S",
+                data_types: &["WORD"],
+                device_areas: Some(&[]),
+                allows_constant: Some(true),
+                manual_page: "42811pidcas.htm",
+            },
+        ],
+        "PIDHBD" => &[
+            LadderOperandSpec {
+                label: "F",
+                data_types: &["WORD"],
+                device_areas: Some(&[]),
+                allows_constant: Some(true),
+                manual_page: "42810pidhbd.htm",
+            },
+            LadderOperandSpec {
+                label: "R",
+                data_types: &["WORD"],
+                device_areas: Some(&[]),
+                allows_constant: Some(true),
+                manual_page: "42810pidhbd.htm",
+            },
+        ],
+        "PIDINIT" => &[LadderOperandSpec {
+            label: "S",
+            data_types: &["WORD"],
+            device_areas: Some(&[]),
+            allows_constant: Some(true),
+            manual_page: "4288pidinit.htm",
+        }],
+        "PIDPAUSE" => &[LadderOperandSpec {
+            label: "S",
+            data_types: &["WORD"],
+            device_areas: Some(&[]),
+            allows_constant: Some(true),
+            manual_page: "4287pidpause.htm",
+        }],
+        "PIDPRMT" => &[
+            LadderOperandSpec {
+                label: "S",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4286pidprmt.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["WORD"],
+                device_areas: Some(&[]),
+                allows_constant: Some(true),
+                manual_page: "4286pidprmt.htm",
+            },
+        ],
+        "PIDRUN" => &[LadderOperandSpec {
+            label: "S",
+            data_types: &["WORD"],
+            device_areas: Some(&[]),
+            allows_constant: Some(true),
+            manual_page: "4285pidrun.htm",
+        }],
         "POR" => &[
             LadderOperandSpec {
                 label: "sl",
@@ -4484,6 +4945,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4139r2ur2upr2udr2udp.htm",
             },
         ],
+        "R<" | "R<=" | "R<>" | "R=" | "R>" | "R>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["REAL"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "4154loadrxloadlx.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["REAL"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "4154loadrxloadlx.htm",
+            },
+        ],
         "RAD" | "RADP" => &[
             LadderOperandSpec {
                 label: "S",
@@ -4776,6 +5253,73 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4174ror4ror4pror8ror8p.htm",
             },
         ],
+        "RSCAL" | "RSCALP" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "S3",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+        ],
+        "RSCAL2" | "RSCAL2P" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+            LadderOperandSpec {
+                label: "S3",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+            LadderOperandSpec {
+                label: "S4",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["REAL"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+        ],
         "RSET" | "RSETP" => &[LadderOperandSpec {
             label: "S",
             data_types: &["WORD"],
@@ -4852,6 +5396,73 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "42419tramprtramp.htm",
             },
         ],
+        "SCAL" | "SCALP" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "S3",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42812scalscalpdscaldscalprscalrs.htm",
+            },
+        ],
+        "SCAL2" | "SCAL2P" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+            LadderOperandSpec {
+                label: "S3",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+            LadderOperandSpec {
+                label: "S4",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["INT"],
+                device_areas: Some(&["PMK", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "42813scal2scal2pdscal2dscal2prsc.htm",
+            },
+        ],
         "SECOND" | "SECONDP" => &[
             LadderOperandSpec {
                 label: "S",
@@ -4866,6 +5477,29 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: Some(&["PMK", "L", "Z", "U", "N", "D", "R"]),
                 allows_constant: Some(false),
                 manual_page: "4295secondsecondp.htm",
+            },
+        ],
+        "SEG" | "SEGP" => &[
+            LadderOperandSpec {
+                label: "S",
+                data_types: &["DWORD"],
+                device_areas: Some(&["PMK", "F", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4231segsegp.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["DWORD"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "4231segsegp.htm",
+            },
+            LadderOperandSpec {
+                label: "Z",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4231segsegp.htm",
             },
         ],
         "SENDDTR" => &[
@@ -5020,6 +5654,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4271sinsinp.htm",
             },
         ],
+        "SKP" => &[
+            LadderOperandSpec {
+                label: "sl",
+                data_types: &["WORD"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "44111skp.htm",
+            },
+            LadderOperandSpec {
+                label: "ax",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "44111skp.htm",
+            },
+        ],
         "SNDUDATA" => &[
             LadderOperandSpec {
                 label: "sl",
@@ -5119,6 +5769,36 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4279sqrtsqrtp.htm",
             },
         ],
+        "SR" => &[
+            LadderOperandSpec {
+                label: "Db",
+                data_types: &["BIT"],
+                device_areas: Some(&["PMK", "L", "D.x", "R.x", "U"]),
+                allows_constant: Some(false),
+                manual_page: "4188sr.htm",
+            },
+            LadderOperandSpec {
+                label: "I",
+                data_types: &["BIT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "D.x", "R.x", "U"]),
+                allows_constant: Some(false),
+                manual_page: "4188sr.htm",
+            },
+            LadderOperandSpec {
+                label: "D",
+                data_types: &["BIT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "D.x", "R.x", "U"]),
+                allows_constant: Some(false),
+                manual_page: "4188sr.htm",
+            },
+            LadderOperandSpec {
+                label: "N",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4188sr.htm",
+            },
+        ],
         "SRD" => &[
             LadderOperandSpec {
                 label: "sl",
@@ -5140,6 +5820,29 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: None,
                 allows_constant: None,
                 manual_page: "44141srd1.htm",
+            },
+        ],
+        "SRS" => &[
+            LadderOperandSpec {
+                label: "sl",
+                data_types: &["WORD"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "44121srs1.htm",
+            },
+            LadderOperandSpec {
+                label: "ax",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "44121srs1.htm",
+            },
+            LadderOperandSpec {
+                label: "n1",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "44121srs1.htm",
             },
         ],
         "SSP" => &[
@@ -5884,6 +6587,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4127wtodwwtodwpdwtowdwtowp2.htm",
             },
         ],
+        "U<" | "U<=" | "U<>" | "U=" | "U>" | "U>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["UINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41519uloadxuloaddx1.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["UINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41519uloadxuloaddx1.htm",
+            },
+        ],
         "UD2L" | "UD2LP" | "UD2R" | "UD2RP" => &[
             LadderOperandSpec {
                 label: "S",
@@ -5898,6 +6617,22 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: Some(&["PMK", "L", "T", "C", "U", "N", "D", "R"]),
                 allows_constant: Some(false),
                 manual_page: "4138ud2rud2rpud2lud2lp.htm",
+            },
+        ],
+        "UD<" | "UD<=" | "UD<>" | "UD=" | "UD>" | "UD>=" => &[
+            LadderOperandSpec {
+                label: "S1",
+                data_types: &["UDINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41519uloadxuloaddx1.htm",
+            },
+            LadderOperandSpec {
+                label: "S2",
+                data_types: &["UDINT"],
+                device_areas: Some(&["PMK", "F", "L", "T", "C", "Z", "U", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "41519uloadxuloaddx1.htm",
             },
         ],
         "UNI" | "UNIP" => &[
@@ -6142,7 +6877,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4247wtobwtobp.htm",
             },
         ],
-        "XABORTT" => &[
+        "XABORTT" | "XABORTTEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6172,7 +6907,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44269xabortt.htm",
             },
         ],
-        "XCAM" => &[
+        "XCAM" | "XCAMEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6202,7 +6937,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44239xcam.htm",
             },
         ],
-        "XCAMA" => &[
+        "XCAMA" | "XCAMAEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6253,7 +6988,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44267xcama.htm",
             },
         ],
-        "XCAMO" => &[
+        "XCAMO" | "XCAMOEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6350,7 +7085,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44271xgearip1.htm",
             },
         ],
-        "XCLR" => &[
+        "XCLR" | "XCLREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6373,7 +7108,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44227xclr.htm",
             },
         ],
-        "XDCON" => &[
+        "XDCON" | "XDCONEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6389,7 +7124,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44248xdcon.htm",
             },
         ],
-        "XDST" => &[
+        "XDST" | "XDSTEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6440,7 +7175,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4423xdst.htm",
             },
         ],
-        "XECLR" => &[
+        "XECLR" | "XECLREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6456,7 +7191,23 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44228xeclr.htm",
             },
         ],
-        "XELIN" => &[
+        "XECON" | "XECONEX" => &[
+            LadderOperandSpec {
+                label: "sl",
+                data_types: &["WORD"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "44247xecon.htm",
+            },
+            LadderOperandSpec {
+                label: "ax",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "44247xecon.htm",
+            },
+        ],
+        "XELIN" | "XELINEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6493,7 +7244,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44240xelin.htm",
             },
         ],
-        "XEMG" => &[
+        "XEMG" | "XEMGEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6509,7 +7260,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44226xemg.htm",
             },
         ],
-        "XEPRS" => &[
+        "XEPRS" | "XEPRSEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6532,7 +7283,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44224xeprs.htm",
             },
         ],
-        "XFLT" => &[
+        "XFLT" | "XFLTEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6548,7 +7299,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4422xflt.htm",
             },
         ],
-        "XGEARIP" => &[
+        "XGEARIP" | "XGEARIPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6629,7 +7380,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4431getmgetmp1.htm",
             },
         ],
-        "XINCH" => &[
+        "XINCH" | "XINCHEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6652,7 +7403,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44218xinch.htm",
             },
         ],
-        "XIST" => &[
+        "XIST" | "XISTEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6675,7 +7426,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4424xist.htm",
             },
         ],
-        "XLCLR" => &[
+        "XLCLR" | "XLCLREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6721,7 +7472,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44259xlrd.htm",
             },
         ],
-        "XLSET" => &[
+        "XLSET" | "XLSETEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6751,7 +7502,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44261xlset.htm",
             },
         ],
-        "XMOF" => &[
+        "XMOF" | "XMOFEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6767,7 +7518,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44222xmof.htm",
             },
         ],
-        "XNMV" => &[
+        "XNMV" | "XNMVEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6783,7 +7534,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44217xnmv.htm",
             },
         ],
-        "XORG" => &[
+        "XORG" | "XORGEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6850,7 +7601,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44271xgearip5.htm",
             },
         ],
-        "XPHASING" => &[
+        "XPHASING" | "XPHASINGEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6961,7 +7712,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44271xgearip2.htm",
             },
         ],
-        "XPOR" => &[
+        "XPOR" | "XPOREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -6984,7 +7735,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44214xpor.htm",
             },
         ],
-        "XPRS" => &[
+        "XPRS" | "XPRSEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7007,7 +7758,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44223xprs.htm",
             },
         ],
-        "XPSO" => &[
+        "XPSO" | "XPSOEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7037,7 +7788,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44216xpso.htm",
             },
         ],
-        "XPST" => &[
+        "XPST" | "XPSTEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7060,7 +7811,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44229xpst.htm",
             },
         ],
-        "XPTT" => &[
+        "XPTT" | "XPTTEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7083,7 +7834,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4429xptt.htm",
             },
         ],
-        "XPTV" => &[
+        "XPTV" | "XPTVEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7159,7 +7910,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44242xpwr.htm",
             },
         ],
-        "XRSTR" => &[
+        "XRSTR" | "XRSTREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7175,7 +7926,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44254xrstr.htm",
             },
         ],
-        "XRTP" => &[
+        "XRTP" | "XRTPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7191,7 +7942,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44219xrtp.htm",
             },
         ],
-        "XSBP" => &[
+        "XSBP" | "XSBPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7228,7 +7979,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44230xsbp.htm",
             },
         ],
-        "XSCLR" => &[
+        "XSCLR" | "XSCLREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7244,7 +7995,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44251xsclr1.htm",
             },
         ],
-        "XSCP" => &[
+        "XSCP" | "XSCPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7281,7 +8032,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44235xscp.htm",
             },
         ],
-        "XSECLR" => &[
+        "XSECLR" | "XSECLREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7297,7 +8048,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44252xseclr.htm",
             },
         ],
-        "XSEP" => &[
+        "XSEP" | "XSEPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7364,7 +8115,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44234xses.htm",
             },
         ],
-        "XSETOVR" => &[
+        "XSETOVR" | "XSETOVREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7452,7 +8203,23 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44232xshp.htm",
             },
         ],
-        "XSMD" => &[
+        "XSKP" | "XSKPEX" => &[
+            LadderOperandSpec {
+                label: "sl",
+                data_types: &["WORD"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "44211xskp.htm",
+            },
+            LadderOperandSpec {
+                label: "ax",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "44211xskp.htm",
+            },
+        ],
+        "XSMD" | "XSMDEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7496,7 +8263,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44236xsmd.htm",
             },
         ],
-        "XSMP" => &[
+        "XSMP" | "XSMPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7533,7 +8300,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44233xsmp.htm",
             },
         ],
-        "XSNS" => &[
+        "XSNS" | "XSNSEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7556,7 +8323,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44220xsns.htm",
             },
         ],
-        "XSOR" => &[
+        "XSOR" | "XSOREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7602,7 +8369,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44238xsrd.htm",
             },
         ],
-        "XSRS" => &[
+        "XSRS" | "XSRSEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7625,7 +8392,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44221xsrs.htm",
             },
         ],
-        "XSSP" => &[
+        "XSSP" | "XSSPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7662,7 +8429,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44212xssp.htm",
             },
         ],
-        "XSSS" => &[
+        "XSSS" | "XSSSEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7699,7 +8466,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44213xsss.htm",
             },
         ],
-        "XSSSD" => &[
+        "XSSSD" | "XSSSDEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7736,7 +8503,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44264xsssd.htm",
             },
         ],
-        "XSSSP" => &[
+        "XSSSP" | "XSSSPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7780,7 +8547,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44241xsssp.htm",
             },
         ],
-        "XSSSPD" => &[
+        "XSSSPD" | "XSSSPDEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7824,7 +8591,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44265xssspd.htm",
             },
         ],
-        "XSST" => &[
+        "XSST" | "XSSTEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7847,7 +8614,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4425xsst.htm",
             },
         ],
-        "XSTC" => &[
+        "XSTC" | "XSTCEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7898,7 +8665,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44262xstc1.htm",
             },
         ],
-        "XSTP" => &[
+        "XSTP" | "XSTPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7921,7 +8688,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44210xstp.htm",
             },
         ],
-        "XSVOFF" => &[
+        "XSVOFF" | "XSVOFFEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7937,7 +8704,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44250xsvoff.htm",
             },
         ],
-        "XSVON" => &[
+        "XSVON" | "XSVONEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7953,7 +8720,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44249xsvon.htm",
             },
         ],
-        "XSVPRD" => &[
+        "XSVPRD" | "XSVPRDEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -7990,7 +8757,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44255xsvprd1.htm",
             },
         ],
-        "XSVPWR" => &[
+        "XSVPWR" | "XSVPWREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8041,7 +8808,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44256xsvpwr1.htm",
             },
         ],
-        "XSVSAVE" => &[
+        "XSVSAVE" | "XSVSAVEEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8064,7 +8831,37 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44257xsvsave.htm",
             },
         ],
-        "XTEAA" => &[
+        "XSWR" => &[
+            LadderOperandSpec {
+                label: "sl",
+                data_types: &["WORD"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "44244xswr.htm",
+            },
+            LadderOperandSpec {
+                label: "ax",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "44244xswr.htm",
+            },
+            LadderOperandSpec {
+                label: "S",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "44244xswr.htm",
+            },
+            LadderOperandSpec {
+                label: "n1",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "44244xswr.htm",
+            },
+        ],
+        "XTEAA" | "XTEAAEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8108,7 +8905,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44225xteaa.htm",
             },
         ],
-        "XTPROBE" => &[
+        "XTPROBE" | "XTPROBEEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8159,7 +8956,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44268xtprobe.htm",
             },
         ],
-        "XTRQ" => &[
+        "XTRQ" | "XTRQEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8189,7 +8986,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44258xtrq.htm",
             },
         ],
-        "XTRQSL" => &[
+        "XTRQSL" | "XTRQSLEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8224,6 +9021,57 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 device_areas: Some(&["PMK", "L", "Z", "N", "D", "R"]),
                 allows_constant: Some(true),
                 manual_page: "44270xtrqsl.htm",
+            },
+        ],
+        "XTRUN" => &[
+            LadderOperandSpec {
+                label: "sl",
+                data_types: &["WORD"],
+                device_areas: None,
+                allows_constant: None,
+                manual_page: "4433xturn.htm",
+            },
+            LadderOperandSpec {
+                label: "ax",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4433xturn.htm",
+            },
+            LadderOperandSpec {
+                label: "n1",
+                data_types: &["WORD"],
+                device_areas: Some(&["PMK", "L", "Z", "D", "R"]),
+                allows_constant: Some(true),
+                manual_page: "4433xturn.htm",
+            },
+            LadderOperandSpec {
+                label: "n2",
+                data_types: &["LREAL"],
+                device_areas: Some(&["PMK", "L", "Z", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4433xturn.htm",
+            },
+            LadderOperandSpec {
+                label: "n3",
+                data_types: &["LREAL"],
+                device_areas: Some(&["PMK", "L", "Z", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4433xturn.htm",
+            },
+            LadderOperandSpec {
+                label: "n4",
+                data_types: &["LREAL"],
+                device_areas: Some(&["PMK", "L", "Z", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4433xturn.htm",
+            },
+            LadderOperandSpec {
+                label: "n5",
+                data_types: &["LREAL"],
+                device_areas: Some(&["PMK", "L", "Z", "D", "R"]),
+                allows_constant: Some(false),
+                manual_page: "4433xturn.htm",
             },
         ],
         "XTWR" => &[
@@ -8256,7 +9104,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44243xtwr.htm",
             },
         ],
-        "XVRD" => &[
+        "XVRD" | "XVRDEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8300,7 +9148,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44245xvrd.htm",
             },
         ],
-        "XVTP" => &[
+        "XVTP" | "XVTPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8316,7 +9164,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4426xvtp.htm",
             },
         ],
-        "XVTPP" => &[
+        "XVTPP" | "XVTPPEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8339,7 +9187,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "4427xvtpp.htm",
             },
         ],
-        "XVWR" => &[
+        "XVWR" | "XVWREX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],
@@ -8390,7 +9238,7 @@ pub(super) fn rules(name: &str) -> &'static [LadderOperandSpec] {
                 manual_page: "44246xvwr.htm",
             },
         ],
-        "XWRT" => &[
+        "XWRT" | "XWRTEX" => &[
             LadderOperandSpec {
                 label: "sl",
                 data_types: &["WORD"],

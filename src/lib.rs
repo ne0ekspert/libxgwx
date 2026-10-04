@@ -41,14 +41,39 @@ mod cpu;
 mod document;
 mod error;
 #[cfg(feature = "write")]
+mod iec_chain_comparison_write;
+#[cfg(feature = "write")]
+mod iec_coil_comparison_write;
+#[cfg(feature = "write")]
+mod iec_coil_write;
+#[cfg(feature = "write")]
+mod iec_connected_timer_write;
+#[cfg(feature = "write")]
+mod iec_contact_mesh_move_write;
+#[cfg(feature = "write")]
+mod iec_contact_write;
+#[cfg(feature = "write")]
+mod iec_conversion_pair_write;
+#[cfg(feature = "write")]
 mod iec_function_write;
 mod iec_graph;
 mod iec_ld;
+#[cfg(feature = "write")]
+mod iec_long_feed_timer_write;
+#[cfg(feature = "write")]
+mod iec_open_spine_comparison_write;
+#[cfg(feature = "write")]
+mod iec_paired_comparison_write;
 mod iec_records;
+#[cfg(feature = "write")]
+mod iec_staggered_move_write;
 mod iec_symbols;
+#[cfg(feature = "write")]
+mod iec_upper_contact_move_write;
 #[cfg(feature = "il")]
 mod il;
 mod instruction_catalog;
+mod instruction_cpu;
 mod instruction_operands;
 mod internal;
 mod ladder_records;
@@ -65,6 +90,7 @@ mod wasm;
 #[cfg(feature = "write")]
 pub use catalog::*;
 pub use comparison_catalog::ladder_comparison_catalog;
+pub use instruction_cpu::{LadderInstructionCpuRestriction, ladder_instruction_cpu_allowed, ladder_instruction_cpu_restriction};
 pub use cpu::*;
 pub use document::XgwxDocument;
 pub use error::XgwxError;
@@ -81,8 +107,9 @@ pub use iec_records::{
     IecRecordFrame, IecRecordKind, IecShortWireContactInsertionSite,
     IecStandaloneFunctionDeletionSite, IecStandaloneFunctionInsertionSite,
     IecTerminalFunctionDeletionSite, IecTerminalFunctionInsertionSite,
+    IecWiredComparisonInsertionSite,
 };
-pub use iec_symbols::IecLocalSymbol;
+pub use iec_symbols::{IEC_SYSTEM_BOOL_VARIABLES, IecLocalSymbol};
 #[cfg(feature = "il")]
 pub use il::*;
 pub use instruction_catalog::{LadderInstructionSpec, ladder_instruction_catalog};

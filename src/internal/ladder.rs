@@ -948,9 +948,30 @@ pub(crate) fn parse_ladder_instruction(ladder_string: &LadderString) -> Option<L
     })
 }
 
+/// Split native instruction text without splitting single-quoted string literals.
+pub(crate) fn ladder_instruction_parts(value: &str, spaces: bool) -> Option<Vec<&str>> {
+    let mut parts = Vec::new();
+    let mut quoted = false;
+    let mut start = 0;
+    for (index, ch) in value.char_indices() {
+        if ch == '\'' {
+            quoted = !quoted;
+        }
+        if !quoted && (ch == ',' || spaces && ch.is_ascii_whitespace()) {
+            parts.push(&value[start..index]);
+            start = index + ch.len_utf8();
+        }
+    }
+    if quoted {
+        return None;
+    }
+    parts.push(&value[start..]);
+    Some(parts)
+}
+
 pub(crate) fn parse_ladder_operation_call(value: &str) -> Option<(String, Vec<String>)> {
-    let parts = value
-        .split(',')
+    let parts = ladder_instruction_parts(value, false)?
+        .into_iter()
         .map(str::trim)
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>();
@@ -988,11 +1009,12 @@ fn prefixed_ladder_operation_call(value: &str) -> Option<(String, Vec<String>)> 
     }
 
     let mnemonic = best?;
-    let operands = value
+    let rest = value
         .strip_prefix(mnemonic)
         .unwrap_or_default()
-        .trim_start_matches(|ch: char| ch == ',' || ch.is_ascii_whitespace())
-        .split(|ch: char| ch == ',' || ch.is_ascii_whitespace())
+        .trim_start_matches(|ch: char| ch == ',' || ch.is_ascii_whitespace());
+    let operands = ladder_instruction_parts(rest, true)?
+        .into_iter()
         .map(str::trim)
         .filter(|operand| !operand.is_empty())
         .map(ToOwned::to_owned)
@@ -1077,6 +1099,12 @@ pub(crate) fn ladder_operation_kind(value: &str) -> LadderElementKind {
 }
 
 pub(crate) fn is_ladder_comparison_mnemonic(value: &str) -> bool {
+    if crate::ladder_comparison_catalog()
+        .iter()
+        .any(|spec| spec.mnemonic == value)
+    {
+        return true;
+    }
     if let Some(value) = value.strip_prefix('4').or_else(|| value.strip_prefix('8')) {
         return matches!(value, "=" | "<>" | ">" | "<" | ">=" | "<=");
     }

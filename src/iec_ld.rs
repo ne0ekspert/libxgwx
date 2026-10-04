@@ -267,6 +267,7 @@ fn row_frames(program: &LadderProgramData) -> Option<Vec<IecRowFrame>> {
         let index = u32::from_le_bytes(head[..4].try_into().ok()?) as usize;
         let count = u16::from_le_bytes(head[8..10].try_into().ok()?) as usize;
         if index < group_count
+            && matches!(&head[4..8], [0, 0, 0, 0] | [1, 0, 0, 0])
             && count > 0
             && count <= max_rows
             && groups[index].replace((head_start, start, count)).is_some()

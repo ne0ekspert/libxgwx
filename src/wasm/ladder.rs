@@ -17,12 +17,16 @@ pub(super) struct WasmLadderProgramSummary {
     pub(super) iec_function_operand_links: Vec<WasmIecFunctionOperandLinkSummary>,
     pub(super) iec_terminal_function_deletion_sites:
         Vec<WasmIecTerminalFunctionDeletionSiteSummary>,
+    pub(super) iec_terminal_timer_insertion_sites: Vec<WasmIecTerminalFunctionInsertionSiteSummary>,
     pub(super) iec_terminal_function_insertion_sites:
         Vec<WasmIecTerminalFunctionInsertionSiteSummary>,
     pub(super) iec_standalone_function_deletion_sites:
         Vec<WasmIecStandaloneFunctionDeletionSiteSummary>,
     pub(super) iec_standalone_function_insertion_sites:
         Vec<WasmIecStandaloneFunctionInsertionSiteSummary>,
+    pub(super) iec_scalar_chain_deletion_sites: Vec<WasmIecFunctionCellDeletionSiteSummary>,
+    pub(super) iec_wired_comparison_insertion_sites:
+        Vec<WasmIecWiredComparisonInsertionSiteSummary>,
     pub(super) iec_function_cell_deletion_sites: Vec<WasmIecFunctionCellDeletionSiteSummary>,
     pub(super) iec_connected_arithmetic_deletion_sites:
         Vec<WasmIecConnectedArithmeticDeletionSiteSummary>,
@@ -40,6 +44,7 @@ pub(super) struct WasmLadderProgramSummary {
     pub(super) source_strings: Vec<WasmLadderStringSummary>,
     pub(super) structural_editing: bool,
     pub(super) instruction_choices: Vec<WasmLadderInstructionChoice>,
+    pub(super) retained_instruction_choices: Vec<WasmLadderInstructionChoice>,
     pub(super) comparison_choices: Vec<WasmLadderInstructionChoice>,
     pub(super) branch_connections: Vec<WasmLadderVerticalLineSummary>,
     pub(super) rungs: Vec<WasmLadderRungSummary>,
@@ -116,7 +121,11 @@ impl WasmLadderProgramSummary {
             + program.instructions.len()
     }
 
-    pub(super) fn from_program(program_index: usize, program: &LadderProgramData) -> Self {
+    pub(super) fn from_program(
+        program_index: usize,
+        program: &LadderProgramData,
+        cpu_model: Option<&str>,
+    ) -> Self {
         let iec_rows = program.iec_row_frames().unwrap_or_default();
         let iec_records = program.iec_record_frames().unwrap_or_default();
         let iec_functions = program.iec_function_blocks().unwrap_or_default();
@@ -257,6 +266,12 @@ impl WasmLadderProgramSummary {
                 .iter()
                 .map(WasmIecTerminalFunctionDeletionSiteSummary::from_site)
                 .collect(),
+            iec_terminal_timer_insertion_sites: program
+                .iec_terminal_timer_insertion_sites()
+                .unwrap_or_default()
+                .iter()
+                .map(WasmIecTerminalFunctionInsertionSiteSummary::from_site)
+                .collect(),
             iec_terminal_function_insertion_sites: iec_terminal_function_insertion_sites
                 .iter()
                 .map(WasmIecTerminalFunctionInsertionSiteSummary::from_site)
@@ -269,6 +284,40 @@ impl WasmLadderProgramSummary {
                 .iter()
                 .map(WasmIecStandaloneFunctionInsertionSiteSummary::from_site)
                 .collect(),
+            iec_scalar_chain_deletion_sites: {
+                #[cfg(feature = "write")]
+                {
+                    program
+                        .iec_scalar_chain_deletion_sites()
+                        .unwrap_or_default()
+                        .iter()
+                        .map(WasmIecFunctionCellDeletionSiteSummary::from_site)
+                        .collect()
+                }
+                #[cfg(not(feature = "write"))]
+                {
+                    Vec::new()
+                }
+            },
+            iec_wired_comparison_insertion_sites: {
+                #[cfg(feature = "write")]
+                {
+                    program
+                        .iec_wired_comparison_insertion_sites()
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|site| WasmIecWiredComparisonInsertionSiteSummary {
+                            group_index: site.group_index,
+                            row_index: site.row_index,
+                            raw_x: site.raw_x,
+                        })
+                        .collect()
+                }
+                #[cfg(not(feature = "write"))]
+                {
+                    Vec::new()
+                }
+            },
             iec_function_cell_deletion_sites: iec_function_cell_deletion_sites
                 .iter()
                 .map(WasmIecFunctionCellDeletionSiteSummary::from_site)
@@ -354,6 +403,26 @@ impl WasmLadderProgramSummary {
             instruction_choices: if program.project_type == Some(1) {
                 crate::ladder_instruction_catalog()
                     .iter()
+                    .filter(|spec| {
+                        cpu_model.is_none_or(|model| {
+                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model) != Some(false)
+                        })
+                    })
+                    .map(WasmLadderInstructionChoice::from)
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            retained_instruction_choices: if program.project_type == Some(1) {
+                crate::ladder_instruction_catalog()
+                    .iter()
+                    .filter(|spec| {
+                        cpu_model.is_some_and(|model| {
+                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model) == Some(false)
+                        }) && program.structure.rungs.iter().any(|rung| {
+                            rung.cells.iter().any(|cell| cell.value == spec.mnemonic)
+                        })
+                    })
                     .map(WasmLadderInstructionChoice::from)
                     .collect()
             } else {
@@ -362,6 +431,11 @@ impl WasmLadderProgramSummary {
             comparison_choices: if program.project_type == Some(1) {
                 crate::ladder_comparison_catalog()
                     .iter()
+                    .filter(|spec| {
+                        cpu_model.is_none_or(|model| {
+                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model) != Some(false)
+                        })
+                    })
                     .map(WasmLadderInstructionChoice::from)
                     .collect()
             } else {
@@ -735,7 +809,16 @@ impl WasmIecConnectedArithmeticDeletionSiteSummary {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(super) struct WasmIecWiredComparisonInsertionSiteSummary {
+    group_index: usize,
+    row_index: u16,
+    raw_x: u8,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecFunctionCellInsertionSiteSummary {
+    function_name: &'static str,
     group_index: usize,
     row_index: u16,
     insertion_offset: usize,
@@ -746,6 +829,7 @@ pub(super) struct WasmIecFunctionCellInsertionSiteSummary {
 impl WasmIecFunctionCellInsertionSiteSummary {
     fn from_site(site: &IecFunctionCellInsertionSite) -> Self {
         Self {
+            function_name: site.function_name,
             group_index: site.group_index,
             row_index: site.row_index,
             insertion_offset: site.insertion_offset,
@@ -1351,6 +1435,7 @@ pub(super) struct WasmLadderCellSummary {
     pub(super) mnemonic_description: Option<&'static str>,
     pub(super) source_text: Option<String>,
     pub(super) instruction_text_editing: bool,
+    pub(super) instruction_deletion: bool,
 }
 
 impl WasmLadderCellSummary {
@@ -1386,6 +1471,29 @@ impl WasmLadderCellSummary {
                                     ),
                                     Ok(Some(_))
                                 )
+                            })
+                }
+                #[cfg(not(feature = "write"))]
+                {
+                    false
+                }
+            },
+            instruction_deletion: {
+                #[cfg(feature = "write")]
+                {
+                    program.version.as_deref() == Some("LD VER 1.1")
+                        && program.project_type == Some(1)
+                        && program
+                            .strings
+                            .iter()
+                            .find(|s| s.offset == cell.offset)
+                            .is_some_and(|s| {
+                                crate::ladder_write::delete_ladder_instruction(
+                                    &program.data,
+                                    cell.offset,
+                                    &s.value,
+                                )
+                                .is_ok()
                             })
                 }
                 #[cfg(not(feature = "write"))]

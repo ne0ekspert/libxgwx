@@ -16,9 +16,11 @@ with source.open(encoding="utf-8") as stream:
     rows = list(csv.DictReader(stream, delimiter="\t"))
 # LD-visible, fixed-arity application blocks. Exclude basic/control-flow
 # categories whose native record layouts need separate structural support.
+# BRST/BRSTP and FF are native-captured exceptions using the application envelope.
 rows = sorted((r for r in rows if r["strShowList"].endswith("11")
-               and 1 <= int(r["bySize"]) <= 8
-               and r["byCmdList"] not in {"1", "22", "1000"}),
+               and 0 <= int(r["bySize"]) <= 8
+               and (r["byCmdList"] not in {"1", "22", "1000"}
+                    or r["Command"].strip() in {"BRST", "BRSTP", "FF"})),
               key=lambda r: r["Command"].strip())
 assert len({r["Command"].strip() for r in rows}) == len(rows)
 text = '''//! Fixed-arity application-instruction identifiers from XG5000 XGTCodeDB.

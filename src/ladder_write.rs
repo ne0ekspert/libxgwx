@@ -50,12 +50,36 @@ pub(crate) fn insert_ladder_comparison(
     mnemonic: &str,
     operands: &[String],
 ) -> Result<Vec<u8>, XgwxError> {
-    if column > 6 {
+    let operand_count = crate::ladder_comparison_catalog()
+        .iter()
+        .find(|spec| spec.mnemonic == mnemonic)
+        .ok_or(XgwxError::InvalidLadderEdit {
+            reason: "unknown comparison instruction",
+        })?
+        .operand_count;
+    if usize::from(column) + operand_count + 1 > 9 {
         return Err(XgwxError::InvalidLadderEdit {
-            reason: "comparison requires three contact cells before the output column",
+            reason: "comparison operands must fit before the output column",
         });
     }
     insert_ladder_function(bytes, raw_y, mnemonic, operands, Some(column))
+}
+
+// Branch records use grid boundaries (3, 6, ...), rather than element
+// positions (1, 4, ...). The next wire cell starts immediately after a boundary.
+fn trailing_wire_start(record: &Record) -> u8 {
+    if record.bytes.starts_with(&[0, 0]) || record.bytes.starts_with(&[1, 0]) {
+        record.x + 1
+    } else {
+        record_end_x(record) + 3
+    }
+}
+
+fn valid_instruction_operand_text(text: &str) -> bool {
+    if let Some(body) = text.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')) {
+        return body.chars().all(|c| c.is_ascii() && !c.is_ascii_control() && c != '\'');
+    }
+    !text.is_empty() && text.chars().all(|c| c.is_ascii_graphic() && !matches!(c, ',' | '\'' | '"'))
 }
 
 fn insert_ladder_function(
@@ -78,7 +102,7 @@ fn insert_ladder_function(
         })?;
     if operands.len() != spec.operand_count
         || operands.iter().any(|operand| {
-            operand.is_empty() || !operand.chars().all(|c| c.is_ascii_graphic() && c != ',')
+            !valid_instruction_operand_text(operand)
         })
     {
         return Err(XgwxError::InvalidLadderEdit {
@@ -139,7 +163,7 @@ fn insert_ladder_function(
     }
     let wire_start = records
         .iter()
-        .map(|record| record_end_x(record) + 3)
+        .map(trailing_wire_start)
         .max()
         .unwrap_or(1);
     if contact_column.is_none() && wire_start < x {
@@ -192,6 +216,14 @@ fn insert_ladder_function(
     row.records = records;
     if contact_column.is_none() {
         row.prefix[21] = x;
+    } else if matches!(mnemonic, "B" | "BN") {
+        // Native indexed-bit insertion remembers the index operand's position.
+        // Other comparison families retain their existing row metadata.
+        row.prefix[29] = right;
+    }
+    if operands.iter().any(|operand| operand.starts_with('\'')) {
+        // Native $MOV/$MOVP captures use this row-prefix variant for literals.
+        row.prefix[17] = 40;
     }
     merge_wires(row);
     let output = program.encode();
@@ -245,17 +277,104 @@ pub(crate) fn delete_ladder_comparison(
     let spec = crate::ladder_comparison_catalog()
         .iter()
         .find(|spec| spec.opcode == opcode && text.split(',').next() == Some(spec.mnemonic));
+    let count = spec.map(|spec| spec.operand_count + 1);
     if record.bytes[9..15] != [1, 0, 0, 0, 0, 0]
         || spec.is_none()
         || text != expected
-        || u16_at(&record.bytes, end)? != 3
+        || Some(u16_at(&record.bytes, end)?) != count
     {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "comparison changed or is not supported",
         });
     }
-    // Parsing already checked the two adjacent operand-reference records.
-    row.records.drain(index..index + 3);
+    // Parsing already checked the adjacent operand-reference records.
+    row.records.drain(index..index + count.unwrap());
+    let output = program.encode();
+    EditableProgram::parse(&output)?;
+    Ok(output)
+}
+
+/// Remove a catalog application at the output end of an unbranched row.
+/// Native deletion also removes the immediately preceding output feed wire.
+pub(crate) fn delete_ladder_instruction(
+    bytes: &[u8],
+    offset: usize,
+    expected: &str,
+) -> Result<Vec<u8>, XgwxError> {
+    let mut program = EditableProgram::parse(bytes)?;
+    let mut position = program.header.len();
+    let mut target = None;
+    for (row_index, row) in program.rows.iter().enumerate() {
+        if let Some((_, header)) = program
+            .group_headers
+            .iter()
+            .find(|(first, _)| *first == row_index)
+        {
+            position += header.len();
+        }
+        position += row.prefix.len();
+        for (index, record) in row.records.iter().enumerate() {
+            if position.checked_add(19) == Some(offset) && record.bytes.starts_with(&[0, 34]) {
+                target = Some((row_index, index));
+            }
+            position += record.bytes.len();
+        }
+    }
+    let (row_index, index) = target.ok_or(XgwxError::InvalidLadderEdit {
+        reason: "application record not found",
+    })?;
+    if !program
+        .group_headers
+        .iter()
+        .any(|(first, header)| *first == row_index && u16_at(header, 8).ok() == Some(1))
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "application deletion requires an unbranched row group",
+        });
+    }
+    let row = &mut program.rows[row_index];
+    let record = &row.records[index];
+    let (text, end) = string_at(&record.bytes, 19)?;
+    let opcode = u32::from_le_bytes(record.bytes[15..19].try_into().unwrap());
+    let spec = crate::ladder_instruction_catalog()
+        .iter()
+        .find(|spec| spec.opcode == opcode && text.split(',').next() == Some(spec.mnemonic))
+        .ok_or(XgwxError::InvalidLadderEdit {
+            reason: "application is not supported",
+        })?;
+    let count = spec.operand_count + 1;
+    if text != expected
+        || usize::from(u16_at(&record.bytes, end)?) != count
+        || record.bytes[9..15] != [1, 0, 32, 0, 0, 0]
+        || record_end_x(record) != 94
+        || row.prefix[13] != 0
+        || row
+            .records
+            .iter()
+            .any(|r| r.bytes.starts_with(&[0, 0]) || matches!(r.bytes[1], 0x3f | 0x40))
+        || index + count != row.records.len()
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "application changed or has an unsupported output layout",
+        });
+    }
+    let x = record.x;
+    row.records.drain(index..index + count);
+    if row
+        .records
+        .last()
+        .is_some_and(|r| r.wire_end == x.checked_sub(3))
+    {
+        row.records.pop();
+    }
+    row.prefix[21] = 94;
+    row.prefix[29] = row
+        .records
+        .iter()
+        .filter(|r| !matches!(r.bytes[1], 0x23 | 0x24))
+        .map(record_end_x)
+        .max()
+        .unwrap_or(1);
     let output = program.encode();
     EditableProgram::parse(&output)?;
     Ok(output)
@@ -305,16 +424,26 @@ pub(crate) fn update_instruction_text(
     let record = program.rows[row].records[record_index].clone();
     let (original, end) = string_at(&record.bytes, 19)?;
     let count = u16_at(&record.bytes, end)?;
-    let original_parts: Vec<_> = original.split(',').collect();
+    let original_parts = crate::internal::ladder_instruction_parts(&original, false)
+        .ok_or(XgwxError::InvalidLadderEdit { reason: "unclosed instruction string literal" })?;
     if original != expected || original_parts.len() != count {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "instruction text does not match its stored operands",
         });
     }
-    let parts: Vec<_> = replacement.split(',').map(str::trim).collect();
+    let parts = crate::internal::ladder_instruction_parts(replacement, false)
+        .ok_or(XgwxError::InvalidLadderEdit { reason: "unclosed instruction string literal" })?
+        .into_iter().map(str::trim).collect::<Vec<_>>();
     crate::instruction_operands::validate_raw_operands(parts[0], &parts[1..])?;
     let type_changed = parts.first() != original_parts.first();
-    if count < 2 {
+    let known_operandless_application = count == 1
+        && record.bytes[11] == 32
+        && crate::ladder_instruction_catalog().iter().any(|spec| {
+            spec.operand_count == 0
+                && spec.mnemonic == original_parts[0]
+                && spec.opcode == u32::from_le_bytes(record.bytes[15..19].try_into().unwrap())
+        });
+    if count < 2 && !known_operandless_application {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "terminal instructions cannot be replaced",
         });
@@ -347,10 +476,10 @@ pub(crate) fn update_instruction_text(
     };
     if parts
         .iter()
-        .any(|part| part.is_empty() || !part.chars().all(|c| c.is_ascii_graphic()))
+        .any(|part| !valid_instruction_operand_text(part))
     {
         return Err(XgwxError::InvalidLadderEdit {
-            reason: "instruction operands must be nonempty printable ASCII tokens separated by commas",
+            reason: "instruction operands require printable ASCII tokens or single-quoted strings",
         });
     }
     let text = parts.join(",");
@@ -373,12 +502,25 @@ pub(crate) fn update_instruction_text(
         next = stop;
     }
     let right = usize::from(record.x) + (count - 1) * 3;
-    let new_x = right
-        .checked_sub((parts.len() - 1) * 3)
-        .filter(|x| *x >= 1)
-        .ok_or(XgwxError::InvalidLadderEdit {
-            reason: "not enough space for the replacement instruction",
-        })? as u8;
+    // Native comparison contacts keep their left edge when their arity changes.
+    // Output applications keep their right edge at the output column.
+    let comparison = record.bytes[11] == 0;
+    let new_x = if comparison {
+        record.x
+    } else {
+        right
+            .checked_sub((parts.len() - 1) * 3)
+            .filter(|x| *x >= 1)
+            .ok_or(XgwxError::InvalidLadderEdit {
+                reason: "not enough space for the replacement instruction",
+            })? as u8
+    };
+    let new_right = usize::from(new_x) + (parts.len() - 1) * 3;
+    if comparison && new_right > 25 {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "comparison operands must fit before the output column",
+        });
+    }
     if type_changed
         && argument_headers
             .iter()
@@ -423,6 +565,24 @@ pub(crate) fn update_instruction_text(
             if (record_index..record_index + count).contains(&index) {
                 continue;
             }
+            if comparison && new_right > right {
+                let growth_start = right as u8 + 3;
+                if let Some(end) = other.wire_end {
+                    if other.x <= new_right as u8 && end >= growth_start {
+                        if other.x < growth_start {
+                            rebuilt.push(wire(other.x, growth_start - 3, row.y));
+                        }
+                        if end > new_right as u8 {
+                            rebuilt.push(wire(new_right as u8 + 3, end, row.y));
+                        }
+                        continue;
+                    }
+                } else if other.x <= new_right as u8 && record_end_x(other) >= growth_start {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "replacement instruction would overlap an element or branch connection",
+                    });
+                }
+            }
             if new_x < record.x && other.x < record.x {
                 if let Some(end) = other.wire_end {
                     if end >= new_x {
@@ -441,6 +601,9 @@ pub(crate) fn update_instruction_text(
         }
         if new_x > record.x {
             rebuilt.push(wire(record.x, new_x - 3, row.y));
+        }
+        if comparison && new_right < right {
+            rebuilt.push(wire(new_right as u8 + 3, right as u8, row.y));
         }
         rebuilt.push(Record {
             bytes: updated,
@@ -469,9 +632,15 @@ pub(crate) fn update_instruction_text(
         rebuilt.sort_by_key(|r| r.x);
         row.records = rebuilt;
         merge_wires(row);
+        if comparison && usize::from(row.prefix[29]) == right {
+            row.prefix[29] = new_right as u8;
+        }
         if row.prefix[21] == record.x {
             row.prefix[21] = new_x;
         }
+    }
+    if parts.iter().skip(1).any(|operand| operand.starts_with('\'')) {
+        program.rows[row].prefix[17] = 40;
     }
     let output = program.encode();
     EditableProgram::parse(&output)?;
@@ -950,7 +1119,7 @@ pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Ve
         if element.kind.is_coil() && edit.expected.is_none() {
             let start = records
                 .iter()
-                .map(|r| r.wire_end.unwrap_or(r.x) + 3)
+                .map(trailing_wire_start)
                 .max()
                 .unwrap_or(1);
             if start <= 91 {
@@ -1421,15 +1590,16 @@ mod tests {
     #[test]
     fn comparison_deletion_removes_operand_references_and_preserves_other_records() {
         for spec in crate::ladder_comparison_catalog() {
+            let operands = catalog_test_operands(spec);
             let source = insert_ladder_comparison(
                 include_bytes!("../fixtures/ladder-edit/R10.bin"),
                 0,
                 1,
                 spec.mnemonic,
-                &["D100".into(), "D102".into()],
+                &operands,
             )
             .unwrap();
-            let text = format!("{},D100,D102", spec.mnemonic);
+            let text = format!("{},{}", spec.mnemonic, operands.join(","));
             let encoded = text
                 .encode_utf16()
                 .flat_map(u16::to_le_bytes)
@@ -1446,7 +1616,7 @@ mod tests {
             let after = EditableProgram::parse(&deleted).unwrap();
             assert_eq!(
                 before.rows[0].records.len(),
-                after.rows[0].records.len() + 3
+                after.rows[0].records.len() + spec.operand_count + 1
             );
             assert!(
                 after.rows[0]
@@ -1455,14 +1625,8 @@ mod tests {
                     .all(|r| !r.bytes.starts_with(&[0, 34]) && !matches!(r.bytes[1], 0x23 | 0x24))
             );
             assert!(delete_ladder_comparison(&deleted, offset, &text).is_err());
-            let restored = insert_ladder_comparison(
-                &deleted,
-                0,
-                1,
-                spec.mnemonic,
-                &["D100".into(), "D102".into()],
-            )
-            .unwrap();
+            let restored =
+                insert_ladder_comparison(&deleted, 0, 1, spec.mnemonic, &operands).unwrap();
             assert_eq!(source, restored);
         }
         let source = insert_ladder_instruction(
@@ -1486,27 +1650,157 @@ mod tests {
     }
 
     #[test]
-    fn all_word_comparisons_preserve_contact_flags_and_native_opcodes() {
+    fn comparison_arity_changes_keep_native_left_edge_and_wiring() {
+        let binary = include_bytes!("../fixtures/ladder-edit/instructions/comparison_dword.bin");
+        let group =
+            include_bytes!("../fixtures/ladder-edit/instructions/comparison_dword_group.bin");
+        let grown =
+            update_instruction_text(binary, 72, "D=,D000100,D000104", "DG=,D000100,D000104,1")
+                .unwrap()
+                .unwrap();
+        assert_eq!(grown, group.as_slice());
+        let shrunk =
+            update_instruction_text(group, 72, "DG=,D000100,D000104,1", "D=,D000100,D000104")
+                .unwrap()
+                .unwrap();
+        assert_eq!(shrunk, binary.as_slice());
+
+        let empty = include_bytes!("../fixtures/ladder-edit/R10.bin");
+        let source =
+            insert_ladder_comparison(empty, 0, 0, "D=", &["D100".into(), "D104".into()]).unwrap();
+        let source = edit_ladder_cell(
+            &source,
+            &crate::LadderCellEdit {
+                raw_y: 0,
+                column: 3,
+                expected: None,
+                replacement: Some(LadderEditElement {
+                    kind: LadderEditKind::NormallyOpen,
+                    operand: "M00000".into(),
+                }),
+            },
+        )
+        .unwrap();
+        let offset = source
+            .windows(4)
+            .position(|b| b == [b'D', 0, b'=', 0])
+            .unwrap()
+            - 4;
+        assert!(
+            update_instruction_text(&source, offset, "D=,D100,D104", "DG=,D100,D104,1").is_err()
+        );
+    }
+
+    #[test]
+    fn all_comparison_families_reproduce_complete_native_saved_programs() {
+        for (batch, expected) in [
+            include_bytes!("../fixtures/ladder-edit/instructions/comparisons_first_half.bin").as_slice(),
+            include_bytes!("../fixtures/ladder-edit/instructions/comparison_output.bin").as_slice(),
+        ].into_iter().enumerate() {
+            let mut bytes = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
+            for (index, spec) in crate::ladder_comparison_catalog().chunks(39).nth(batch).unwrap().iter().enumerate() {
+                let y = 8 + index as u8 * 4;
+                bytes = insert_ladder_row(&bytes, y).unwrap();
+                let bit = spec.mnemonic.starts_with('4') || spec.mnemonic.starts_with('8');
+                let mut operands = if bit { vec!["D100.0".into(), "D102.0".into()] } else { vec!["D100".into(), "D104".into()] };
+                if spec.operand_count == 3 {
+                    operands.push(if spec.mnemonic.starts_with('G') || spec.mnemonic.starts_with("DG") { "1" } else { "D108" }.into());
+                }
+                bytes = insert_ladder_comparison(&bytes, y, 0, spec.mnemonic, &operands).unwrap();
+                bytes = insert_ladder_instruction(&bytes, y, "MOV", &["1".into(), format!("D{}", 200 + index)]).unwrap();
+            }
+            assert_eq!(bytes, expected);
+        }
+    }
+
+    #[test]
+    fn application_deletion_and_basic_brst_match_complete_native_payloads() {
+        let before = include_bytes!("../fixtures/ladder-edit/instructions/comparison_output.bin");
+        let deleted =
+            include_bytes!("../fixtures/ladder-edit/instructions/comparison_output_deleted.bin");
+        let brst = include_bytes!("../fixtures/ladder-edit/instructions/basic_brst.bin");
+        let encoded = "MOV,1,D200"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        let offset = before
+            .windows(encoded.len())
+            .position(|w| w == encoded)
+            .unwrap()
+            - 4;
+        let terminal = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin");
+        assert!(delete_ladder_instruction(terminal, 387, "END").is_err());
+        assert_eq!(
+            delete_ladder_instruction(before, offset, "MOV,1,D200").unwrap(),
+            deleted.as_slice()
+        );
+        assert!(delete_ladder_instruction(before, offset, "MOV,2,D200").is_err());
+        assert!(delete_ladder_instruction(before, offset + 1, "MOV,1,D200").is_err());
+        assert_eq!(
+            insert_ladder_instruction(deleted, 8, "BRST", &["M00020".into(), "8".into()]).unwrap(),
+            brst.as_slice()
+        );
+    }
+
+    #[test]
+    fn string_literal_applications_reproduce_complete_native_saved_program() {
+        let mut bytes = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
+        for (old, new) in [("STOP", "$MOVP,'Room B, off',D000200"), ("WDT", "$MOV,'Room A, on',D000100")] {
+            let encoded = old.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<_>>();
+            let offset = bytes.windows(encoded.len()).position(|b| b == encoded).unwrap() - 4;
+            bytes = update_instruction_text(&bytes, offset, old, new).unwrap().unwrap();
+        }
+        assert_eq!(bytes, include_bytes!("../fixtures/ladder-edit/instructions/string_literals.bin").as_slice());
+    }
+
+    #[test]
+    fn quoted_string_operands_remain_single_native_tokens() {
+        let empty = include_bytes!("../fixtures/ladder-edit/R10.bin");
+        let bytes = insert_ladder_instruction(empty, 0, "$MOV", &["'Room A, on'".into(), "D100".into()]).unwrap();
+        let text = "$MOV,'Room A, on',D100";
+        let encoded = text.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<_>>();
+        let offset = bytes.windows(encoded.len()).position(|b| b == encoded).unwrap() - 4;
+        let edited = update_instruction_text(&bytes, offset, text, "$MOV,'Room B, off',D104").unwrap().unwrap();
+        let restored = update_instruction_text(&edited, offset, "$MOV,'Room B, off',D104", text).unwrap().unwrap();
+        assert_eq!(restored, bytes);
+        assert_eq!(crate::internal::parse_ladder_operation_call(text).unwrap().1, ["'Room A, on'", "D100"]);
+        assert_eq!(crate::internal::parse_ladder_operation_call("$MOV 'Room A, on' D100").unwrap().1, ["'Room A, on'", "D100"]);
+        assert!(crate::internal::parse_ladder_operation_call("$MOV,'unclosed,D100").is_none());
+        assert!(insert_ladder_instruction(empty, 0, "$MOV", &["1".into(), "D100".into()]).is_err());
+        assert!(insert_ladder_instruction(empty, 0, "MOV", &["'room'".into(), "D100".into()]).is_err());
+        assert!(insert_ladder_instruction(empty, 0, "$MOV", &["D100".into(), "'destination'".into()]).is_err());
+        assert!(insert_ladder_instruction(empty, 0, "$MOV", &[format!("'{}'", "a".repeat(32)), "D100".into()]).is_err());
+        assert!(insert_ladder_instruction(empty, 0, "$MOV", &["'room\n'".into(), "D100".into()]).is_err());
+    }
+
+    #[test]
+    fn indexed_bits_and_ff_reproduce_complete_native_saved_program() {
+        let mut bytes = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
+        let offset = bytes.windows(8).position(|w| w == b"S\0T\0O\0P\0").unwrap() - 4;
+        bytes = update_instruction_text(&bytes, offset, "STOP", "FF,M00030")
+            .unwrap().unwrap();
+        for (y, operand, mnemonic, operands) in [
+            (0, "M00000", "B", ["D000100", "4"]),
+            (4, "M00001", "BN", ["D000104", "D000108"]),
+        ] {
+            bytes = edit_ladder_cell(&bytes, &crate::LadderCellEdit {
+                raw_y: y, column: 0,
+                expected: Some(LadderEditElement { kind: LadderEditKind::NormallyOpen, operand: operand.into() }),
+                replacement: None,
+            }).unwrap();
+            bytes = insert_ladder_comparison(&bytes, y, 0, mnemonic, &operands.map(String::from)).unwrap();
+        }
+        assert_eq!(bytes, include_bytes!("../fixtures/ladder-edit/instructions/indexed_bits_ff.bin").as_slice());
+    }
+
+    #[test]
+    fn all_comparisons_preserve_contact_flags_and_native_opcodes() {
         let empty = include_bytes!("../fixtures/ladder-edit/R10.bin");
         for spec in crate::ladder_comparison_catalog() {
-            let mut bytes = insert_ladder_comparison(
-                empty,
-                0,
-                0,
-                spec.mnemonic,
-                &["D100".into(), "D102".into()],
-            )
-            .unwrap();
-            assert!(
-                insert_ladder_comparison(
-                    &bytes,
-                    0,
-                    1,
-                    spec.mnemonic,
-                    &["D100".into(), "D102".into()]
-                )
-                .is_err()
-            );
+            let operands = catalog_test_operands(spec);
+            let mut bytes =
+                insert_ladder_comparison(empty, 0, 2, spec.mnemonic, &operands).unwrap();
+            assert!(insert_ladder_comparison(&bytes, 0, 1, spec.mnemonic, &operands).is_err());
             for replacement in crate::ladder_comparison_catalog() {
                 let parsed = EditableProgram::parse(&bytes).unwrap();
                 let record = parsed.rows[0]
@@ -1528,7 +1822,11 @@ mod tests {
                     &bytes,
                     offset,
                     &text,
-                    &format!("{},D100,D102", replacement.mnemonic),
+                    &format!(
+                        "{},{}",
+                        replacement.mnemonic,
+                        catalog_test_operands(replacement).join(",")
+                    ),
                 )
                 .unwrap()
                 .unwrap();
@@ -1632,6 +1930,29 @@ mod tests {
                 "0".to_owned()
             })
             .collect()
+    }
+
+    #[test]
+    fn operandless_applications_match_native_capture_and_keep_end_protected() {
+        let native = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin");
+        for (row, name) in [(0, "STOP"), (1, "WDT")] {
+            let mut source = EditableProgram::parse(native).unwrap();
+            source.rows[row]
+                .records
+                .retain(|record| !record.bytes.starts_with(&[0, 34]));
+            let actual =
+                insert_ladder_instruction(&source.encode(), row as u8 * 4, name, &[]).unwrap();
+            assert_eq!(actual, native.as_slice(), "{name} native payload differs");
+        }
+        let offset = 122;
+        let enlarged = update_instruction_text(native, offset, "STOP", "MOV,1,D100")
+            .unwrap()
+            .unwrap();
+        let restored = update_instruction_text(&enlarged, offset, "MOV,1,D100", "STOP")
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored, native.as_slice());
+        assert!(update_instruction_text(native, 387, "END", "STOP").is_err());
     }
 
     #[test]
@@ -1770,11 +2091,11 @@ mod tests {
         let catalog = crate::ladder_instruction_catalog();
         assert!(catalog.len() > 800);
         for spec in catalog {
-            let text = format!(
-                "{},{}",
-                spec.mnemonic,
-                catalog_test_operands(spec).join(",")
-            );
+            let operands = catalog_test_operands(spec);
+            let text = std::iter::once(spec.mnemonic)
+                .chain(operands.iter().map(String::as_str))
+                .collect::<Vec<_>>()
+                .join(",");
             let edited = update_instruction_text(&data.data, offset, old, &text)
                 .unwrap_or_else(|e| panic!("{}: {e}", spec.mnemonic))
                 .unwrap();
@@ -2353,6 +2674,20 @@ mod tests {
         let blank = include_bytes!("../fixtures/ladder-edit/branches/R44.bin");
         let (horizontal, _) = crate::ladder_records::exact_geometry(blank).unwrap();
         assert!(!horizontal.iter().any(|line| line.raw_y == 4));
+    }
+
+    #[test]
+    fn outputs_on_lower_branch_rows_match_native_saved_program() {
+        let document = crate::XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx")).unwrap();
+        let source = document.ladder_programs().remove(0).unwrap().data;
+        let coil = edit_ladder_cell(&source, &LadderCellEdit {
+            raw_y: 12, column: 9, expected: None,
+            replacement: element(LadderEditKind::Output, "M00030"),
+        }).unwrap();
+        let actual = insert_ladder_instruction(&coil, 16, "MOV", &["1".into(), "D100".into()]).unwrap();
+        let native = include_bytes!("../fixtures/ladder-edit/branches/branch_outputs.bin");
+        assert_eq!(actual, native.as_slice());
+        assert!(editable_ladder_supported(&actual));
     }
 
     #[test]

@@ -12,8 +12,8 @@ negated edge contacts; operandless INV, PUP and PDN operations; output, inverse,
 set/reset and rising/falling-edge coils; horizontal wires; and preserved END
 instructions. Recognized comments and application instructions are preserved,
 allowing structural edits elsewhere in the same program. Instruction operand
-text and insertion are supported as described below; instruction deletion remains
-protected. The entire program is validated before editing; unknown record
+text, insertion and guarded application deletion are supported as described
+below. The entire program is validated before editing; unknown record
 layouts and malformed or truncated records reject the structural operation.
 
 Contacts occupy columns 0–8; coils occupy column 9. `raw_y` is the decoded
@@ -30,6 +30,15 @@ or a decimal D register with one hexadecimal bit index (`D0000.0` through
 bounded serialization syntax, not CPU-specific device-range or program
 validation. Symbol names and other addressing forms are not supported by the
 structural API.
+
+The private manual coverage audit distinguishes application/comparison catalog
+entries from native contact and coil elements. For example, LOAD/AND/OR use a
+normally open element with cell, series or parallel placement; they are not
+three application blocks with interchangeable native IDs. `editorCovered`
+includes these existing element forms, while `cataloged` counts only the
+instruction catalogs. Neither count establishes CPU availability or native
+acceptance of every instruction. END, NOP and stack/control-flow commands remain
+separate from the editable element inventory.
 
 The D-register bit syntax is confirmed by `XGK(B)InstructionHelp_Kr_V3.5.chm`,
 sections 2.2.2 (bit data, examples `D0010.1` and `D0011.A`) and 2.3.9
@@ -56,7 +65,10 @@ For replacement or deletion, provide the expected kind and operand. A stale
 selection fails without mutating the document. Set `replacement: None` to delete.
 Deletion leaves a wiring gap, matching native Delete; it does not automatically
 reconnect contacts. Inserting a contact into an existing wire splits that wire.
-Inserting a coil adds trailing wire without bridging earlier gaps.
+Inserting a coil adds trailing wire without bridging earlier gaps. After a
+branch boundary at coordinate 3, 6, etc., the first trailing wire cell is
+that boundary plus 1; contacts and ordinary wires advance by 3. This distinction
+also applies when adding an output application on a lower branch row.
 
 The sibling VS Code extension exposes Element and Device address controls,
 single-element Delete and rectangular keyboard Delete. A selection containing
@@ -252,13 +264,27 @@ Full local evidence is retained under
 
 `insert_ladder_instruction` places a fixed-arity application instruction at the
 XGK output end of a row. It uses the existing catalog, including MOV and I2R,
-and validates arity, text, and occupied spans. `insert_ladder_comparison` places
-the captured `=`, `>`, `<`, `>=`, `<=`, and `<>` contact forms in three adjacent contact cells. Their
-native opcodes are 1254, 1256, 1258, 1260, 1262, and 1264 respectively; their record flags remain contact flags when
-changing the comparison or its operands.
-`delete_ladder_comparison` checks the expected full source text and native
-comparison opcode before removing the comparison and its two operand references.
-It leaves the three-cell gap and preserves other elements and row coordinates. Native Check Program still determines
+and validates arity, text, and occupied spans. `insert_ladder_comparison` covers
+78 input contacts from 13 manual families: word, DWORD, REAL, LREAL, string,
+word/DWORD group, word/DWORD range, nibble, byte, unsigned word and unsigned
+DWORD. The six relations are `=`, `>`, `<`, `>=`, `<=` and `<>`. Binary forms
+occupy three cells; group/range forms occupy four. Native identifiers come
+from XGTCodeDB, and record flags remain contact flags when editing.
+The same input envelope supports the indexed-bit contacts `B` and `BN` (IL
+`LOADB`/`LOADBN`). Their source and bit-index operands are WORD values; only the
+low four index bits select the bit, so a WORD index is not restricted to 0–15.
+The source must be a permitted word device rather than a constant or bit address.
+The VS Code text prompt uses `LOADB`/`LOADBN`, preserving `B` as the ordinary
+normally-closed contact alias. Serialized records keep the native `B`/`BN` names.
+`FF` is an output application with a BIT destination, matching the manual's
+toggle-on-rising-input operation.
+`delete_ladder_comparison` checks the expected full source text, native opcode
+and operand count before removing the contact and its operand references.
+It leaves the occupied gap and preserves other elements and row coordinates.
+Native D= to DG= capture verifies that comparison resizing keeps the left
+anchor, updates the remembered operand position and consumes adjacent wires;
+both complete captured payloads are reproduced byte for byte. Output applications
+retain their right anchor. Growth into another element or branch is rejected. Native Check Program still determines
 CPU availability and whether the completed rung has a valid input condition.
 
 IEC `insert_iec_ld_function` places MOVE, ADD/SUB/MUL/DIV, or EQ/GT/GE/LT/LE at
@@ -300,22 +326,31 @@ Full local capture evidence is kept outside Git under
 
 ### Instruction replacement catalog
 
-The Instruction selector exposes 859 fixed-arity LD application instructions.
+The Instruction selector exposes 877 fixed-arity LD application instructions,
+including 15 operandless instructions.
 For example, `MOV,0,D000000` can become `ADD,1,2,D000000` and then
 `TON,T0000,100`. Edit operands before applying; selector defaults are placeholders.
-The catalog is not filtered by CPU or OS version. Use XG5000 Check Program for
-instruction availability and operand validity. Basic/control-flow categories and
-zero-operand instructions are excluded from replacement.
+The browser filters documented XGK model incompatibilities for 31 instructions
+from reviewed manual tables (module transfers, communication commands and
+INLATCH). The document writer rejects incompatible insertion and mnemonic
+replacement atomically; operand-only repairs of an existing instruction remain
+possible. Other commands and unknown CPU models are not filtered. Firmware and
+module requirements are not checked. Use XG5000 Check Program for full
+instruction availability and operand validity. Basic/control-flow categories
+1 and 22 remain excluded from replacement. Operandless application blocks can
+be inserted and replaced; END remains protected.
 
 `scripts/generate-instruction-catalog.py` reproduces the factual mnemonic,
 `nIndex` opcode and `bySize` operand count mappings from an XGTCodeDB TSV export
 of installed XG5000 4.82.1.0 `l.kor/CMDDB.mdb`. The database is not redistributed.
 Export SHA-256: `75eded4ca287e08334d8789e742e3c4305835bf76a586ec858b2539032b2f957`.
+The expanded 877-entry catalog uses a fresh full-table export with SHA-256
+`84f9637c25ece73a54d5340871459a097bf5362eae561b84a359ec3f05b67c25`.
 
 Native edits captured in `fixtures/ladder-edit/instructions/R70.bin` (MOV to ADD)
 and `R71.bin` (ADD to TON) verify growth and shrinkage. The first comparison
 normalizes display heights recalculated by native editing on unrelated rows;
-all remaining bytes match. ADD to TON matches byte for byte. All 859 catalog
+all remaining bytes match. ADD to TON matches byte for byte. All 877 catalog
 entries pass serialization, opcode, and byte-exact restoration tests. These are
 structural checks, not native execution of every instruction.
 
@@ -339,7 +374,8 @@ Regenerate with `scripts/generate-operand-rules.py` after locally extracting the
 CHM with 7-Zip; the manual text and images are not included in the repository.
 Use `--check` to verify regeneration without modifying the generated file. Missing
 or unrecognized manual input is rejected before writing the catalog.
-714 of the 865 application/comparison entries have matching operand tables.
+895 of the 942 application/comparison entries that take operands have reviewed
+operand rules. The 15 operandless entries need no operand metadata.
 Arity mismatches, absent pages and unrecognized type tables have no inferred rule.
 Each operand retains its manual page for review. Missing permission tables are
 represented as unknown rather than prohibited.
@@ -350,6 +386,35 @@ NIBBLE/BYTE despite describing signed word decrement. Reviewed overrides separat
 MOV/DMOV, real moves, integer/real conversions, arithmetic widths, increment and
 decrement variants, and nibble/byte moves. Other shared tables retain their unions;
 these are not a complete per-CPU instruction checker.
+
+The generator expands `NAME(EX)` motion-module variants, inherits vertically
+merged type cells, and excludes relative memory descriptions such as `S2+1`
+from argument counts. Scaling variants retain their individual INT/DINT/REAL
+types. Independent usage tables resolve stale extra rows; reviewed page-specific
+repairs cover the PIDINIT loop operand, SRS, XSWR and image-only output comparison
+diagrams. Constant-only PID operands retain their usage table's empty device list.
+
+Audit the complete chapter 4 instruction list against a local native database:
+
+```sh
+python3 scripts/audit-instruction-help.py /path/to/extracted-help \
+  /path/to/XGTCodeDB.tsv --output /path/to/private-coverage.json
+```
+
+The report records manual pages, native IDs/arity, catalog membership and operand
+rule coverage. It distinguishes catalog availability from native validation.
+The v3.5 manual contains eight names that do not match the installed database
+(including ADDCP, BETOW and XTURN); these are reported for review, not assigned
+invented opcodes. Basic/control categories remain outside the writable application catalog until
+their native layouts are verified. All 78 comparison contacts were generated in two programs and passed native
+all-program checks with 0 errors and 0 warnings on XGK-CPUUN. After Save As,
+every program payload and parsed local record remained exact (12,986 and
+13,580 bytes), without normalization. Private evidence: XGC1GEN/XGC2GEN and
+XGC1S/XGC2S in iec-full-edit-audit-20261004. This is editor/compiler validation;
+PLC execution was not performed.
+ADDBP, BTOW and XTRUN rules use the correctly spelled command in their own usage
+tables despite the page-title typos. The remaining unmatched titles are retained
+in the audit for explicit review.
 
 WASM instruction choices include `operandRules`. The command picker displays
 expected types and filters declared variable suggestions. XGK integer symbols use
@@ -386,3 +451,89 @@ payload byte for byte. Evidence is in
 
 Local `iec_*_probe`, inventory and group-analysis examples are investigative tools;
 they are not general editor APIs or evidence that unsupported edits are enabled.
+
+### XGK application deletion and basic bit reset
+
+`delete_ladder_instruction` removes a catalog application, its operand
+references and its immediately preceding output feed wire. Expected full text,
+opcode, arity, output anchor and a single unbranched row group are checked.
+END, unknown instructions, branches and output comments remain protected.
+WASM reports `instructionDeletion` per cell; the shared diagram Delete action
+uses this capability. Native MOV deletion leaves the input comparison alone;
+Check Program reports one incomplete-rung error. Tests reproduce that entire
+13,440-byte captured payload exactly.
+
+BRST and BRSTP are explicit exceptions to the excluded basic category: their
+shared application envelope has a native BRST capture. Operand rules come from
+the manual (BIT destination and WORD bit count). Reinserted BRST reproduces the
+complete 13,592-byte native payload and passed native checks with 0 errors and
+0 warnings. This does not establish support for other basic/control layouts.
+
+### Native indexed-bit and FF evidence
+
+Native XG5000 insertion of B, BN and FF passed full Check Program with
+0 errors and 0 warnings. The 676-byte saved program is reconstructed exactly
+by the writer regression fixture, with local-symbol records also matching.
+The reconstruction uses the native dialog's padded D addresses; arbitrary
+short-address normalization and PLC runtime behavior remain unverified.
+In the text prompt, use LOADB/LOADBN for indexed-bit contacts so the existing
+B alias continues to mean a normally closed contact.
+
+### Quoted string operands
+
+XGK instruction text supports single-quoted ASCII string constants with embedded
+spaces, commas and parentheses, up to 31 characters. The prompt and native
+combined/decomposed record parser preserve the complete quoted operand. Literal
+permission is required explicitly by the manual rule, so string destinations
+and unknown literal permissions remain guarded. Non-ASCII literals and embedded
+apostrophe escapes remain unsupported pending native encoding evidence.
+
+The operand generator also reads usage tables headed `문자열`, including source
+literal permissions and destination device restrictions for string instructions.
+
+Native $MOV/$MOVP string-literal insertion passed full Check Program with 0 errors
+and 0 warnings. The writer reconstructs the complete 683-byte saved payload and
+local records exactly, including the observed literal row-prefix variant.
+
+### Reviewed CPU model tables
+
+`scripts/generate-instruction-availability.py` extracts the unambiguous model
+tables in manual sections 4.39 and 4.40, plus the explicit INLATCH restriction
+in section 4.24.21. Reproduce or check the generated data with:
+
+```sh
+python3 scripts/generate-instruction-availability.py /path/to/extracted-help --check
+```
+
+`ladder_instruction_cpu_allowed` returns `None` for unreviewed commands or
+non-XGK/unknown models, and a model-table result otherwise. `Some(true)` does
+not establish firmware, module, runtime or native edit acceptance. INLATCH is
+limited to XGK-CPUUN/HN/SN; GETIP and SETIP have the same reviewed model list.
+GETCOMM and PUTCOMM are excluded on every reviewed XGK model. Motion pages
+with different XGF/XBF command variants are deliberately not interpreted as
+a single shared model restriction. Native database CPU bit masks remain
+undecoded; no instruction or firmware availability is inferred from them.
+
+### Output entry from interior blank cells
+
+The sibling editor accepts coil and output application commands from any blank
+XGK cell, including cells on lower branch rows. OUT/SET/RST/OUTP/OUTN and
+application commands use the right output position on the same physical row.
+Contact commands still use the cursor column. Interior P/N aliases remain
+contacts; pulse coils use OUTP/OUTN. The existing occupied-output checks prevent
+an insertion from replacing an output already on that row.
+
+Rendered checks on a private copy of `elements.xgwx` inserted OUT M00030 from
+row 12, column 2 and SET M00031 from row 16, column 5. They also inserted
+MOV 1 D100 from row 12, column 3. Double-click and Enter opened the built-in
+prompt, each output appeared at the right side, and undo restored the baseline.
+The WASM regression verifies both coil and application insertion retain all
+nine original branch connections and the existing inverse coil on row 8.
+
+Native acceptance of the branch-output writer uses XGK-CPUSN and XG5000
+4.82.1.0. The generated OUT/MOV branch additions passed all-program logical,
+syntax and duplicate-coil checks with 0 errors, 0 warnings and 13 messages.
+Native Save As preserved all 2,531 ProgramData bytes and the one local-symbol
+table exactly. `fixtures/ladder-edit/branches/branch_outputs.bin` retains the
+complete saved payload; the writer test reconstructs it without normalization.
+This proves file-format/compiler acceptance, not PLC runtime execution.

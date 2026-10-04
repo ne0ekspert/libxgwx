@@ -179,10 +179,19 @@ pub struct IecConnectedArithmeticDeletionSite {
 /// function shape while retaining the other records in both stored rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IecFunctionCellInsertionSite {
+    pub function_name: &'static str,
     pub group_index: usize,
     pub row_index: u16,
     pub insertion_offset: usize,
     pub reference_offset: usize,
+    pub raw_x: u8,
+}
+
+/// Empty comparison header whose BOOL output connects to a retained MOVE.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IecWiredComparisonInsertionSite {
+    pub group_index: usize,
+    pub row_index: u16,
     pub raw_x: u8,
 }
 
@@ -462,7 +471,10 @@ impl LadderProgramData {
                 .collect::<Vec<_>>();
             if top_records.len() != 3
                 || !matches!(top_records[0].kind, IecRecordKind::Contact(6..=11))
-                || top_records[1].kind != IecRecordKind::LongWire
+                || !matches!(
+                    top_records[1].kind,
+                    IecRecordKind::LongWire | IecRecordKind::ShortWire
+                )
                 || top_records[2].kind != IecRecordKind::FunctionBlock
                 || top_records[2].offset != block.record_offset
                 || top_records[1].end != block.record_offset
@@ -470,7 +482,12 @@ impl LadderProgramData {
                 continue;
             }
             let wire = self.data.get(top_records[1].offset..top_records[1].end)?;
-            if wire[15].checked_add(3) != Some(block.raw_x) {
+            let wire_end = if top_records[1].kind == IecRecordKind::ShortWire {
+                wire[5]
+            } else {
+                wire[15]
+            };
+            if wire_end.checked_add(3) != Some(block.raw_x) {
                 continue;
             }
             let child_records = records
@@ -515,6 +532,118 @@ impl LadderProgramData {
     /// Find the retained-contact shape produced by deleting one of the five
     /// elevator MOVEs or the captured lighting MOVE. Its two pin rows are
     /// implicit until insertion.
+    /// Native-compatible deletions from horizontal scalar chains with shared pin rows.
+    #[cfg(feature = "write")]
+    pub fn iec_scalar_chain_deletion_sites(&self) -> Option<Vec<IecFunctionCellDeletionSite>> {
+        Some(
+            self.iec_function_blocks()?
+                .into_iter()
+                .filter_map(|block| {
+                    crate::iec_function_write::remove_chain(
+                        self,
+                        block.record_offset,
+                        &block.name.value,
+                    )
+                    .ok()?;
+                    Some(IecFunctionCellDeletionSite {
+                        group_index: block.group_index,
+                        row_index: block.row_index,
+                        block_offset: block.record_offset,
+                        raw_x: block.raw_x,
+                        pin_count: block.pin_count,
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    /// Captured comparison-result scaffolds accepting two input operands.
+    #[cfg(feature = "write")]
+    pub fn iec_wired_comparison_insertion_sites(
+        &self,
+    ) -> Option<Vec<IecWiredComparisonInsertionSite>> {
+        let mut sites = self
+            .iec_function_blocks()?
+            .iter()
+            .filter_map(|block| {
+                let row_index = block.row_index.checked_sub(1)?;
+                let group_index =
+                    crate::iec_function_write::wired_comparison_scaffold(self, row_index, 10)?;
+                Some(IecWiredComparisonInsertionSite {
+                    group_index,
+                    row_index,
+                    raw_x: 10,
+                })
+            })
+            .collect::<Vec<_>>();
+        sites.extend(crate::iec_paired_comparison_write::sites(self)?);
+        sites.extend(crate::iec_coil_comparison_write::sites(self)?);
+        Some(sites)
+    }
+
+    /// A retained normal contact and two vacant rows for a terminal TON.
+    pub fn iec_terminal_timer_insertion_sites(
+        &self,
+    ) -> Option<Vec<IecTerminalFunctionInsertionSite>> {
+        let rows = self.iec_row_frames()?;
+        let records = self.iec_record_frames()?;
+        let mut sites = Vec::new();
+        #[cfg(feature = "write")]
+        for contact in records
+            .iter()
+            .filter(|r| r.kind == IecRecordKind::Contact(6))
+        {
+            if let Some(site) = crate::iec_connected_timer_write::scaffold(self, contact.offset) {
+                sites.push(site);
+            }
+            if let Some(site) =
+                crate::iec_conversion_pair_write::timer_scaffold(self, contact.offset)
+            {
+                sites.push(site);
+            }
+            if let Some(site) = crate::iec_long_feed_timer_write::scaffold(self, contact.offset) {
+                sites.push(site);
+            }
+        }
+        for row in &rows {
+            let start = row.start.checked_sub(10)?;
+            let same_group = rows
+                .iter()
+                .filter(|r| r.group_index == row.group_index)
+                .count();
+            let Some(contact) = records
+                .iter()
+                .find(|r| r.group_index == row.group_index && r.row_index == row.row_index)
+            else {
+                continue;
+            };
+            let next = rows.iter().find(|r| r.group_index == row.group_index + 1);
+            if row.row_index > u16::MAX / 4 - 2
+                || same_group != 1
+                || row.record_count != 1
+                || contact.kind != IecRecordKind::Contact(6)
+                || contact.end != row.end
+                || self.data.get(contact.offset + 5) != Some(&1)
+                || self.data.get(start + 4..start + 8) != Some(&[0, 0, 0, 0])
+                || self.data.get(start + 8..start + 10) != Some(&[1, 0])
+                || self.data.get(row.start + 29) != Some(&1)
+                || next.is_none_or(|next| {
+                    next.row_index != row.row_index + 3 || next.start != row.end + 10
+                })
+            {
+                continue;
+            }
+            sites.push(IecTerminalFunctionInsertionSite {
+                group_index: row.group_index,
+                row_index: row.row_index,
+                contact_offset: contact.offset,
+                insertion_offset: row.end,
+                raw_x: 7,
+            });
+        }
+        Some(sites)
+    }
+
     pub fn iec_terminal_function_insertion_sites(
         &self,
     ) -> Option<Vec<IecTerminalFunctionInsertionSite>> {
@@ -584,8 +713,9 @@ impl LadderProgramData {
     }
 
     /// Find the standalone function group covered by the captured XG5000
-    /// Delete operation. Its top row is exactly a one-cell wire followed by a
-    /// function block, and all subordinate rows belong only to that block.
+    /// Delete operation. Its top row is exactly a one-cell long or short wire
+    /// followed by a function block, and all subordinate rows belong only to
+    /// that block. The short feed also occurs after deleting a chain's tail.
     pub fn iec_standalone_function_deletion_sites(
         &self,
     ) -> Option<Vec<IecStandaloneFunctionDeletionSite>> {
@@ -616,7 +746,10 @@ impl LadderProgramData {
                 })
                 .collect::<Vec<_>>();
             if top_records.len() != 2
-                || top_records[0].kind != IecRecordKind::LongWire
+                || !matches!(
+                    top_records[0].kind,
+                    IecRecordKind::LongWire | IecRecordKind::ShortWire
+                )
                 || top_records[1].kind != IecRecordKind::FunctionBlock
                 || top_records[1].offset != block.record_offset
                 || top_records[0].end != block.record_offset
@@ -624,7 +757,12 @@ impl LadderProgramData {
                 continue;
             }
             let wire = self.data.get(top_records[0].offset..top_records[0].end)?;
-            if wire[5] != 1 || wire[15] != 1 || wire[15].checked_add(3) != Some(block.raw_x) {
+            let one_cell_feed = match top_records[0].kind {
+                IecRecordKind::LongWire => wire.get(15).copied() == Some(1),
+                IecRecordKind::ShortWire => wire.get(9..15) == Some([0; 6].as_slice()),
+                _ => false,
+            };
+            if wire[5] != 1 || block.raw_x != 4 || !one_cell_feed {
                 continue;
             }
             let child_records = records
@@ -848,6 +986,69 @@ impl LadderProgramData {
                 .iter()
                 .filter(|row| row.group_index == block.group_index)
                 .collect::<Vec<_>>();
+            // Native Delete on a connected R_TRIG removes only its body and
+            // output reference. The other functions and stored rows stay put;
+            // the resulting horizontal gap can be repaired independently.
+            if block.name.value == "R_TRIG"
+                && block.opcode_family == 0x21
+                && block.opcode == 0x1f
+                && block.pin_count == 1
+            {
+                let own_refs = references
+                    .iter()
+                    .filter(|reference| reference.target_record_offset == block.record_offset)
+                    .collect::<Vec<_>>();
+                let body_index = records
+                    .iter()
+                    .position(|r| r.offset == block.record_offset)?;
+                let preceding = body_index.checked_sub(1).and_then(|i| records.get(i));
+                let following = records.get(body_index + 1);
+                let retained_rows = group_rows.iter().all(|row| {
+                    records.iter().any(|record| {
+                        record.group_index == row.group_index
+                            && record.row_index == row.row_index
+                            && record.offset != block.record_offset
+                            && !own_refs.iter().any(|r| r.record_offset == record.offset)
+                    })
+                });
+                if own_refs.len() == 1
+                    && own_refs[0].is_output
+                    && own_refs[0].group_index == block.group_index
+                    && block.row_index.checked_add(1) == Some(own_refs[0].row_index)
+                    && !operand_links
+                        .iter()
+                        .any(|link| link.target_record_offset == block.record_offset)
+                    && preceding.is_some_and(|r| {
+                        r.group_index == block.group_index
+                            && r.row_index == block.row_index
+                            && match r.kind {
+                                IecRecordKind::Contact(6..=11) | IecRecordKind::ShortWire => {
+                                    self.data[r.offset + 5].checked_add(3) == Some(block.raw_x)
+                                }
+                                IecRecordKind::LongWire => {
+                                    self.data[r.offset + 15].checked_add(3) == Some(block.raw_x)
+                                }
+                                _ => false,
+                            }
+                    })
+                    && following.is_some_and(|r| {
+                        r.group_index == block.group_index
+                            && r.row_index == block.row_index
+                            && r.kind == IecRecordKind::LongWire
+                            && block.raw_x.checked_add(3) == Some(self.data[r.offset + 5])
+                    })
+                    && retained_rows
+                {
+                    sites.push(IecFunctionCellDeletionSite {
+                        group_index: block.group_index,
+                        row_index: block.row_index,
+                        block_offset: block.record_offset,
+                        raw_x: block.raw_x,
+                        pin_count: block.pin_count,
+                    });
+                }
+                continue;
+            }
             if block.pin_count != 1
                 || group_rows.len() != 2
                 || group_rows.first().map(|row| row.row_index) != Some(block.row_index)
@@ -970,11 +1171,46 @@ impl LadderProgramData {
                 continue;
             }
             sites.push(IecFunctionCellInsertionSite {
+                function_name: "FF",
                 group_index: first_row.group_index,
                 row_index: first_row.row_index,
                 insertion_offset: top[1].offset,
                 reference_offset: bottom[0].offset,
                 raw_x: 4,
+            });
+        }
+        for gap in self.iec_horizontal_wire_repair_sites()? {
+            let wire_index = records
+                .iter()
+                .position(|r| r.offset == gap.insertion_offset)?;
+            let wire = &records[wire_index];
+            let Some(next) = records.get(wire_index + 1) else {
+                continue;
+            };
+            let Some(bottom) = rows
+                .iter()
+                .find(|r| r.group_index == gap.group_index && r.row_index == gap.row_index + 1)
+            else {
+                continue;
+            };
+            if wire.kind != IecRecordKind::LongWire
+                || next.kind != IecRecordKind::FunctionBlock
+                || next.group_index != gap.group_index
+                || next.row_index != gap.row_index
+                || records
+                    .iter()
+                    .filter(|r| r.group_index == gap.group_index && r.row_index == bottom.row_index)
+                    .any(|r| self.data[r.offset + 5] <= gap.raw_x)
+            {
+                continue;
+            }
+            sites.push(IecFunctionCellInsertionSite {
+                function_name: "R_TRIG",
+                group_index: gap.group_index,
+                row_index: gap.row_index,
+                insertion_offset: gap.insertion_offset,
+                reference_offset: bottom.records_start,
+                raw_x: gap.raw_x,
             });
         }
         Some(sites)
@@ -1035,6 +1271,18 @@ impl LadderProgramData {
                 insertion_offset: top.records_start,
             });
         }
+        #[cfg(feature = "write")]
+        sites.extend(
+            crate::iec_contact_mesh_move_write::leading_contact_sites(self, false)?
+                .into_iter()
+                .map(|(group_index, row_index, insertion_offset, _)| {
+                    IecLeadingContactInsertionSite {
+                        group_index,
+                        row_index,
+                        insertion_offset,
+                    }
+                }),
+        );
         Some(sites)
     }
 
@@ -1128,9 +1376,6 @@ impl LadderProgramData {
         let rows = self.iec_row_frames()?;
         let mut sites = Vec::new();
         for row in &rows {
-            if row.record_count < 3 {
-                continue;
-            }
             let parts = records
                 .iter()
                 .filter(|record| {
@@ -1138,6 +1383,23 @@ impl LadderProgramData {
                 })
                 .collect::<Vec<_>>();
             if parts.len() != row.record_count as usize {
+                continue;
+            }
+            if let [contact, endpoint] = parts.as_slice()
+                && let IecRecordKind::Contact(contact_code @ 6..=11) = contact.kind
+                && endpoint.kind == IecRecordKind::BranchEnd
+                && self.data.get(contact.offset + 5) == Some(&1)
+                && self.data.get(endpoint.offset + 5) == Some(&3)
+            {
+                sites.push(IecNoContactDeletionSite {
+                    group_index: row.group_index,
+                    row_index: row.row_index,
+                    contact_offset: contact.offset,
+                    raw_x: 1,
+                    contact_code,
+                });
+            }
+            if row.record_count < 3 {
                 continue;
             }
             let group_rows = rows
@@ -1212,6 +1474,29 @@ impl LadderProgramData {
                     raw_x: contact[5],
                     contact_code,
                 });
+            }
+        }
+        #[cfg(feature = "write")]
+        sites.extend(
+            crate::iec_contact_mesh_move_write::leading_contact_sites(self, true)?
+                .into_iter()
+                .map(|(group_index, row_index, contact_offset, contact_code)| {
+                    IecNoContactDeletionSite {
+                        group_index,
+                        row_index,
+                        contact_offset,
+                        raw_x: 1,
+                        contact_code,
+                    }
+                }),
+        );
+        #[cfg(feature = "write")]
+        for site in crate::iec_contact_write::deletion_sites(self)? {
+            if !sites
+                .iter()
+                .any(|s| s.contact_offset == site.contact_offset)
+            {
+                sites.push(site);
             }
         }
         Some(sites)
@@ -1335,6 +1620,31 @@ impl LadderProgramData {
                 let [left_frame, right_frame] = pair else {
                     continue;
                 };
+                if matches!(
+                    left_frame.kind,
+                    IecRecordKind::Contact(6..=11) | IecRecordKind::ShortWire
+                ) && right_frame.kind == IecRecordKind::LongWire
+                    && left_frame.end == right_frame.offset
+                {
+                    let left = self.data.get(left_frame.offset..left_frame.end)?;
+                    let right = self.data.get(right_frame.offset..right_frame.end)?;
+                    if right.len() == 19
+                        && left[5].checked_add(6) == Some(right[5])
+                        && left[6..9] == right[6..9]
+                        && right[6..9] == right[16..19]
+                        && right[5] <= right[15]
+                        && right[9..15] == [0; 6]
+                        && (left_frame.kind != IecRecordKind::ShortWire || left[9..15] == [0; 6])
+                    {
+                        sites.push(IecHorizontalWireRepairSite {
+                            group_index: row.group_index,
+                            row_index: row.row_index,
+                            insertion_offset: right_frame.offset,
+                            raw_x: left[5] + 3,
+                        });
+                    }
+                    continue;
+                }
                 if left_frame.kind != IecRecordKind::LongWire
                     || right_frame.kind != IecRecordKind::LongWire
                     || left_frame.end != right_frame.offset
@@ -1353,7 +1663,18 @@ impl LadderProgramData {
                 if left[5] > left[15]
                     || right[5] >= right[15]
                     || left[15].checked_add(6) != Some(right[5])
-                    || self.data.get(row.start + 29) != Some(&gap_x)
+                    || (self.data.get(row.start + 29) != Some(&gap_x)
+                        && self.data.get(row.start + 29).copied()
+                            != parts
+                                .iter()
+                                .filter(|r| {
+                                    matches!(
+                                        r.kind,
+                                        IecRecordKind::Contact(_) | IecRecordKind::FunctionBlock
+                                    )
+                                })
+                                .map(|r| self.data[r.offset + 5])
+                                .max())
                     || !matches!(&left[9..15], [0, 0, 4, 0, 0, 0] | [0, 0, 0, 0, 0, 0])
                     || right[9..15] != left[9..15]
                     || left[6..9] != right[6..9]
@@ -1507,7 +1828,7 @@ fn parse_function_block(data: &[u8], record: IecRecordFrame) -> Option<IecFuncti
         let expected_row = record.row_index.checked_add(u16::from(ordinal))?;
         let expected_y = expected_row.checked_mul(4)?;
         let current_body_flag = u16::from_le_bytes([header[6], header[7]]);
-        if !(matches!(current_body_flag, 0 | 2) || current_body_flag == u16::from(raw_x))
+        if !(matches!(current_body_flag, 0 | 2 | 4) || current_body_flag == u16::from(raw_x))
             || body_flag.is_some_and(|expected| expected != current_body_flag)
         {
             return None;
@@ -1808,8 +2129,10 @@ fn function_start(data: &[u8], offset: usize, end: usize, row_index: u16) -> boo
         && (1..=94).contains(&bytes[5])
         && bytes[6..8] == (row_index * 4).to_le_bytes()
         && bytes[8] == 0
-        && (matches!(&bytes[9..15], [1, 0, 0, 0, 0, 0] | [1, 0, 0, 2, 0, 0])
-            || bytes[9..15] == [1, 0, bytes[5], 0, 0, 0])
+        && (matches!(
+            &bytes[9..15],
+            [1, 0, 0, 0, 0, 0] | [1, 0, 4, 0, 0, 0] | [1, 0, 0, 2, 0, 0] | [1, 0, 4, 2, 0, 0]
+        ) || bytes[9..15] == [1, 0, bytes[5], 0, 0, 0])
         && matches!(bytes[15], 0x20 | 0x21 | 0x28)
         && bytes[18..20] == [0, 0]
         && (1..=32).contains(&bytes[20])
@@ -1916,7 +2239,9 @@ fn simple_record(
         0x3f | 0x40 if matches!(&bytes[9..15], [0, 0, 0x20, 0, 0, 0] | [0, 0, 0x24, 0, 0, 0]) => {
             IecRecordKind::Comment
         }
-        0x46 if bytes[9..15] == [0; 6] => IecRecordKind::FunctionOperand,
+        0x46 if matches!(&bytes[9..15], [0, 0, 0, 0, 0, 0] | [0, 0, 4, 0, 0, 0]) => {
+            IecRecordKind::FunctionOperand
+        }
         _ => return None,
     };
     let text_end = utf16_end(data, offset + 15)?;

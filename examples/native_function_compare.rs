@@ -6,8 +6,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     let [before, after] = args.as_slice() else {
         return Err("usage: native_function_compare BEFORE AFTER".into());
     };
-    let old = XgwxDocument::from_path(before)?.ladder_programs();
-    let new = XgwxDocument::from_path(after)?.ladder_programs();
+    let old_document = XgwxDocument::from_path(before)?;
+    let new_document = XgwxDocument::from_path(after)?;
+    let old_locals = old_document
+        .iec_local_symbols()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    let new_locals = new_document
+        .iec_local_symbols()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    if old_locals != new_locals {
+        return Err("parsed local symbols or record offsets changed".into());
+    }
+    println!(
+        "local symbols: {} program tables match exactly",
+        old_locals.len()
+    );
+    let old = old_document.ladder_programs();
+    let new = new_document.ladder_programs();
     if old.len() != new.len() {
         return Err("program count changed".into());
     }
@@ -43,7 +60,20 @@ fn main() -> Result<(), Box<dyn Error>> {
                     })
                     .collect::<Vec<_>>()
             };
-            if shape(before) != shape(after) || new.iec_circuit_graph().is_none() {
+            let before = shape(before);
+            let after = shape(after);
+            if before != after {
+                for block in before.iter().filter(|block| !after.contains(block)) {
+                    println!("program {index}: removed function {block:?}");
+                }
+                for block in after.iter().filter(|block| !before.contains(block)) {
+                    println!("program {index}: added function {block:?}");
+                }
+            }
+            if before != after
+                || new.iec_circuit_layout().is_none()
+                || (old.iec_circuit_graph().is_some() && new.iec_circuit_graph().is_none())
+            {
                 return Err(
                     format!("program {index}: function shape or circuit graph changed").into(),
                 );

@@ -180,6 +180,23 @@ pub fn delete_xgwx_ladder_comparison_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Delete a verified XGK application from an unbranched output row.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_ladder_instruction)]
+pub fn delete_xgwx_ladder_instruction_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    offset: usize,
+    expected: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.delete_ladder_instruction(program_index, offset, expected)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Create or edit a supported native rung/output comment.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_ladder_comment)]
@@ -742,6 +759,99 @@ pub fn edit_xgwx_iec_ld_branch_segment_wasm(
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Toggle a vertical wire without deleting shared row or function records.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_iec_ld_vertical_wire)]
+#[allow(clippy::too_many_arguments)]
+pub fn edit_xgwx_iec_ld_vertical_wire_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    group_index: usize,
+    start_row_index: u16,
+    end_row_index: u16,
+    x: u8,
+    expected: bool,
+    present: bool,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.edit_iec_ld_vertical_wire(
+        program_index,
+        group_index,
+        start_row_index,
+        end_row_index,
+        x,
+        expected,
+        present,
+    )
+    .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Connect adjacent IEC groups, rebuilding group envelopes and adding wiring.
+#[wasm_bindgen(js_name = connect_xgwx_iec_ld_groups)]
+#[allow(clippy::too_many_arguments)]
+pub fn connect_xgwx_iec_ld_groups_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    upper_group_index: usize,
+    expected_upper_row: u16,
+    lower_group_index: usize,
+    expected_lower_row: u16,
+    x: u8,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.connect_iec_ld_groups(
+        program_index,
+        upper_group_index,
+        expected_upper_row,
+        lower_group_index,
+        expected_lower_row,
+        x,
+    )
+    .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Extend an IEC group into the adjacent implicit blank row.
+#[wasm_bindgen(js_name = extend_xgwx_iec_ld_vertical_wire)]
+pub fn extend_xgwx_iec_ld_vertical_wire_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    group_index: usize,
+    start_row_index: u16,
+    x: u8,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.extend_iec_ld_vertical_wire(program_index, group_index, start_row_index, x)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Split disconnected IEC row ranges without changing coordinates or elements.
+#[wasm_bindgen(js_name = split_xgwx_iec_ld_group)]
+pub fn split_xgwx_iec_ld_group_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    group_index: usize,
+    expected_upper_row: u16,
+    expected_lower_row: u16,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.split_iec_ld_group(
+        program_index,
+        group_index,
+        expected_upper_row,
+        expected_lower_row,
+    )
+    .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Insert one implicit IEC LD blank row after a decoded stored row, matching
@@ -1358,6 +1468,111 @@ pub fn delete_xgwx_iec_ld_terminal_function_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Remove a scalar branch-mounted block while retaining its branch rows.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_iec_ld_branch_function)]
+pub fn delete_xgwx_iec_ld_branch_function_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    block_offset: usize,
+    expected_name: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.delete_iec_ld_branch_function(program_index, block_offset, expected_name)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Replace a captured scalar branch function atomically, adjusting its footprint.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = replace_xgwx_iec_ld_branch_function)]
+pub fn replace_xgwx_iec_ld_branch_function_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    block_offset: usize,
+    expected_name: &str,
+    function_name: &str,
+    operands_json: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let operands: Vec<String> = serde_json::from_str(operands_json)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.replace_iec_ld_branch_function(
+        program_index,
+        block_offset,
+        expected_name,
+        function_name,
+        &operands,
+    )
+    .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Replace a supported scalar chain function atomically, adjusting its footprint.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = replace_xgwx_iec_ld_scalar_chain_function)]
+pub fn replace_xgwx_iec_ld_scalar_chain_function_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    block_offset: usize,
+    expected_name: &str,
+    function_name: &str,
+    operands_json: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let operands: Vec<String> = serde_json::from_str(operands_json)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.replace_iec_ld_scalar_chain_function(
+        program_index,
+        block_offset,
+        expected_name,
+        function_name,
+        &operands,
+    )
+    .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Insert a terminal TON with a declared instance and typed TIME operands.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = insert_xgwx_iec_ld_terminal_timer)]
+pub fn insert_xgwx_iec_ld_terminal_timer_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    contact_offset: usize,
+    instance: &str,
+    preset: &str,
+    elapsed: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.insert_iec_ld_terminal_timer(program_index, contact_offset, instance, preset, elapsed)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Delete one scalar body from a shared-row horizontal chain.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_iec_ld_scalar_chain_function)]
+pub fn delete_xgwx_iec_ld_scalar_chain_function_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    block_offset: usize,
+    expected_name: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.delete_iec_ld_scalar_chain_function(program_index, block_offset, expected_name)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Restore the captured terminal MOVE after its retained contact.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = insert_xgwx_iec_ld_terminal_move)]
@@ -1765,6 +1980,23 @@ pub fn delete_xgwx_iec_ld_connected_arithmetic_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Delete a scalar arithmetic block while retaining its external branch spine.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_iec_ld_branched_arithmetic)]
+pub fn delete_xgwx_iec_ld_branched_arithmetic_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    block_offset: usize,
+    expected_name: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc =
+        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.delete_iec_ld_branched_arithmetic(program_index, block_offset, expected_name)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.to_bytes()
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// Insert the captured connected single-output FF function cell.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = insert_xgwx_iec_ld_function_cell)]
@@ -1862,6 +2094,15 @@ impl WasmLadderMnemonicSummary {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct WasmIecSystemVariableSummary {
+    name: &'static str,
+    data_type: &'static str,
+    writable: bool,
+    description: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct WasmDocumentSummary {
     header: WasmHeaderSummary,
     project: WasmProjectSummary,
@@ -1870,6 +2111,7 @@ struct WasmDocumentSummary {
     programs: Vec<WasmProgramSummary>,
     variables: Vec<WasmVariableSummary>,
     local_variables: Vec<Vec<WasmIecLocalSymbolSummary>>,
+    iec_system_variables: Vec<WasmIecSystemVariableSummary>,
     hardware: WasmHardwareSummary,
     ladder: Vec<WasmLadderProgramSummary>,
     networks: Vec<WasmNetworkSummary>,
@@ -2016,6 +2258,15 @@ impl WasmDocumentSummary {
                 .collect(),
             variables: variables_for_output,
             local_variables,
+            iec_system_variables: IEC_SYSTEM_BOOL_VARIABLES
+                .iter()
+                .map(|&(name, description)| WasmIecSystemVariableSummary {
+                    name,
+                    data_type: "BOOL",
+                    writable: false,
+                    description,
+                })
+                .collect(),
             hardware: WasmHardwareSummary {
                 cpu_profile: doc.cpu_hardware_profile(),
                 bases: bases.into_iter().map(WasmBaseSummary::from_base).collect(),
@@ -2066,6 +2317,12 @@ fn decode_browser_ladder(
     let mut errors = 0;
     let mut decoded_bytes = 0usize;
     let mut item_count = 0usize;
+    let cpu_model = doc
+        .configurations()
+        .first()
+        .and_then(|configuration| configuration.type_code)
+        .and_then(crate::cpu::cpu_for_type)
+        .map(|cpu| cpu.model);
 
     for (program_index, element) in doc
         .root
@@ -2101,6 +2358,7 @@ fn decode_browser_ladder(
         ladder.push(WasmLadderProgramSummary::from_program(
             program_index,
             &program,
+            cpu_model,
         ));
     }
 
