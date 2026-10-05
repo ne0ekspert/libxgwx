@@ -14029,6 +14029,7 @@ fn xgi_combined_contact_comparison_native_capture() {
     }
 }
 
+#[cfg(feature = "write")]
 #[test]
 #[ignore = "requires external XGI project and optional native shifted captures"]
 fn xgi_shifted_heating_comparison_deletion() {
@@ -14119,6 +14120,7 @@ fn xgi_shifted_heating_comparison_deletion() {
     }
 }
 
+#[cfg(feature = "write")]
 #[test]
 #[ignore = "requires external XGI project for contact-kind lifecycle coverage"]
 fn xgi_contact_kind_comparison_lifecycle() {
@@ -14244,6 +14246,7 @@ fn xgi_contact_kind_comparison_lifecycle() {
     }
 }
 
+#[cfg(feature = "write")]
 #[test]
 #[ignore = "requires external XGI project for contact-first comparison edits"]
 fn xgi_contact_first_comparison_lifecycle() {
@@ -14430,6 +14433,7 @@ fn xgi_contact_first_comparison_lifecycle() {
     }
 }
 
+#[cfg(feature = "write")]
 #[test]
 #[ignore = "requires native contact-first captures and the source fixture"]
 fn xgi_contact_first_native_refill_lifecycle() {

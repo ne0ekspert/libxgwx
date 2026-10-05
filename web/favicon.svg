@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>libxgwx</title>
+  <rect width="64" height="64" rx="12" fill="#17241f"/>
+  <path d="m14 20 13 24m0-24L14 44m23-24h13v6H37v12h7v-5h-5v-5h11v16H31V20z" fill="none" stroke="#d4f572" stroke-width="4" stroke-linecap="square"/>
+</svg>
