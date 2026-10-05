@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Open your LS XG5000 .xgwx workspace locally to inspect its project, programs, variables, hardware, networks and parameters. Files stay on your device." />
+    <meta name="description" content="Edit supported PLC program properties, IEC contacts, coils and typed operands in your LS XG5000 .xgwx workspace locally. Files stay on your device." />
     <meta name="robots" content="noindex, follow" />
     <link rel="canonical" href="https://ne0ekspert.github.io/libxgwx/editor.html" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <title>Workspace explorer · libxgwx</title>
+    <title>Workspace editor · libxgwx</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -15,7 +15,7 @@
       <header class="topbar">
         <div>
           <h1>libxgwx</h1>
-          <p>Parse LS XG5000 .xgwx workspace files locally in your browser.</p>
+          <p>Edit your PLC program locally. Your original file stays unchanged.</p>
         </div>
         <a href="./">← libxgwx home</a>
       </header>
@@ -23,28 +23,17 @@
       <section id="drop-zone" class="drop-zone">
         <input id="file-input" aria-label="Choose an .xgwx workspace file" type="file" accept=".xgwx,application/octet-stream" />
         <div>
-          <strong>Choose or drop an .xgwx file</strong>
-          <span>No file is uploaded or transmitted. Parsing runs in this page.</span>
+          <strong>Open or drop an .xgwx file</strong>
+          <span>Files stay on your device.</span>
         </div>
       </section>
 
       <section id="status" class="status" role="status">Waiting for a file.</section>
 
-      <nav class="tabs" aria-label="Parsed views">
-        <button class="tab active" data-tab="summary" type="button">Summary</button>
-        <button class="tab" data-tab="programs" type="button">Programs</button>
-        <button class="tab" data-tab="variables" type="button">Variables</button>
-        <button class="tab" data-tab="hardware" type="button">Hardware</button>
-        <button class="tab" data-tab="networks" type="button">Networks</button>
-        <button class="tab" data-tab="parameters" type="button">Parameters</button>
-      </nav>
+      <section id="edit-toolbar" class="edit-toolbar" hidden></section>
 
-      <section id="summary" class="panel active"></section>
-      <section id="programs" class="panel"></section>
-      <section id="variables" class="panel"></section>
-      <section id="hardware" class="panel"></section>
-      <section id="networks" class="panel"></section>
-      <section id="parameters" class="panel"></section>
+      <section id="editing" class="panel active" aria-label="PLC editor"></section>
+      <p class="edit-help">Edits are limited to existing supported records. Module insertion/deletion and communication address, port and mode changes are unavailable. Native XG5000 validation and PLC execution have not been verified for this browser editor.</p>
     </main>
 
     <script type="module" src="./app.js"></script>

@@ -41,6 +41,20 @@ for program in doc.programs() {
 
 ## API
 
+[API docs](https://ne0ekspert.github.io/libxgwx/api/xgwx/index.html) are generated
+from the Rust library with `cargo doc`. The reference includes the parser and
+optional `write`, `il`, and `wasm` APIs. The crate name is `xgwx`.
+
+Generate the same reference locally:
+
+```sh
+RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" cargo doc --lib --no-deps --no-default-features --features write,il,wasm
+```
+
+Open `target/doc/xgwx/index.html`. Pages publishes the complete generated tree
+under `/libxgwx/api/` so its relative assets and source links resolve correctly.
+The API overview below complements the generated reference.
+
 - `XgwxDocument::parse(&[u8])` parses from bytes.
 - `XgwxDocument::from_path(...)` parses from a file.
 - `XgwxDocument::project_info()` returns root project metadata.

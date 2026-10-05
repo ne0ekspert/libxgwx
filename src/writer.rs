@@ -566,7 +566,133 @@ pub struct NetworkModulePatch {
     pub description: Option<String>,
 }
 
+/// One existing network metadata attribute, with stale-value protection.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct BrowserNetworkPatch {
+    pub network_index: usize,
+    pub module: bool,
+    pub base: Option<u32>,
+    pub slot: Option<u32>,
+    pub field: String,
+    pub expected_value: String,
+    pub replacement: String,
+}
+
+/// Bounded browser hardware edit. Uses existing format writers only.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct BrowserHardwarePatch {
+    pub operation: String,
+    pub base: u32,
+    pub slot: Option<u32>,
+    pub expected_value: String,
+    pub replacement: String,
+    pub key: Option<String>,
+    pub index: Option<u32>,
+}
+
 impl XgwxDocument {
+    /// Apply one supported hardware field transactionally. The XML outside the
+    /// exact selected attribute is compared byte for byte before commit.
+    pub fn edit_browser_hardware(&mut self, patch: &BrowserHardwarePatch) -> Result<(), XgwxError> {
+        let fail = |message: &str| XgwxError::BrowserHardwareEdit(message.to_owned());
+        let is_base = patch.operation == "slotCount";
+        if !is_base && patch.slot.is_none() { return Err(fail("missing module slot")); }
+        let attribute_name = match patch.operation.as_str() {
+            "slotCount" => "SlotCount",
+            "comment" => "Comment",
+            "inputFilter" | "option" => "Details",
+            _ => return Err(fail("unsupported browser hardware field")),
+        };
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let nodes = document.descendants().filter(|node| {
+            node.has_tag_name(if is_base { "Base" } else { "Module" })
+                && node.attribute("Base").and_then(|v| v.parse::<u32>().ok()) == Some(patch.base)
+                && (is_base && node.parent().is_some_and(|p| p.has_tag_name("BaseInfo"))
+                    || !is_base && node.attribute("Slot").and_then(|v| v.parse::<u32>().ok()) == patch.slot)
+        }).collect::<Vec<_>>();
+        let target = match nodes.as_slice() {
+            [node] => *node,
+            _ => return Err(fail("hardware target is absent or ambiguous")),
+        };
+        let attribute = target.attributes().find(|a| a.name() == attribute_name)
+            .ok_or_else(|| fail("hardware field is absent"))?;
+        let observed = if is_base {
+            attribute.value().parse::<u32>().map_err(|_| fail("invalid slot count"))?.to_string()
+        } else { attribute.value().to_owned() };
+        if observed != patch.expected_value { return Err(fail("stale hardware field")); }
+        let range = attribute.range_value();
+        let mut candidate = self.clone();
+        let slot = patch.slot.unwrap_or(0);
+        match patch.operation.as_str() {
+            "slotCount" => candidate.set_base_slot_count(patch.base,
+                patch.replacement.parse().map_err(|_| fail("invalid slot count"))?)?,
+            "comment" => candidate.update_module(patch.base, slot, &ModulePatch {
+                comment: Some(patch.replacement.clone()), ..ModulePatch::default()
+            })?,
+            "inputFilter" => {
+                let value = patch.replacement.parse::<u8>().map_err(|_| fail("invalid input filter"))?;
+                if ![0,1,3,5,10,20,70,100].contains(&value) { return Err(fail("unverified input filter value")); }
+                candidate.set_module_input_filter(patch.base, slot, ModuleInputFilter::from_raw(value))?;
+            },
+            "option" => candidate.set_module_option(patch.base, slot,
+                patch.key.as_deref().ok_or_else(|| fail("missing option key"))?,
+                patch.index.ok_or_else(|| fail("missing option index"))?,
+                patch.replacement.parse().map_err(|_| fail("invalid option value"))?)?,
+            _ => unreachable!(),
+        }
+        let parsed = roxmltree::Document::parse(&candidate.xml).map_err(XgwxError::Xml)?;
+        let updated = parsed.descendants().find(|node| {
+            node.has_tag_name(if is_base { "Base" } else { "Module" })
+                && node.attribute("Base").and_then(|v| v.parse::<u32>().ok()) == Some(patch.base)
+                && (is_base && node.parent().is_some_and(|p| p.has_tag_name("BaseInfo"))
+                    || !is_base && node.attribute("Slot").and_then(|v| v.parse::<u32>().ok()) == patch.slot)
+        }).and_then(|node| node.attribute(attribute_name)).ok_or_else(|| fail("edited field disappeared"))?;
+        let mut expected = self.xml.clone();
+        expected.replace_range(range, &escape_xml_attribute(updated));
+        if candidate.xml != expected { return Err(fail("non-target hardware XML changed")); }
+        candidate.to_verified_bytes()?;
+        *self = candidate;
+        Ok(())
+    }
+
+    /// Reuse metadata writers; commit only one exact XML attribute delta.
+    pub fn edit_browser_network(&mut self, patch: &BrowserNetworkPatch) -> Result<(), XgwxError> {
+        let fail = |s: &str| XgwxError::BrowserNetworkEdit(s.to_owned());
+        let attr = match (patch.module, patch.field.as_str()) {
+            (false, "name") => "Name", (true, "configName") => "ConfigName",
+            (true, "alias") => "Alias", (true, "description") => "Description",
+            _ => return Err(fail("unsupported network field; protocol and address writes are not validated")),
+        };
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let network = document.descendants().filter(|n| n.has_tag_name("Network"))
+            .nth(patch.network_index).ok_or_else(|| fail("network is absent"))?;
+        let target = if patch.module {
+            if patch.base.is_none() || patch.slot.is_none() { return Err(fail("module position is absent")); }
+            let all = document.descendants().filter(|n| n.has_tag_name("NetworkModule")
+                && n.attribute("Base").and_then(|s| s.parse().ok()) == patch.base
+                && n.attribute("Slot").and_then(|s| s.parse().ok()) == patch.slot).collect::<Vec<_>>();
+            match all.as_slice() { [n] if n.ancestors().any(|p| p == network) => *n,
+                _ => return Err(fail("network module is absent, ambiguous or belongs to another network")) }
+        } else { network };
+        let field = target.attributes().find(|a| a.name() == attr).ok_or_else(|| fail("existing network attribute is absent"))?;
+        if field.value() != patch.expected_value { return Err(fail("stale network value")); }
+        let range = field.range_value();
+        let mut candidate = self.clone();
+        if patch.module {
+            let mut p = NetworkModulePatch::default();
+            match patch.field.as_str() { "configName" => p.config_name=Some(patch.replacement.clone()),
+                "alias" => p.alias=Some(patch.replacement.clone()), _ => p.description=Some(patch.replacement.clone()) }
+            candidate.update_network_module(patch.base.unwrap(), patch.slot.unwrap(), &p)?;
+        } else { candidate.update_network(patch.network_index, &NetworkPatch { name:Some(patch.replacement.clone()), ..NetworkPatch::default() })?; }
+        let mut expected = self.xml.clone();expected.replace_range(range, &escape_xml_attribute(&patch.replacement));
+        if candidate.xml != expected { return Err(fail("non-target network XML changed")); }
+        candidate.to_verified_bytes()?; *self=candidate; Ok(())
+    }
+
     /// Select the CPU model stored by the primary project configuration.
     ///
     /// This updates the authoritative `<Configuration Type>` value while
@@ -1273,6 +1399,82 @@ impl XgwxDocument {
                 ..ModulePatch::default()
             },
         )
+    }
+
+    /// Bounded browser edit: one existing IEC kind byte or one operand string.
+    /// All XML outside the selected ProgramData and all other payload bytes
+    /// are verified unchanged before the candidate is committed.
+    pub fn edit_browser_iec(&mut self, index: usize, patch: &BrowserIecPatch) -> Result<(), XgwxError> {
+        let before = self.ladder_programs().into_iter().nth(index)
+            .ok_or(XgwxError::ProgramNotFound { index })??;
+        if before.project_type != Some(2) || before.version.as_deref() != Some("LD VER 1.1") {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        let symbols = if patch.operation == "kind" { Vec::new() } else {
+            self.iec_local_symbols().into_iter().nth(index)
+                .ok_or(XgwxError::ProgramNotFound { index })??
+        };
+        let mut candidate = self.clone();
+        let expected_payload = if patch.operation == "functionOperand" {
+            let link = before.iec_function_operand_links().and_then(|links| links.into_iter()
+                .find(|l| l.record_offset.checked_add(15) == Some(patch.offset)))
+                .ok_or(XgwxError::UnsupportedLadderLayout)?;
+            let block = before.iec_function_blocks().and_then(|blocks| blocks.into_iter()
+                .find(|b| b.record_offset == link.target_record_offset))
+                .ok_or(XgwxError::UnsupportedLadderLayout)?;
+            if block.name.value != patch.expected_kind || link.is_array {
+                return Err(XgwxError::LadderCellChanged { program_index: index, offset: patch.offset });
+            }
+            let symbol = symbols.iter().find(|v| v.name == patch.replacement && !v.is_instance)
+                .ok_or(XgwxError::InvalidLadderEdit { reason: "browser operands must be declared primitive local symbols" })?;
+            let mask = symbol.data_type_code.checked_sub(1).and_then(|n| 1u32.checked_shl(n)).unwrap_or(0);
+            if mask & link.data_type_mask == 0 || (link.is_output && symbol.storage_class == "I") {
+                return Err(XgwxError::InvalidLadderEdit { reason: "operand type or output permissions do not match the decoded pin" });
+            }
+            candidate.update_iec_ld_function_operand(index, patch.offset, &patch.expected_value, &patch.replacement)?;
+            replace_iec_ld_text_bytes(&before.data, index, patch.offset, &patch.expected_value, &patch.replacement)?
+        } else {
+            let element = crate::iec_ld::element_operands(&before).into_iter()
+                .find(|e| e.string.offset == patch.offset)
+                .ok_or(XgwxError::LadderCellNotFound { program_index: index, offset: patch.offset })?;
+            let coil = element.record_code >= 0x0e;
+            let code = if coil { iec_rung_coil_code(&patch.expected_kind)? } else { iec_rung_contact_code(&patch.expected_kind)? };
+            if element.record_code != code || element.string.value != patch.expected_value {
+                return Err(XgwxError::LadderCellChanged { program_index: index, offset: patch.offset });
+            }
+            match patch.operation.as_str() {
+                "kind" => {
+                    let replacement = if coil { iec_rung_coil_code(&patch.replacement)? } else { iec_rung_contact_code(&patch.replacement)? };
+                    if coil { candidate.update_iec_ld_coil_kind(index, patch.offset, &patch.expected_kind, &patch.replacement)?; }
+                    else { candidate.update_iec_ld_contact_kind(index, patch.offset, &patch.expected_kind, &patch.replacement)?; }
+                    let mut payload = before.data.clone();
+                    let position = patch.offset.checked_sub(14).ok_or(XgwxError::UnsupportedLadderLayout)?;
+                    *payload.get_mut(position).ok_or(XgwxError::UnsupportedLadderLayout)? = replacement;
+                    payload
+                }
+                "elementOperand" => {
+                    if !symbols.iter().any(|v| v.name == patch.replacement && !v.is_instance && v.data_type_code == 1 && (!coil || v.storage_class != "I")) {
+                        return Err(XgwxError::InvalidLadderEdit { reason: "contact/coil browser operands must be declared BOOL symbols; coil destinations must be writable" });
+                    }
+                    candidate.update_iec_ld_element_operand(index, patch.offset, &patch.expected_value, &patch.replacement)?;
+                    replace_iec_ld_text_bytes(&before.data, index, patch.offset, &patch.expected_value, &patch.replacement)?
+                }
+                _ => return Err(XgwxError::InvalidLadderEdit { reason: "unsupported browser ladder operation" }),
+            }
+        };
+        let after = candidate.ladder_programs().into_iter().nth(index)
+            .ok_or(XgwxError::ProgramNotFound { index })??;
+        if after.data != expected_payload || candidate.header != self.header || candidate.trailer != self.trailer {
+            return Err(XgwxError::RewriteVerificationFailed);
+        }
+        let a = browser_program_text_range(&self.xml, index)?;
+        let b = browser_program_text_range(&candidate.xml, index)?;
+        if self.xml[..a.start] != candidate.xml[..b.start] || self.xml[a.end..] != candidate.xml[b.end..] {
+            return Err(XgwxError::RewriteVerificationFailed);
+        }
+        candidate.to_verified_bytes()?;
+        *self = candidate;
+        Ok(())
     }
 
     /// Update editable XML metadata for one program selected by document order.
@@ -11274,6 +11476,34 @@ impl XgwxDocument {
         Ok(bytes)
     }
 
+    /// Serialize, reparse, and verify the full XML plus untouched container data.
+    /// Compression size/checksum and alignment padding may change; all other
+    /// header bytes and the security trailer must remain identical.
+    pub fn to_verified_bytes(&self) -> Result<Vec<u8>, XgwxError> {
+        let bytes = self.to_bytes()?;
+        let reparsed = Self::parse(&bytes)?;
+        if reparsed.xml != self.xml || reparsed.root != self.root {
+            return Err(XgwxError::RewriteVerificationFailed);
+        }
+        if reparsed.main_gzip == self.main_gzip {
+            if reparsed.header != self.header || reparsed.trailer != self.trailer {
+                return Err(XgwxError::RewriteVerificationFailed);
+            }
+        } else {
+            let mut before = self.header.raw.clone();
+            let mut after = reparsed.header.raw.clone();
+            for header in [&mut before, &mut after] {
+                header[HEADER_CHECKSUM_OFFSET..HEADER_CHECKSUM_INPUT_START].fill(0);
+                header[COMPRESSED_SIZE_OFFSET..SUPPORTED_HEADER_LEN].fill(0);
+            }
+            if before != after || self.supported_trailer_after_main_padding()?
+                != reparsed.supported_trailer_after_main_padding()? {
+                return Err(XgwxError::RewriteVerificationFailed);
+            }
+        }
+        Ok(bytes)
+    }
+
     /// Serialize and write the workspace to a file.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn write_to(&self, path: impl AsRef<std::path::Path>) -> Result<(), XgwxError> {
@@ -16899,4 +17129,24 @@ mod iec_expression_tests {
         assert!(classify_iec_expression(&expression, &[], &program).is_none());
         assert!(classify_iec_expression("(1 + 2) * 3", &[], &program).is_some());
     }
+}
+
+/// A single existing-record edit, with optimistic concurrency preconditions.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct BrowserIecPatch {
+    pub operation: String,
+    pub offset: usize,
+    pub expected_kind: String,
+    pub expected_value: String,
+    pub replacement: String,
+}
+
+fn browser_program_text_range(xml: &str, index: usize) -> Result<Range<usize>, XgwxError> {
+    let tree = roxmltree::Document::parse(xml).map_err(XgwxError::Xml)?;
+    tree.descendants().filter(|n| n.has_tag_name("Program")).nth(index)
+        .and_then(|p| p.descendants().find(|n| n.has_tag_name("ProgramData")))
+        .and_then(|n| n.children().find(|n| n.is_text())).map(|n| n.range())
+        .ok_or(XgwxError::MissingProgramData)
 }

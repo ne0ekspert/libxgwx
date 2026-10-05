@@ -197,6 +197,9 @@ pub enum XgwxError {
         reason: &'static str,
     },
     AuthenticatedRewriteUnsupported,
+    BrowserHardwareEdit(String),
+    BrowserNetworkEdit(String),
+    RewriteVerificationFailed,
 }
 
 impl fmt::Display for XgwxError {
@@ -419,6 +422,9 @@ impl fmt::Display for XgwxError {
                 write!(f, "structural editing requires a verified LD record layout")
             }
             Self::InvalidLadderEdit { reason } => write!(f, "cannot edit ladder cell: {reason}"),
+            Self::BrowserHardwareEdit(reason) => write!(f, "hardware edit rejected: {reason}"),
+            Self::BrowserNetworkEdit(reason) => write!(f, "network edit rejected: {reason}"),
+            Self::RewriteVerificationFailed => write!(f, "rewritten workspace failed XML or container preservation verification"),
             Self::AuthenticatedRewriteUnsupported => write!(
                 f,
                 "cannot rewrite workspace: the container does not match the validated XG5000 header, alignment, or Security layout"

@@ -1169,7 +1169,7 @@ fn writes_program_metadata_and_same_length_ladder_cell() {
     doc.update_ladder_cell_text(0, cell.offset, "M00000", "M00042")
         .expect("same-length ladder cell updates");
 
-    let rewritten = doc.to_bytes().expect("edited document writes");
+    let rewritten = doc.to_verified_bytes().expect("edited document writes");
     let reparsed = XgwxDocument::parse(&rewritten).expect("rewritten document parses");
     let metadata = reparsed
         .programs()
@@ -1244,7 +1244,7 @@ fn writes_same_length_variable_fields_and_numeric_address() {
     )
     .expect("supported variable fields update");
 
-    let rewritten = doc.to_bytes().expect("edited document writes");
+    let rewritten = doc.to_verified_bytes().expect("edited document writes");
     let reparsed = XgwxDocument::parse(&rewritten).expect("rewritten document parses");
     let variables = reparsed.variables().expect("variables decode");
     assert_eq!(variables.len(), 82);
@@ -14840,4 +14840,132 @@ fn documented_instruction_cpu_rejections_are_atomic() {
     // Existing commands can still have their operands repaired after a CPU change.
     doc.select_cpu("XGK-CPUH").unwrap();
     doc.update_ladder_cell_text(0, offset, "INLATCH,0,D100", "INLATCH,0,D200").unwrap();
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn verified_serialization_detects_inconsistent_xml_tree() {
+    let source = std::fs::read("fixtures/elements.xgwx").unwrap();
+    let mut doc = XgwxDocument::parse(&source).unwrap();
+    assert_eq!(doc.to_verified_bytes().unwrap(), source);
+    // A caller changing the public XML without updating its parsed tree must
+    // not receive bytes marked as verified.
+    doc.xml = doc.xml.replace("<Project ", "<Project Unexpected=\"changed\" ");
+    assert!(matches!(doc.to_verified_bytes(), Err(XgwxError::RewriteVerificationFailed)));
+}
+
+#[cfg(feature = "write")]
+fn browser_iec_test_document() -> XgwxDocument {
+    use base64::Engine;
+    fn element(code: u8, x: u8, name: &str) -> Vec<u8> {
+        let mut bytes = vec![0xff, code, 0, 0, 0, x, 0, 0, 0, 1, 0, if code >= 0x0e {0x20} else {0}, 0, 0, 0];
+        bytes.extend_from_slice(&[0xff, 0xfe, 0xff, name.encode_utf16().count() as u8]);
+        for unit in name.encode_utf16() {bytes.extend_from_slice(&unit.to_le_bytes());}
+        bytes
+    }
+    let mut contacts = vec![0,0,0,0,1,0,1,0, 0,0,0,0,0,0,0,0,1,0];
+    let mut row = crate::iec_function_write::row_header(0);
+    row[33..35].copy_from_slice(&3u16.to_le_bytes());
+    contacts.extend(row); contacts.extend(element(6,1,"SwitchA"));
+    contacts.extend(crate::iec_function_write::wire(0,4,91));
+    contacts.extend(element(14,94,"LampA"));
+    let mut blank = vec![0,0,0,0,1,0,1,0, 0,0,0,0,0,0,0,0,1,0];
+    blank.extend(crate::iec_function_write::row_header(0));
+    let xml = format!("<Project GUID=\"browser-qa\">Independent IEC QA<Unknown Keep=\"exact\">OPAQUE</Unknown><Program Comment=\"Contact demo\">Signals<LocalVar><Symbols Count=\"0\"> </Symbols></LocalVar><ProgramData Version=\"LD VER 1.1\" ProjectType=\"2\" Compressed=\"false\">{}</ProgramData></Program><Program Comment=\"Function demo\">Math<LocalVar><Symbols Count=\"0\"> </Symbols></LocalVar><ProgramData Version=\"LD VER 1.1\" ProjectType=\"2\" Compressed=\"false\">{}</ProgramData></Program></Project>",base64::engine::general_purpose::STANDARD.encode(contacts),base64::engine::general_purpose::STANDARD.encode(blank));
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());encoder.write_all(xml.as_bytes()).unwrap();let gzip=encoder.finish().unwrap();
+    let mut header=vec![0;138];header[..6].copy_from_slice(&[88,71,255,254,255,20]);
+    for (i,u) in "XG5000 WORKSPACE FILE".encode_utf16().enumerate(){header[6+i*2..8+i*2].copy_from_slice(&u.to_le_bytes());}
+    header[46..50].copy_from_slice(&1u32.to_le_bytes());let aligned=(gzip.len()+3)&!3;
+    header[134..138].copy_from_slice(&(aligned as u32).to_le_bytes());
+    header.extend(gzip);header.resize(138+aligned,0);header.extend(b"independent-opaque-trailer");
+    let mut doc = XgwxDocument::parse(&header).unwrap();
+    for (name,kind) in [("SwitchA","BOOL"),("SwitchB","BOOL"),("LongerSwitch","BOOL"),("LampA","BOOL"),("LampB","BOOL"),("NumberA","INT"),("InputOnly","BOOL")] {
+        doc.insert_iec_local_symbol(0,name,kind,"").unwrap();
+    }
+    let input_index = doc.iec_local_symbols().remove(0).unwrap().iter().position(|s|s.name=="InputOnly").unwrap();
+    doc.update_iec_local_symbol_address(0,input_index,"InputOnly","","%IX0.0.0").unwrap();
+    for name in ["NumberA","NumberB","NumberC","NumberD"] {doc.insert_iec_local_symbol(1,name,"INT","").unwrap();}
+    doc.insert_iec_local_symbol(1,"BoolFlag","BOOL","").unwrap();
+    doc.insert_iec_ld_function(1,0,10,"ADD",&["NumberA".into(),"NumberB".into(),"NumberC".into()]).unwrap();
+    XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap()
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn browser_iec_edits_preserve_exact_non_target_data_and_reject_stale_edits() {
+    let source=browser_iec_test_document();
+    let before=source.ladder_programs().into_iter().collect::<Result<Vec<_>,_>>().unwrap();
+    assert!(before[0].iec_circuit_graph().is_some());
+    let contact=crate::iec_ld::element_operands(&before[0]).into_iter().find(|e|e.record_code==6).unwrap();
+    let mut edited=source.clone();
+    let mut patch=BrowserIecPatch{operation:"kind".into(),offset:contact.string.offset,expected_kind:"NO".into(),expected_value:"SwitchA".into(),replacement:"NC".into()};
+    edited.edit_browser_iec(0,&patch).unwrap();
+    assert_eq!(edited.ladder_programs().remove(1).unwrap().data,before[1].data);
+    let saved=edited.to_verified_bytes().unwrap();
+    assert!(edited.edit_browser_iec(0,&patch).is_err());assert_eq!(edited.to_verified_bytes().unwrap(),saved);
+    patch.expected_kind="NC".into();patch.operation="elementOperand".into();patch.replacement="LongerSwitch".into();
+    edited.edit_browser_iec(0,&patch).unwrap();
+    assert_eq!(edited.ladder_programs().remove(1).unwrap().data,before[1].data);
+    let snapshot=edited.clone();patch.expected_value="LongerSwitch".into();patch.replacement="NumberA".into();
+    assert!(edited.edit_browser_iec(0,&patch).is_err());assert_eq!(edited,snapshot);
+    patch.replacement="Undeclared".into();assert!(edited.edit_browser_iec(0,&patch).is_err());assert_eq!(edited,snapshot);
+    patch.offset=usize::MAX;assert!(edited.edit_browser_iec(0,&patch).is_err());assert_eq!(edited,snapshot);
+    let coil=crate::iec_ld::element_operands(&before[0]).into_iter().find(|e|e.record_code==14).unwrap();
+    let readonly=BrowserIecPatch{operation:"elementOperand".into(),offset:coil.string.offset,expected_kind:"OUTPUT".into(),expected_value:"LampA".into(),replacement:"InputOnly".into()};
+    assert!(edited.edit_browser_iec(0,&readonly).is_err());assert_eq!(edited,snapshot);
+    let function=crate::iec_ld::function_operands(&before[1]).into_iter().find(|e|e.value=="NumberA").unwrap();
+    let p=BrowserIecPatch{operation:"functionOperand".into(),offset:function.offset,expected_kind:"ADD".into(),expected_value:"NumberA".into(),replacement:"NumberD".into()};
+    edited.edit_browser_iec(1,&p).unwrap();
+    let roundtrip=XgwxDocument::parse(&edited.to_verified_bytes().unwrap()).unwrap();
+    assert!(crate::iec_ld::function_operands(&roundtrip.ladder_programs().remove(1).unwrap()).iter().any(|e|e.value=="NumberD"));
+    // Optional QA export is independently constructed, never third-party data.
+    if let Ok(path)=env::var("LIBXGWX_BROWSER_QA_OUT") {std::fs::write(path,source.to_verified_bytes().unwrap()).unwrap();}
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn browser_hardware_edits_are_bounded_and_atomic() {
+    let input = crate::xgk_module_catalog().iter().find(|e| e.model == "XGI-D24A/B").unwrap();
+    let analog = crate::xgk_module_catalog().iter().find(|e| e.model == "XGF-AD8A").unwrap();
+    let xml = format!(r#"<Project>Hardware QA<Configuration Type="17">PLC</Configuration><Parameter Type="IO PARAMETER"><Module Base="0" Slot="1" Id="{}" SubType="0" Name="{}" Comment="Original" Details="{}"/><Module Base="1" Slot="2" Id="{}" SubType="0" Name="{}" Comment="Analog" Details="{}"/><BaseInfo><Base Base="0" SlotCount="4"/><Base Base="1" SlotCount="6"/></BaseInfo></Parameter><Program Comment="Keep">Main<ProgramData dt="bin.base64">YWJj</ProgramData></Program><Unknown Keep="exact"/></Project>"#, input.id, input.name, input.details, analog.id, analog.name, analog.details);
+    let mut doc = browser_iec_test_document();doc.xml=xml.clone();doc.root=parse_xml(&xml).unwrap();
+    let patch = |op:&str,base,slot,expected:String,replacement:&str,key,index| BrowserHardwarePatch {
+        operation:op.into(),base,slot,expected_value:expected,replacement:replacement.into(),key,index
+    };
+    doc.edit_browser_hardware(&patch("slotCount",0,None,"4".into(),"6",None,None)).unwrap();
+    assert_eq!(doc.xml,xml.replace("Base=\"0\" SlotCount=\"4\"", "Base=\"0\" SlotCount=\"6\""));
+    let before = doc.xml.clone();
+    doc.edit_browser_hardware(&patch("comment",0,Some(1),"Original".into(),"Changed & safe",None,None)).unwrap();
+    assert_eq!(doc.xml,before.replace("Comment=\"Original\"", "Comment=\"Changed &amp; safe\""));
+    let before = doc.xml.clone();
+    doc.edit_browser_hardware(&patch("inputFilter",0,Some(1),input.details.into(),"5",None,None)).unwrap();
+    assert_eq!(doc.xml,before.replacen(&format!("Details=\"{}\"",input.details),&format!("Details=\"05{}\"",&input.details[2..]),1));
+    let before = doc.xml.clone();
+    doc.edit_browser_hardware(&patch("option",1,Some(2),analog.details.into(),"1",Some("channelOperation".into()),Some(3))).unwrap();
+    let details=doc.modules().into_iter().find(|m|m.base==Some(1)).unwrap().details.unwrap();
+    assert_eq!(&details[..2],"08");assert_eq!(&details[2..],&analog.details[2..]);
+    assert_eq!(doc.xml,before.replace(analog.details,&details));
+    let saved=XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();assert_eq!(saved.xml,doc.xml);
+    let original=doc.to_verified_bytes().unwrap();
+    for p in [patch("slotCount",0,None,"4".into(),"8",None,None),patch("slotCount",0,None,"6".into(),"2",None,None),patch("comment",99,Some(1),"Original".into(),"Bad",None,None),patch("inputFilter",0,Some(1),"0500000000000000".into(),"255",None,None),patch("option",1,Some(2),details.clone(),"99",Some("channelOperation".into()),Some(3))] {
+        assert!(doc.edit_browser_hardware(&p).is_err());assert_eq!(doc.to_verified_bytes().unwrap(),original);
+    }
+    let unverified=doc.xml.replace("Type=\"17\"","Type=\"100\"");let mut other=doc.clone();other.xml=unverified.clone();other.root=parse_xml(&unverified).unwrap();
+    assert!(other.edit_browser_hardware(&patch("slotCount",0,None,"6".into(),"8",None,None)).is_err());
+    assert!(other.edit_browser_hardware(&patch("inputFilter",0,Some(1),"0500000000000000".into(),"10",None,None)).is_err());
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn browser_network_metadata_is_bounded_and_atomic() {
+    let xml=r#"<Project><Network Name="LAN" Type="Ethernet" NetworkType="FEnet"><NetworkModule Base="0" Slot="1" ConfigName="PLC" Alias="Station" Description="Original"><Opaque>KEEP</Opaque></NetworkModule></Network><Network Name="Other"/><Program>Keep<ProgramData dt="bin.base64">YWJj</ProgramData></Program></Project>"#;
+    let mut doc=browser_iec_test_document();doc.xml=xml.into();doc.root=parse_xml(xml).unwrap();
+    let mut p=BrowserNetworkPatch {network_index:0,module:false,base:None,slot:None,field:"name".into(),expected_value:"LAN".into(),replacement:"Plant & line".into()};
+    doc.edit_browser_network(&p).unwrap();assert_eq!(doc.xml,xml.replace("Name=\"LAN\"","Name=\"Plant &amp; line\""));
+    let saved=doc.clone();assert!(doc.edit_browser_network(&p).is_err());assert_eq!(doc,saved);
+    p.module=true;p.base=Some(0);p.slot=Some(1);p.field="alias".into();p.expected_value="Station".into();p.replacement="New station".into();
+    doc.edit_browser_network(&p).unwrap();let saved=doc.clone();
+    p.field="ipAddress".into();assert!(doc.edit_browser_network(&p).is_err());assert_eq!(doc,saved);
+    p.field="alias".into();p.network_index=1;assert!(doc.edit_browser_network(&p).is_err());assert_eq!(doc,saved);
+    let bytes=doc.to_verified_bytes().unwrap();let next=XgwxDocument::parse(&bytes).unwrap();assert_eq!(next.xml,doc.xml);
 }
