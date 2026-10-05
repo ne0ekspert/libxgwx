@@ -43,10 +43,10 @@ jobs:
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked
       - name: Build wasm package
-        run: wasm-pack build --target web --out-dir web/dist/pkg --out-name libxgwx --features wasm --no-default-features
+        run: wasm-pack build --target web --out-dir web/dist/pkg --out-name libxgwx --features wasm,write --no-default-features
       - name: Copy static demo assets
         run: |
-          cp web/index.html web/landing.css web/landing.js web/editor.html web/styles.css web/app.js web/dist/
+          cp web/index.html web/landing.css web/landing.js web/editor.html web/styles.css web/app.js web/editing.js web/ladder-edit.js web/project-settings.js web/hardware-edit.js web/network-edit.js web/global-variables.js web/dist/
           cp web/sitemap.xml web/favicon.svg web/social-card.png web/dist/
           test -f web/dist/pkg/libxgwx.js
           test -f web/dist/pkg/libxgwx_bg.wasm

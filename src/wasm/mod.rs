@@ -13,6 +13,19 @@ use network::*;
 use parameters::*;
 use project::*;
 
+/// Bounded hardware form edit with stale-field and full-container validation.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_browser_hardware)]
+pub fn edit_xgwx_browser_hardware_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?.as_string()
+        .ok_or_else(|| JsValue::from_str("hardware patch is not JSON-serializable"))?;
+    let patch: BrowserHardwarePatch = serde_json::from_str(&json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_browser_hardware(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 const MAX_WASM_VARIABLES: usize = 65536;
 const MAX_WASM_LADDER_PROGRAMS: usize = 64;
 const MAX_WASM_LADDER_DECODED_BYTES: usize = 32 * 1024 * 1024;
@@ -47,6 +60,36 @@ pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
         JsValue::from_str(&format!("failed to serialize xgwx summary: {error}"))
     })?;
     js_sys::JSON::parse(&json)
+}
+
+/// Apply one strictly bounded IEC demo edit with payload preservation checks.
+#[cfg(feature = "write")]
+#[wasm_bindgen]
+pub fn edit_xgwx_browser_iec(bytes: &[u8], index: usize, patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("invalid patch"))?;
+    let patch: BrowserIecPatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_browser_iec(index, &patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Probe whether this container can be rewritten without returning probe bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen]
+pub fn check_xgwx_edit_support(bytes: &[u8]) -> Result<bool, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.xml.push('\n');
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(true)
+}
+
+/// Reparse the exact download bytes and verify a lossless round trip.
+#[cfg(feature = "write")]
+#[wasm_bindgen]
+pub fn verify_xgwx_bytes(bytes: &[u8]) -> Result<bool, JsValue> {
+    let doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let roundtrip = doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(roundtrip == bytes)
 }
 
 /// Return category and description metadata for known ladder mnemonics.
@@ -426,7 +469,7 @@ pub fn update_xgwx_program_wasm(
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_program(program_index, &patch)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
+    doc.to_verified_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
@@ -447,7 +490,7 @@ pub fn update_xgwx_variable_wasm(
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_variable(variable_index, &patch)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
+    doc.to_verified_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
@@ -577,6 +620,17 @@ pub fn update_xgwx_iec_local_symbol_type_wasm(
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Apply one bounded existing network metadata field.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_browser_network)]
+pub fn edit_xgwx_browser_network_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json=js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("invalid network patch"))?;
+    let patch=serde_json::from_str::<BrowserNetworkPatch>(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc=XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_browser_network(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply supported changes to one network and return rewritten bytes.
