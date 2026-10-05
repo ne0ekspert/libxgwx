@@ -1,48 +1,120 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>libxgwx demo</title>
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <main class="app-shell">
-      <header class="topbar">
-        <div>
-          <h1>libxgwx</h1>
-          <p>Parse LS XG5000 .xgwx workspace files locally in your browser.</p>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Parse LS XG5000 .xgwx workspace files with libxgwx, an open-source Rust library. Inspect projects, programs, variables and hardware locally in your browser." />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="google-site-verification" content="-0PT9AOKaMSFUm4jZEIXc7bd4O8mqFwyeLfReWeYzC0" />
+  <meta name="theme-color" content="#17241f" />
+  <title>libxgwx | Rust parser for LS XG5000 .xgwx files</title>
+  <link rel="canonical" href="https://ne0ekspert.github.io/libxgwx/" />
+  <link rel="sitemap" type="application/xml" href="./sitemap.xml" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="libxgwx" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:title" content="libxgwx | Rust parser for LS XG5000 .xgwx files" />
+  <meta property="og:description" content="Explore XG5000 project structure, programs, variables and hardware with a Rust library and a local, read-only browser tool." />
+  <meta property="og:url" content="https://ne0ekspert.github.io/libxgwx/" />
+  <meta property="og:image" content="https://ne0ekspert.github.io/libxgwx/social-card.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="libxgwx: Rust parser for LS XG5000 .xgwx workspace files" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="libxgwx | Rust parser for LS XG5000 .xgwx files" />
+  <meta name="twitter:description" content="Explore XG5000 project structure, programs, variables and hardware with a Rust library and a local, read-only browser tool." />
+  <meta name="twitter:image" content="https://ne0ekspert.github.io/libxgwx/social-card.png" />
+  <meta name="twitter:image:alt" content="libxgwx: Rust parser for LS XG5000 .xgwx workspace files" />
+  <link rel="stylesheet" href="./landing.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://ne0ekspert.github.io/libxgwx/#webpage",
+        "url": "https://ne0ekspert.github.io/libxgwx/",
+        "name": "libxgwx | Rust parser for LS XG5000 .xgwx files",
+        "description": "Parse LS XG5000 .xgwx workspace files with libxgwx, an open-source Rust library. Inspect projects, programs, variables and hardware locally in your browser.",
+        "inLanguage": "en",
+        "about": { "@id": "https://github.com/ne0ekspert/libxgwx#source" }
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "@id": "https://github.com/ne0ekspert/libxgwx#source",
+        "name": "libxgwx",
+        "description": "Open-source Rust parser for LS XG5000 .xgwx workspace files, with partial ladder decoding and optional guarded write operations.",
+        "url": "https://ne0ekspert.github.io/libxgwx/",
+        "codeRepository": "https://github.com/ne0ekspert/libxgwx",
+        "programmingLanguage": "Rust",
+        "license": "https://www.apache.org/licenses/LICENSE-2.0"
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header wrap">
+    <a class="brand" href="./" aria-label="libxgwx home">libxgwx</a>
+    <nav aria-label="Main navigation">
+      <a href="#capabilities">Capabilities</a>
+      <a href="#quick-start">Quick start</a>
+      <a href="https://github.com/ne0ekspert/libxgwx">GitHub</a>
+      <a class="button primary" href="./editor.html">Open editor <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title">Open up your<br />XG5000 workspace.</h1>
+        <p>An open-source Rust parser for LS XG5000 <code>.xgwx</code> workspace files. Explore project structure, programs, variables and hardware — in code or in your browser.</p>
+        <div class="actions">
+          <a class="button primary" href="./editor.html">Open editor <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
+          <a class="button secondary" href="#quick-start">Quick start</a>
         </div>
-        <a href="https://github.com/ne0ekspert/libxgwx" rel="noreferrer">GitHub</a>
-      </header>
-
-      <section id="drop-zone" class="drop-zone">
-        <input id="file-input" type="file" accept=".xgwx,application/octet-stream" />
-        <div>
-          <strong>Choose or drop an .xgwx file</strong>
-          <span>No file is uploaded or transmitted. Parsing runs in this page.</span>
+      </div>
+      <div class="workspace-map" role="img" aria-label="An XG5000 workspace contains an XG binary header, a gzip-compressed XML project, and optional binary metadata.">
+        <div class="source-file"><svg viewBox="0 0 100 130" aria-hidden="true"><path d="M12 2h53l25 25v99H12zM65 2v25h25"/></svg><span>.xgwx</span><small>XG5000<br />workspace file</small></div>
+        <svg class="connections" viewBox="0 0 115 250" preserveAspectRatio="none" aria-hidden="true"><path d="M0 125H112M55 125V35Q55 25 65 25H112M55 125V215Q55 225 65 225H112"/><path d="m106 20 6 5-6 5m0 90 6 5-6 5m0 90 6 5-6 5"/></svg>
+        <div class="file-parts">
+          <div class="file-part"><span class="part-symbol">XG</span><div><strong>XG header</strong><p>Binary workspace header<br />and file label</p></div></div>
+          <div class="file-part"><svg viewBox="0 0 40 48" aria-hidden="true"><path d="M5 2h20l10 10v34H5zM25 2v10h10"/></svg><div><strong>XML project</strong><p>Programs, variables,<br />hardware and networks</p></div></div>
+          <div class="file-part"><svg viewBox="0 0 40 48" aria-hidden="true"><ellipse cx="20" cy="8" rx="16" ry="6"/><path d="M4 8v30c0 8 32 8 32 0V8M4 19c0 8 32 8 32 0M4 29c0 8 32 8 32 0"/></svg><div><strong>Binary metadata</strong><p>Optional trailing data<br />preserved for inspection</p></div></div>
         </div>
-      </section>
+      </div>
+    </section>
+    <section class="capabilities wrap" id="capabilities" aria-labelledby="capabilities-title">
+      <h2 id="capabilities-title">From workspace to useful data.</h2>
+      <div class="capability-columns">
+        <article><h3>Project structure</h3><p>Read project metadata, PLC configurations, hardware modules and networks. Inspect decoded Cnet, FEnet and parameter details where supported.</p><a href="https://github.com/ne0ekspert/libxgwx#api">Explore the API <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></svg></a></article>
+        <article><h3>Program insights</h3><p>Explore programs, tasks and variables. Partially decode ladder logic and inspect available rungs, cells and wire segments in the browser viewer.</p><a href="./editor.html">Try your workspace <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></svg></a></article>
+        <article><h3>Rust tooling</h3><p>Parse bytes or a file through a straightforward Rust API. Optional <code>il</code> and <code>write</code> features expose instruction-list output and guarded workspace edits.</p><a href="https://github.com/ne0ekspert/libxgwx/blob/master/docs/ladder-editing.md">Read editing limits <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></svg></a></article>
+      </div>
+    </section>
+    <section class="quick-start" id="quick-start" aria-labelledby="quick-start-title">
+      <div class="wrap start-layout">
+        <div><h2 id="quick-start-title">Start with a workspace.</h2><p>Read a file with a few lines of Rust, then build the tools your project needs.</p><p class="browser-note">Just exploring? Open the browser tool. Your file stays on your device. The current demo is read-only.</p><div class="actions"><a class="button primary" href="./editor.html">Open editor <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a><a class="button secondary" href="https://github.com/ne0ekspert/libxgwx#usage">Documentation</a></div></div>
+        <div class="code-example"><div class="code-header"><span>Rust · Cargo.toml + main.rs</span><button id="copy-code" type="button">Copy code</button></div><pre><code id="quick-code"><span class="comment"># Cargo.toml</span>
+[dependencies]
+xgwx = { package = "libxgwx", git = "https://github.com/ne0ekspert/libxgwx" }
 
-      <section id="status" class="status" role="status">Waiting for a file.</section>
+<span class="comment">// main.rs</span>
+<span class="keyword">use</span> xgwx::XgwxDocument;
 
-      <nav class="tabs" aria-label="Parsed views">
-        <button class="tab active" data-tab="summary" type="button">Summary</button>
-        <button class="tab" data-tab="programs" type="button">Programs</button>
-        <button class="tab" data-tab="variables" type="button">Variables</button>
-        <button class="tab" data-tab="hardware" type="button">Hardware</button>
-        <button class="tab" data-tab="networks" type="button">Networks</button>
-        <button class="tab" data-tab="parameters" type="button">Parameters</button>
-      </nav>
-
-      <section id="summary" class="panel active"></section>
-      <section id="programs" class="panel"></section>
-      <section id="variables" class="panel"></section>
-      <section id="hardware" class="panel"></section>
-      <section id="networks" class="panel"></section>
-      <section id="parameters" class="panel"></section>
-    </main>
-
-    <script type="module" src="./app.js"></script>
-  </body>
+<span class="keyword">fn</span> main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    <span class="keyword">let</span> doc = XgwxDocument::from_path(<span class="string">"project.xgwx"</span>)?;
+    <span class="keyword">for</span> program <span class="keyword">in</span> doc.programs() {
+        println!(<span class="string">"{:?}"</span>, program.name);
+    }
+    Ok(())
+}</code></pre><p id="copy-status" role="status" aria-live="polite"></p></div>
+      </div>
+    </section>
+  </main>
+  <footer class="wrap site-footer"><div><a class="brand" href="./">libxgwx</a><a href="https://github.com/ne0ekspert/libxgwx/blob/master/LICENSE-APACHE">Apache-2.0</a><a href="https://github.com/ne0ekspert/libxgwx">GitHub</a></div><p>A Rust parser for LS XG5000 .xgwx workspace files.</p></footer>
+  <script src="./landing.js" defer></script>
+</body>
 </html>
