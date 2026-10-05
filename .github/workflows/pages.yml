@@ -27,9 +27,38 @@ jobs:
       - run: cargo test --features write
       - run: cargo check --no-default-features
 
+  api-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate Rust API documentation
+        env:
+          RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
+        run: |
+          cargo doc --lib --no-deps --no-default-features --features write,il,wasm
+          cat > target/doc/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=xgwx/index.html"><title>libxgwx API docs</title></head><body><a href="xgwx/index.html">Open Rust API docs</a></body></html>
+          HTML
+      - name: Verify Rust API documentation
+        run: |
+          test -f target/doc/index.html
+          test -f target/doc/xgwx/index.html
+          test -d target/doc/static.files
+          if find target/doc -iname '*.xgwx' | grep -q .; then
+            echo "API docs artifact must not include .xgwx fixture files"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-api-docs
+          path: target/doc
+          if-no-files-found: error
+
   deploy:
     if: github.event_name != 'pull_request'
-    needs: test
+    needs: [test, api-docs]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -51,6 +80,19 @@ jobs:
           test -f web/dist/pkg/libxgwx.js
           test -f web/dist/pkg/libxgwx_bg.wasm
           if find web/dist -name '*.xgwx' | grep -q .; then
+            echo "Pages artifact must not include .xgwx fixture files"
+            exit 1
+          fi
+      - name: Include generated Rust API documentation
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-api-docs
+          path: web/dist/api
+      - name: Verify combined Pages artifact
+        run: |
+          test -f web/dist/api/xgwx/index.html
+          test -d web/dist/api/static.files
+          if find web/dist -iname '*.xgwx' | grep -q .; then
             echo "Pages artifact must not include .xgwx fixture files"
             exit 1
           fi
