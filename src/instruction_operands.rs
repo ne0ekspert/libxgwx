@@ -297,6 +297,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "write")]
     #[test]
     fn indexed_bit_sources_and_toggle_destinations_follow_manual_permissions() {
         for name in ["B", "BN"] {

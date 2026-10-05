@@ -792,6 +792,7 @@ pub fn edit_xgwx_iec_ld_vertical_wire_wasm(
 }
 
 /// Connect adjacent IEC groups, rebuilding group envelopes and adding wiring.
+#[cfg(feature = "write")]
 #[wasm_bindgen(js_name = connect_xgwx_iec_ld_groups)]
 #[allow(clippy::too_many_arguments)]
 pub fn connect_xgwx_iec_ld_groups_wasm(
@@ -818,6 +819,7 @@ pub fn connect_xgwx_iec_ld_groups_wasm(
 }
 
 /// Extend an IEC group into the adjacent implicit blank row.
+#[cfg(feature = "write")]
 #[wasm_bindgen(js_name = extend_xgwx_iec_ld_vertical_wire)]
 pub fn extend_xgwx_iec_ld_vertical_wire_wasm(
     bytes: &[u8],
@@ -834,6 +836,7 @@ pub fn extend_xgwx_iec_ld_vertical_wire_wasm(
 }
 
 /// Split disconnected IEC row ranges without changing coordinates or elements.
+#[cfg(feature = "write")]
 #[wasm_bindgen(js_name = split_xgwx_iec_ld_group)]
 pub fn split_xgwx_iec_ld_group_wasm(
     bytes: &[u8],

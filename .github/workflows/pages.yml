@@ -3,6 +3,8 @@ name: Build and deploy demo
 on:
   push:
     branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +28,7 @@ jobs:
       - run: cargo check --no-default-features
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: test
     runs-on: ubuntu-latest
     environment:
