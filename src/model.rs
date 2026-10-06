@@ -1567,7 +1567,7 @@ pub struct CnetPortConfigSummary {
     pub modem: Option<u32>,
     /// Raw XG5000 baud selector.
     pub bps: Option<u32>,
-    /// Decoded baud rate, currently `Bps * 1200`.
+    /// Decoded baud rate from the native selector index.
     pub baud_rate: Option<u32>,
     /// Raw data-bit selector.
     pub data_bit: Option<u32>,
@@ -1658,7 +1658,7 @@ impl CnetPortConfigSummary {
             mode_kind: attr_u32(element, "Mode").and_then(CnetMode::from_raw),
             modem: attr_u32(element, "Modem"),
             bps: attr_u32(element, "Bps"),
-            baud_rate: attr_u32(element, "Bps").map(|value| value * 1200),
+            baud_rate: attr_u32(element, "Bps").and_then(cnet_baud_rate),
             data_bit: attr_u32(element, "DataBit"),
             data_bits: attr_u32(element, "DataBit").and_then(CnetDataBits::from_raw),
             stop_bit: attr_u32(element, "StopBit"),
@@ -1700,6 +1700,13 @@ impl CnetPortConfigSummary {
             attributes: element.attributes.clone(),
         }
     }
+}
+
+/// Baud rates in XG5000 selector order (native Bps values 0 through 14).
+pub const CNET_BAUD_RATES: [u32; 15] = [300, 600, 1200, 1800, 2400, 3600, 4800, 7200, 9600, 19200, 38400, 57600, 64000, 76800, 115200];
+
+fn cnet_baud_rate(selector: u32) -> Option<u32> {
+    CNET_BAUD_RATES.get(selector as usize).copied()
 }
 
 /// Cnet serial electrical interface mode.

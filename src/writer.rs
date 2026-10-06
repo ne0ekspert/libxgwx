@@ -11589,7 +11589,7 @@ impl XgwxDocument {
         self.apply_xml_replacements(vec![(text.range(), replacement)])
     }
 
-    fn apply_xml_replacements(
+    pub(crate) fn apply_xml_replacements(
         &mut self,
         mut replacements: Vec<(Range<usize>, String)>,
     ) -> Result<(), XgwxError> {
@@ -12532,8 +12532,9 @@ fn push_network_configuration_additions(
         let group_offset = closing_tag_offset(xml, group, "XGPD_CONFIG_INFO_GROUP")?;
         let group_indentation = line_indentation(xml, group_offset);
         let config = format!(
-            "<XGPD_CONFIG_INFO_{tag} StationNo=\"0\" Type=\"{}\" Base=\"{base}\" Slot=\"{slot}\" SubType=\"{}\"{}></XGPD_CONFIG_INFO_{tag}>{newline}{group_indentation}",
+            "<XGPD_CONFIG_INFO_{tag} StationNo=\"0\" Type=\"{}\" Base=\"{base}\" Slot=\"{slot}\" SubType=\"{}\"{}>{}</XGPD_CONFIG_INFO_{tag}>{newline}{group_indentation}",
             entry.id, entry.sub_type, profile.attributes,
+            if tag == "CNET" { crate::cnet_write::default_cnet_ports(entry.sub_type) } else { String::new() },
         );
         replacements.push((group_offset..group_offset, config));
     }
@@ -12570,7 +12571,8 @@ fn network_profile(model: &str) -> Option<NetworkProfile> {
             xgpd_tag: Some("FENET"),
             attributes: " Media=\"0\" MediaB=\"0\" Media1=\"0\" Media1_2=\"0\" IpAddr_0=\"192\" IpAddr_1=\"168\" IpAddr_2=\"0\" IpAddr_3=\"100\" Subnet_0=\"255\" Subnet_1=\"255\" Subnet_2=\"255\" Subnet_3=\"0\" Gateway_0=\"192\" Gateway_1=\"168\" Gateway_2=\"0\" Gateway_3=\"1\" Dns_0=\"0\" Dns_1=\"0\" Dns_2=\"0\" Dns_3=\"0\" Dhcp=\"0\" Relay=\"0\" RapienetProtocol=\"0\" DriverType=\"2\" RcvWaitTime=\"100\" ClientWaitTime=\"60\" GlofaSocketCnt=\"3\" HsNo2=\"0\" Media2=\"0\" Media2_2=\"0\" IpAddr2_0=\"0\" IpAddr2_1=\"0\" IpAddr2_2=\"0\" IpAddr2_3=\"0\" Subnet2_0=\"0\" Subnet2_1=\"0\" Subnet2_2=\"0\" Subnet2_3=\"0\" Gateway2_0=\"0\" Gateway2_1=\"0\" Gateway2_2=\"0\" Gateway2_3=\"0\" Dns2_0=\"0\" Dns2_1=\"0\" Dns2_2=\"0\" Dns2_3=\"0\" Dhcp2=\"0\" OneIPSolution=\"0\" DI_DeviceType=\"80\" DI_DataType=\"88\" DI_Size=\"0\" DI_Addr=\"0\" DO_DeviceType=\"80\" DO_DataType=\"88\" DO_Size=\"0\" DO_Addr=\"200\" AI_DeviceType=\"68\" AI_DataType=\"87\" AI_Size=\"0\" AI_Addr=\"0\" AO_DeviceType=\"68\" AO_DataType=\"87\" AO_Size=\"0\" AO_Addr=\"100\" EnableHostTable=\"0\" arHostIp_Count=\"0\" ExtendEnableHostTable=\"0\" SecurityConfigItemCount=\"0\" ServerPortEnable=\"0\" ServerPortIndividualType_0=\"0\" ServerPortIndividualStartPortNo_0=\"0\" ServerPortIndividualPortCount_0=\"0\" ServerPortIndividualType_1=\"0\" ServerPortIndividualStartPortNo_1=\"0\" ServerPortIndividualPortCount_1=\"0\" ServerPortIndividualType_2=\"0\" ServerPortIndividualStartPortNo_2=\"0\" ServerPortIndividualPortCount_2=\"0\" ServerPortIndividualType_3=\"0\" ServerPortIndividualStartPortNo_3=\"0\" ServerPortIndividualPortCount_3=\"0\" ServerPortIndividualType_4=\"0\" ServerPortIndividualStartPortNo_4=\"0\" ServerPortIndividualPortCount_4=\"0\" ServerPortIndividualType_5=\"0\" ServerPortIndividualStartPortNo_5=\"0\" ServerPortIndividualPortCount_5=\"0\" ServerPortIndividualType_6=\"0\" ServerPortIndividualStartPortNo_6=\"0\" ServerPortIndividualPortCount_6=\"0\" ServerPortIndividualType_7=\"0\" ServerPortIndividualStartPortNo_7=\"0\" ServerPortIndividualPortCount_7=\"0\" Used_OPCUA=\"0\" AutoNegotiationSpeedLimit=\"0\"",
         }),
-        "XGL-BIPT" | "XGL-EIPT" | "XGL-C22A/B" | "XGL-C42A/B" | "XGL-CH2A/B" | "XGL-EFMF(B)"
+        "XGL-C22A/B" | "XGL-C42A/B" | "XGL-CH2A/B" => Some(NetworkProfile { xgpd_tag: Some("CNET"), attributes: "" }),
+        "XGL-BIPT" | "XGL-EIPT" | "XGL-EFMF(B)"
         | "XGL-EFMHB" => Some(NetworkProfile {
             xgpd_tag: None,
             attributes: "",

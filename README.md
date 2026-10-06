@@ -401,6 +401,14 @@ The API overview below complements the generated reference.
   data type retain their UTF-16 length; the numeric address is updated in place.
 - `ladder_mnemonic_info(...)` and `known_ladder_mnemonics()` expose category
   and description metadata for known ladder instruction mnemonics.
+- `edit_cnet_settings(&CnetSettingsPatch)` changes captured Cnet serial-port
+  fields in one transaction at an exact Base/Slot. Each `CnetFieldEdit` identifies
+  the zero-based port index, field, expected value, and replacement. Final
+  station/framing/repeater constraints are checked together; opaque modem,
+  Modbus mapping, and protocol payloads are preserved. The `bps` field is the
+  native selector index (0–14), while `CnetPortConfigSummary::baud_rate` reports
+  the actual rate. XGL-C22A/B, CH2A/B, and C42A/B insertions include captured
+  two-port defaults. Other hardware layouts remain guarded.
 - `XgwxDocument::project_options()`, `parameters()`, `hsc_parameters()`,
   `safety_comm()`, `trend_monitoring()`, `xgpd_config_infos()`,
   `cnet_config_infos()`, `fenet_config_infos()`, and `properties()` expose

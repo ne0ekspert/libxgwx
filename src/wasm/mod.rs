@@ -633,6 +633,19 @@ pub fn edit_xgwx_browser_network_wasm(bytes: &[u8], patch: JsValue) -> Result<Ve
     doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+/// Apply a batch of native Cnet serial-port changes atomically.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_cnet_settings)]
+pub fn edit_xgwx_cnet_settings_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?.as_string()
+        .ok_or_else(|| JsValue::from_str("invalid Cnet patch"))?;
+    let patch = serde_json::from_str::<CnetSettingsPatch>(&json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_cnet_settings(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Apply supported changes to one network and return rewritten bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_fenet_field)]

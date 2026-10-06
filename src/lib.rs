@@ -36,6 +36,10 @@
 
 #[cfg(feature = "write")]
 mod catalog;
+#[cfg(feature = "write")]
+mod cnet_write;
+#[cfg(feature = "write")]
+pub use cnet_write::{CnetFieldEdit, CnetSettingsPatch};
 mod comparison_catalog;
 mod cpu;
 mod document;
