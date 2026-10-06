@@ -211,6 +211,10 @@ fn row_frames(program: &LadderProgramData) -> Option<Vec<IecRowFrame>> {
         return None;
     }
     let data = &program.data;
+    // XG5000 stores an untouched IEC ladder as just the zero-count header.
+    if data.as_slice() == [0; 8] {
+        return Some(Vec::new());
+    }
     if data.len() < 43 || data.get(..4)? != [0; 4] {
         return None;
     }

@@ -238,9 +238,13 @@ pub(super) struct WasmFenetSummary {
     pub(super) gateway2: Option<String>,
     pub(super) dns2: Option<String>,
     pub(super) dhcp: Option<u32>,
+    pub(super) dhcp2: Option<u32>,
     pub(super) driver_type: Option<u32>,
+    pub(super) rapienet_protocol: Option<u32>,
     pub(super) rcv_wait_time: Option<u32>,
+    pub(super) rcv_wait_time_unit: Option<u32>,
     pub(super) client_wait_time: Option<u32>,
+    pub(super) client_wait_time_unit: Option<u32>,
     pub(super) glofa_socket_count: Option<u32>,
 }
 
@@ -264,9 +268,29 @@ impl WasmFenetSummary {
             gateway2: fenet.gateway2.as_ref().map(|value| value.address.clone()),
             dns2: fenet.dns2.as_ref().map(|value| value.address.clone()),
             dhcp: fenet.dhcp,
+            dhcp2: fenet
+                .attributes
+                .iter()
+                .find(|a| a.name == "Dhcp2")
+                .and_then(|a| a.value.parse().ok()),
             driver_type: fenet.driver_type,
+            rapienet_protocol: fenet
+                .attributes
+                .iter()
+                .find(|a| a.name == "RapienetProtocol")
+                .and_then(|a| a.value.parse().ok()),
             rcv_wait_time: fenet.rcv_wait_time,
+            rcv_wait_time_unit: fenet
+                .attributes
+                .iter()
+                .find(|a| a.name == "RcvWaitTimeUnit")
+                .and_then(|a| a.value.parse().ok()),
             client_wait_time: fenet.client_wait_time,
+            client_wait_time_unit: fenet
+                .attributes
+                .iter()
+                .find(|a| a.name == "ClientWaitTimeUnit")
+                .and_then(|a| a.value.parse().ok()),
             glofa_socket_count: fenet.glofa_socket_count,
         }
     }

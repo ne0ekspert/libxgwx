@@ -580,6 +580,18 @@ pub struct BrowserNetworkPatch {
     pub replacement: String,
 }
 
+/// Edit one existing FEnet setting at an exact module position.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct FenetFieldPatch {
+    pub base: u32,
+    pub slot: u32,
+    pub field: String,
+    pub expected_value: String,
+    pub replacement: String,
+}
+
 /// Bounded browser hardware edit. Uses existing format writers only.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
@@ -691,6 +703,152 @@ impl XgwxDocument {
         let mut expected = self.xml.clone();expected.replace_range(range, &escape_xml_attribute(&patch.replacement));
         if candidate.xml != expected { return Err(fail("non-target network XML changed")); }
         candidate.to_verified_bytes()?; *self=candidate; Ok(())
+    }
+
+    /// Change a captured FEnet setting without altering module identity or payloads.
+    pub fn edit_fenet_field(&mut self, patch: &FenetFieldPatch) -> Result<(), XgwxError> {
+        let fail = |reason: &str| XgwxError::BrowserNetworkEdit(reason.to_owned());
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let at_position = |node: &roxmltree::Node<'_, '_>| {
+            node.attribute("Base").and_then(|v| v.parse::<u32>().ok()) == Some(patch.base)
+                && node.attribute("Slot").and_then(|v| v.parse::<u32>().ok()) == Some(patch.slot)
+        };
+        let modules = document
+            .descendants()
+            .filter(|n| n.has_tag_name("NetworkModule") && at_position(n))
+            .collect::<Vec<_>>();
+        let [module] = modules.as_slice() else {
+            return Err(fail("network module is absent or ambiguous"));
+        };
+        let records = document
+            .descendants()
+            .filter(|n| n.has_tag_name("XGPD_CONFIG_INFO_FENET") && at_position(n))
+            .collect::<Vec<_>>();
+        let [record] = records.as_slice() else {
+            return Err(fail("FEnet configuration is absent or ambiguous"));
+        };
+        if module.attribute("Id") != record.attribute("Type") {
+            return Err(fail("FEnet type does not match the network module"));
+        }
+        let scalar = match patch.field.as_str() {
+            "stationNo" => Some((
+                "StationNo",
+                0,
+                if record
+                    .attribute("RapienetProtocol")
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .unwrap_or(0)
+                    == 0
+                {
+                    63
+                } else {
+                    220
+                },
+            )),
+            "glofaSocketCount" => Some(("GlofaSocketCnt", 1, 16)),
+            "rcvWaitTime" => Some(("RcvWaitTime", 2, 255)),
+            "clientWaitTime" => Some(("ClientWaitTime", 2, 255)),
+            "driverType" => Some(("DriverType", 2, 7)),
+            _ => None,
+        };
+        let prefix = match patch.field.as_str() {
+            "ipAddress" => Some("IpAddr"),
+            "subnet" => Some("Subnet"),
+            "gateway" => Some("Gateway"),
+            "dns" => Some("Dns"),
+            "ipAddress2" => Some("IpAddr2"),
+            "subnet2" => Some("Subnet2"),
+            "gateway2" => Some("Gateway2"),
+            "dns2" => Some("Dns2"),
+            "dhcp" | "dhcp2" | "stationNo" | "glofaSocketCount" | "rcvWaitTime"
+            | "clientWaitTime" | "driverType" => None,
+            _ => return Err(fail("unsupported FEnet setting")),
+        };
+        let (names, values) = if let Some(prefix) = prefix {
+            let octets = patch
+                .replacement
+                .split('.')
+                .map(|v| {
+                    if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
+                        return Err(fail("enter four decimal IPv4 octets from 0 to 255"));
+                    }
+                    v.parse::<u8>()
+                        .map_err(|_| fail("enter four decimal IPv4 octets from 0 to 255"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            if octets.len() != 4 {
+                return Err(fail("enter four decimal IPv4 octets from 0 to 255"));
+            }
+            if matches!(patch.field.as_str(), "subnet" | "subnet2") {
+                let mask = u32::from_be_bytes(octets.clone().try_into().unwrap());
+                let inverse = !mask;
+                if inverse & inverse.wrapping_add(1) != 0 {
+                    return Err(fail("subnet mask must contain contiguous leading ones"));
+                }
+            }
+            (
+                (0..4).map(|i| format!("{prefix}_{i}")).collect::<Vec<_>>(),
+                octets.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            )
+        } else if let Some((attribute, minimum, maximum)) = scalar {
+            let text = &patch.replacement;
+            if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+                return Err(fail("enter an unsigned decimal integer"));
+            }
+            let value = text
+                .parse::<u32>()
+                .map_err(|_| fail("integer is too large"))?;
+            if patch.field == "driverType" && !matches!(value, 2 | 5 | 7) {
+                return Err(fail(
+                    "driver type must be XGT server (2), Modbus server (5), or Smart server (7)",
+                ));
+            }
+            if value < minimum || value > maximum {
+                return Err(fail(&format!(
+                    "{} must be between {minimum} and {maximum}",
+                    patch.field
+                )));
+            }
+            (vec![attribute.to_owned()], vec![value.to_string()])
+        } else {
+            if !matches!(patch.replacement.as_str(), "0" | "1") {
+                return Err(fail("DHCP must be 0 (disabled) or 1 (enabled)"));
+            }
+            (
+                vec![if patch.field == "dhcp" {
+                    "Dhcp"
+                } else {
+                    "Dhcp2"
+                }
+                .to_owned()],
+                vec![patch.replacement.clone()],
+            )
+        };
+        let mut replacements = Vec::new();
+        let mut old_values = Vec::new();
+        for (name, value) in names.iter().zip(values) {
+            let attribute = record
+                .attributes()
+                .find(|a| a.name() == name)
+                .ok_or_else(|| fail("setting attribute is absent"))?;
+            let old = attribute
+                .value()
+                .parse::<u32>()
+                .map_err(|_| fail("existing setting value is invalid"))?;
+            if prefix.is_some() && old > 255 {
+                return Err(fail("existing IPv4 octet is invalid"));
+            }
+            old_values.push(old.to_string());
+            replacements.push((attribute.range_value(), value));
+        }
+        if old_values.join(".") != patch.expected_value {
+            return Err(fail("stale FEnet value; reopen the editor"));
+        }
+        let mut candidate = self.clone();
+        candidate.apply_xml_replacements(replacements)?;
+        candidate.to_verified_bytes()?;
+        *self = candidate;
+        Ok(())
     }
 
     /// Select the CPU model stored by the primary project configuration.
@@ -849,10 +1007,7 @@ impl XgwxDocument {
             })
             .ok_or(XgwxError::MissingModuleContainer)?;
         let insertion_offset = anchor.range().start;
-        let indentation_start = changed.xml[..insertion_offset]
-            .rfind('\n')
-            .map_or(insertion_offset, |offset| offset + 1);
-        let indentation = &changed.xml[indentation_start..insertion_offset];
+        let indentation = line_indentation(&changed.xml, insertion_offset);
         let newline = xml_newline(&changed.xml);
         let module = format!(
             "<Module Base=\"{base}\" Slot=\"{slot}\" Id=\"{}\" SubType=\"{}\" Name=\"{}\" Comment=\"\" Details=\"{}\"></Module>{newline}{indentation}",
@@ -12423,7 +12578,14 @@ fn closing_tag_offset(
 
 fn line_indentation(xml: &str, offset: usize) -> &str {
     let start = xml[..offset].rfind('\n').map_or(offset, |index| index + 1);
-    &xml[start..offset]
+    let prefix = &xml[start..offset];
+    // Native blank projects put opening and closing tags on the same line.
+    // Only copy whitespace, never the XML preceding an inline closing tag.
+    if prefix.bytes().all(|byte| matches!(byte, b' ' | b'\t' | b'\r')) {
+        prefix
+    } else {
+        ""
+    }
 }
 
 fn xml_newline(xml: &str) -> &'static str {
@@ -13176,8 +13338,9 @@ fn insert_iec_ld_linear_rung_bytes(
             // IEC row framing runs to the end of the program payload. Require
             // the final decoded record to consume that tail before appending
             // a new group, so opaque trailing data is never reinterpreted.
-            if rows.last().map(|row| row.end) != Some(program.data.len())
-                || records.last().map(|record| record.end) != Some(program.data.len())
+            if program.data.as_slice() != [0; 8]
+                && (rows.last().map(|row| row.end) != Some(program.data.len())
+                    || records.last().map(|record| record.end) != Some(program.data.len()))
             {
                 return Err(XgwxError::UnsupportedLadderLayout);
             }

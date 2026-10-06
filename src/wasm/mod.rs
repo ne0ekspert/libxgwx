@@ -635,6 +635,19 @@ pub fn edit_xgwx_browser_network_wasm(bytes: &[u8], patch: JsValue) -> Result<Ve
 
 /// Apply supported changes to one network and return rewritten bytes.
 #[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_fenet_field)]
+pub fn edit_xgwx_fenet_field_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?.as_string()
+        .ok_or_else(|| JsValue::from_str("invalid FEnet patch"))?;
+    let patch = serde_json::from_str::<FenetFieldPatch>(&json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_fenet_field(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Apply supported changes to one network and return rewritten bytes.
+#[cfg(feature = "write")]
 #[wasm_bindgen(js_name = update_xgwx_network)]
 pub fn update_xgwx_network_wasm(
     bytes: &[u8],
