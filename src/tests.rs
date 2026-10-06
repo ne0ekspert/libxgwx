@@ -6930,7 +6930,7 @@ fn assert_ladder_instruction(program: &LadderProgramData, mnemonic: &str, operan
 fn assert_marker_only_ladder_contact(
     program: &LadderProgramData,
     raw_x: u8,
-    raw_y: u8,
+    raw_y: u32,
     expected: LadderContact,
 ) {
     let cell = program

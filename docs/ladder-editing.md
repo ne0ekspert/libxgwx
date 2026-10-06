@@ -19,7 +19,9 @@ layouts and malformed or truncated records reject the structural operation.
 Contacts occupy columns 0–8; coils occupy column 9. `raw_y` is the decoded
 physical row coordinate (0, 4, 8, …), not a logical rung index. Existing rows are
 preserved, including empty rows. An empty program can receive its first element
-at raw row 0. `insert_ladder_row` inserts a physical row before the selected
+at any supported physical row, retaining gaps as sparse rows. Y coordinates
+are u32 in the Rust API and use three little-endian bytes in native records.
+`insert_ladder_row` inserts a physical row before the selected
 coordinate, matching native Ctrl+L, and stretches crossing branch connections.
 `edit_ladder_branch` adds or removes a vertical connection between adjacent rows
 at a column boundary. Row deletion and horizontal-wire editing are not implemented.
@@ -152,7 +154,8 @@ let connection = LadderBranchEdit {
 Set `expected: true, present: false` to remove an existing connection. Stale
 expectations fail without mutation. The WASM exports are
 `insert_xgwx_ladder_row` and `edit_xgwx_ladder_branch`. Row insertion supports up
-to 61 physical rows in this captured layout. Connections must join adjacent
+to 65,535 physical rows (indices 0 through 65534), including the native extended
+row-count header. Connections must join adjacent
 rows; overlapping longer spans and protected comment rows reject the operation.
 Adding/removing a connection preserves unrelated records and rebuilds native
 row groups. Connection removal does not reconnect or repair dangling elements.
@@ -537,3 +540,21 @@ Native Save As preserved all 2,531 ProgramData bytes and the one local-symbol
 table exactly. `fixtures/ladder-edit/branches/branch_outputs.bin` retains the
 complete saved payload; the writer test reconstructs it without normalization.
 This proves file-format/compiler acceptance, not PLC runtime execution.
+
+
+## Wide XGK canvas acceptance — 2026-10-06
+
+Synthetic XGK-CPUSN projects at rows 256 and 65534 opened at their expected
+physical positions, passed native Check Program with zero errors and warnings,
+and retained byte-identical ProgramData after Save As. The boundary project
+also reopened at row 65534. Public fixtures and details are in
+[`fixtures/canvas-rows`](../fixtures/canvas-rows/README.md).
+
+The VS Code canvas grows on scroll up to 65,535 rows, rendering blank cells only
+around the viewport. Selecting a distant empty cell and inserting a contact,
+coil, comparison or application instruction directly extends the sparse native
+program. Scrolling does not write bytes. Native boundary validation covers
+contact/coil projects; local tests additionally exercise high-row function
+operands, branch references, comment shifts, row-count header transitions,
+stale edits and overflow rejection. IEC high-coordinate support remains limited
+to its separately validated writer range.

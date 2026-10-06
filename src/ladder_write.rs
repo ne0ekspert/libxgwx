@@ -7,7 +7,7 @@ use crate::{XgwxError, ladder_records::*};
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct LadderCellEdit {
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub column: u8,
     pub expected: Option<LadderEditElement>,
     pub replacement: Option<LadderEditElement>,
@@ -28,7 +28,7 @@ pub enum LadderCommentKind {
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct LadderCommentEdit {
     pub kind: LadderCommentKind,
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub expected: Option<String>,
     pub replacement: String,
 }
@@ -36,7 +36,7 @@ pub struct LadderCommentEdit {
 /// Insert one catalog application instruction at the output end of a row.
 pub(crate) fn insert_ladder_instruction(
     bytes: &[u8],
-    raw_y: u8,
+    raw_y: u32,
     mnemonic: &str,
     operands: &[String],
 ) -> Result<Vec<u8>, XgwxError> {
@@ -45,7 +45,7 @@ pub(crate) fn insert_ladder_instruction(
 
 pub(crate) fn insert_ladder_comparison(
     bytes: &[u8],
-    raw_y: u8,
+    raw_y: u32,
     column: u8,
     mnemonic: &str,
     operands: &[String],
@@ -84,7 +84,7 @@ fn valid_instruction_operand_text(text: &str) -> bool {
 
 fn insert_ladder_function(
     bytes: &[u8],
-    raw_y: u8,
+    raw_y: u32,
     mnemonic: &str,
     operands: &[String],
     contact_column: Option<u8>,
@@ -124,8 +124,7 @@ fn insert_ladder_function(
     }
     let mut program = EditableProgram::parse(bytes)?;
     if !raw_y.is_multiple_of(4)
-        || raw_y > 240
-        || usize::from(raw_y) / 4 > u16_at(&program.header, 4)?
+        || raw_y >= XGK_MAX_ROWS as u32 * 4
     {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "instruction row is outside the editable range",
@@ -169,16 +168,14 @@ fn insert_ladder_function(
     if contact_column.is_none() && wire_start < x {
         records.push(wire(wire_start, x - 3, raw_y));
     }
-    let mut record = vec![0, 34, 0, 0, 0, x, raw_y, 0, 0, 1, 0, flags, 0, 0, 0];
+    let mut record = vec![0, 34, 0, 0, 0, x, raw_y.to_le_bytes()[0], raw_y.to_le_bytes()[1], raw_y.to_le_bytes()[2], 1, 0, flags, 0, 0, 0];
     record.extend_from_slice(&spec.opcode.to_le_bytes());
     append_string(&mut record, &text);
     record.extend_from_slice(&(parts.len() as u16).to_le_bytes());
     for (index, part) in parts.iter().enumerate() {
         record.extend_from_slice(&[
             x + index as u8 * 3,
-            raw_y,
-            0,
-            0,
+            raw_y.to_le_bytes()[0], raw_y.to_le_bytes()[1], raw_y.to_le_bytes()[2],
             u8::from(index == 0),
             0,
             flags,
@@ -203,9 +200,7 @@ fn insert_ladder_function(
                 0,
                 0,
                 x,
-                raw_y,
-                0,
-                0,
+                raw_y.to_le_bytes()[0], raw_y.to_le_bytes()[1], raw_y.to_le_bytes()[2],
             ],
             x,
             wire_end: None,
@@ -540,9 +535,7 @@ pub(crate) fn update_instruction_text(
         let header = if type_changed {
             vec![
                 new_x + index as u8 * 3,
-                program.rows[row].y,
-                0,
-                0,
+                program.rows[row].y.to_le_bytes()[0], program.rows[row].y.to_le_bytes()[1], program.rows[row].y.to_le_bytes()[2],
                 u8::from(index == 0),
                 0,
                 record.bytes[11],
@@ -620,9 +613,7 @@ pub(crate) fn update_instruction_text(
                     0,
                     0,
                     new_x,
-                    row.y,
-                    0,
-                    0,
+                    row.y.to_le_bytes()[0], row.y.to_le_bytes()[1], row.y.to_le_bytes()[2],
                 ],
                 x: new_x,
                 wire_end: None,
@@ -654,9 +645,9 @@ fn append_string(bytes: &mut Vec<u8>, value: &str) {
     }
 }
 
-fn wire(x: u8, end: u8, y: u8) -> Record {
-    let mut bytes = vec![255, 2, 0, 0, 0, x, y, 0, 0, 0, 0, 0, 0, 0, 0];
-    bytes.extend([end, y, 0, 0]);
+fn wire(x: u8, end: u8, y: u32) -> Record {
+    let mut bytes = vec![255, 2, 0, 0, 0, x, y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2], 0, 0, 0, 0, 0, 0];
+    bytes.extend([end, y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2]]);
     Record {
         bytes,
         x,
@@ -664,7 +655,7 @@ fn wire(x: u8, end: u8, y: u8) -> Record {
         element: None,
     }
 }
-fn element_record(x: u8, y: u8, element: &LadderEditElement) -> Record {
+fn element_record(x: u8, y: u32, element: &LadderEditElement) -> Record {
     let mut bytes = vec![
         255,
         element.kind.marker(),
@@ -672,9 +663,7 @@ fn element_record(x: u8, y: u8, element: &LadderEditElement) -> Record {
         0,
         0,
         x,
-        y,
-        0,
-        0,
+        y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2],
         1,
         0,
         if element.kind.is_coil() { 32 } else { 0 },
@@ -703,7 +692,7 @@ fn comment_marker(kind: LadderCommentKind) -> u8 {
     }
 }
 
-fn comment_record(kind: LadderCommentKind, y: u8, text: &str) -> Record {
+fn comment_record(kind: LadderCommentKind, y: u32, text: &str) -> Record {
     let rung = kind == LadderCommentKind::Rung;
     let x = if rung { 1 } else { 97 };
     let mut bytes = vec![
@@ -713,9 +702,7 @@ fn comment_record(kind: LadderCommentKind, y: u8, text: &str) -> Record {
         0,
         0,
         x,
-        y,
-        0,
-        0,
+        y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2],
         0,
         0,
         if rung { 32 } else { 0 },
@@ -768,6 +755,7 @@ pub(crate) fn edit_ladder_comment(
 ) -> Result<Vec<u8>, XgwxError> {
     let units = edit.replacement.encode_utf16().count();
     if !edit.raw_y.is_multiple_of(4)
+        || edit.raw_y >= XGK_MAX_ROWS as u32 * 4
         || edit.replacement.trim().is_empty()
         || units > u8::MAX as usize
         || edit.replacement.chars().any(|character| {
@@ -802,27 +790,31 @@ pub(crate) fn edit_ladder_comment(
     }
 
     let mut program = if edit.kind == LadderCommentKind::Rung {
-        let parsed = EditableProgram::parse(bytes)?;
+        let mut parsed = EditableProgram::parse(bytes)?;
         if parsed.rows.iter().any(|row| {
             row.records.iter().any(|record| {
                 record.bytes.starts_with(&[0, 0])
                     && row.y < edit.raw_y
-                    && record.bytes[18] >= edit.raw_y
+                    && y_at(&record.bytes, 18) >= edit.raw_y
             })
         }) {
             return Err(XgwxError::InvalidLadderEdit {
                 reason: "rung comments cannot be inserted inside a branch span",
             });
         }
-        EditableProgram::parse(&insert_ladder_row(bytes, edit.raw_y)?)?
+        let requested = edit.raw_y as usize / 4;
+        if requested > row_count(&parsed.header)? {
+            set_row_count(&mut parsed.header, requested);
+        }
+        EditableProgram::parse(&insert_ladder_row(&parsed.encode(), edit.raw_y)?)?
     } else {
         EditableProgram::parse(bytes)?
     };
 
-    let count = u16_at(&program.header, 4)?;
-    if edit.kind == LadderCommentKind::Output && count == 0 && edit.raw_y == 0 {
-        program.header[4..6].copy_from_slice(&1_u16.to_le_bytes());
-    } else if usize::from(edit.raw_y) / 4 >= u16_at(&program.header, 4)? {
+    let count = row_count(&program.header)?;
+    if edit.kind == LadderCommentKind::Output && edit.raw_y as usize / 4 >= count {
+        set_row_count(&mut program.header, edit.raw_y as usize / 4 + 1);
+    } else if (edit.raw_y as usize) / 4 >= row_count(&program.header)? {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "comment row does not exist",
         });
@@ -861,7 +853,7 @@ pub(crate) fn edit_ladder_comment(
 
 pub(crate) fn delete_ladder_rung_comment(
     bytes: &[u8],
-    raw_y: u8,
+    raw_y: u32,
     expected: &str,
 ) -> Result<Vec<u8>, XgwxError> {
     if !raw_y.is_multiple_of(4) {
@@ -870,7 +862,7 @@ pub(crate) fn delete_ladder_rung_comment(
         });
     }
     let mut program = EditableProgram::parse(bytes)?;
-    let count = u16_at(&program.header, 4)?;
+    let count = row_count(&program.header)?;
     let row_index =
         program
             .rows
@@ -903,7 +895,7 @@ pub(crate) fn delete_ladder_rung_comment(
             && row
                 .records
                 .iter()
-                .any(|record| record.bytes.starts_with(&[0, 0]) && record.bytes[18] > raw_y)
+                .any(|record| record.bytes.starts_with(&[0, 0]) && y_at(&record.bytes, 18) > raw_y)
     }) {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "rung comment belongs to a branch span",
@@ -916,32 +908,32 @@ pub(crate) fn delete_ladder_rung_comment(
         if old_y > raw_y {
             row.y -= 4;
             row.prefix[..4].copy_from_slice(&(u32::from(row.y) / 4).to_le_bytes());
-            row.prefix[22] = row.y;
-            row.prefix[30] = row.y;
+            put_y(&mut row.prefix, 22, row.y);
+            put_y(&mut row.prefix, 30, row.y);
         }
         for record in &mut row.records {
             if record.bytes.starts_with(&[0, 0]) {
-                if record.bytes[8] > raw_y {
-                    record.bytes[8] -= 4;
+                if y_at(&record.bytes, 8) > raw_y {
+                    shift_y(&mut record.bytes, 8, -4);
                 }
-                if record.bytes[18] > raw_y {
-                    record.bytes[18] -= 4;
+                if y_at(&record.bytes, 18) > raw_y {
+                    shift_y(&mut record.bytes, 18, -4);
                 }
             } else if record.bytes.starts_with(&[1, 0]) {
-                if record.bytes[6] > raw_y {
-                    record.bytes[6] -= 4;
+                if y_at(&record.bytes, 6) > raw_y {
+                    shift_y(&mut record.bytes, 6, -4);
                 }
             } else if old_y > raw_y {
-                record.bytes[6] = row.y;
+                put_y(&mut record.bytes, 6, row.y);
                 if record.wire_end.is_some() {
-                    record.bytes[16] = row.y;
+                    put_y(&mut record.bytes, 16, row.y);
                 }
                 if record.bytes.starts_with(&[0, 34]) {
                     let (_, end) = string_at(&record.bytes, 19)?;
                     let operand_count = u16_at(&record.bytes, end)?;
                     let mut next = end + 2;
                     for _ in 0..operand_count {
-                        record.bytes[next + 1] = row.y;
+                        put_y(&mut record.bytes, next + 1, row.y);
                         let (_, end) = string_at(&record.bytes, next + 10)?;
                         next = end;
                     }
@@ -949,7 +941,7 @@ pub(crate) fn delete_ladder_rung_comment(
             }
         }
     }
-    program.header[4..6].copy_from_slice(&((count - 1) as u16).to_le_bytes());
+    set_row_count(&mut program.header, count - 1);
     program.rebuild_groups();
     let output = program.encode();
     EditableProgram::parse(&output)?;
@@ -958,10 +950,10 @@ pub(crate) fn delete_ladder_rung_comment(
 
 /// Physical rows, including sparse blanks, excluding comment-only rows.
 #[cfg(feature = "wasm")]
-pub(crate) fn editable_ladder_rows(bytes: &[u8]) -> Result<Vec<u8>, XgwxError> {
+pub(crate) fn editable_ladder_rows(bytes: &[u8]) -> Result<Vec<u32>, XgwxError> {
     let program = EditableProgram::parse(bytes)?;
-    Ok((0..u16_at(&program.header, 4)?)
-        .map(|index| (index * 4) as u8)
+    Ok((0..row_count(&program.header)?)
+        .map(|index| (index * 4) as u32)
         .filter(|y| !program.rows.iter().any(|r| r.y == *y && r.prefix[13] != 0))
         .collect())
 }
@@ -973,7 +965,7 @@ pub(crate) fn editable_ladder_supported(bytes: &[u8]) -> bool {
 
 /// Exact vertical reference segments; unlike rendered lines these are not merged.
 #[cfg(feature = "wasm")]
-pub(crate) fn ladder_connections(bytes: &[u8]) -> Result<Vec<(u8, u8, u8)>, XgwxError> {
+pub(crate) fn ladder_connections(bytes: &[u8]) -> Result<Vec<(u8, u32, u32)>, XgwxError> {
     let program = EditableProgram::parse(bytes)?;
     Ok(program
         .rows
@@ -982,7 +974,7 @@ pub(crate) fn ladder_connections(bytes: &[u8]) -> Result<Vec<(u8, u8, u8)>, Xgwx
             row.records
                 .iter()
                 .filter(|r| r.bytes.starts_with(&[0, 0]))
-                .map(|r| (r.x, row.y, r.bytes[18]))
+                .map(|r| (r.x, row.y, y_at(&r.bytes, 18)))
         })
         .collect())
 }
@@ -1007,7 +999,7 @@ fn valid_bit_device_address(operand: &str) -> bool {
 }
 
 pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Vec<u8>, XgwxError> {
-    if edit.column > 9 || !edit.raw_y.is_multiple_of(4) {
+    if edit.column > 9 || !edit.raw_y.is_multiple_of(4) || edit.raw_y >= XGK_MAX_ROWS as u32 * 4 {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "invalid row or column",
         });
@@ -1051,10 +1043,7 @@ pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Ve
             records: Vec::new(),
         });
     }
-    if edit.expected.is_none()
-        && edit.replacement.is_some()
-        && usize::from(edit.raw_y) / 4 < u16_at(&program.header, 4)?
-    {
+    if edit.expected.is_none() && edit.replacement.is_some() {
         program.materialize_row(edit.raw_y);
     }
     let row = program
@@ -1147,27 +1136,27 @@ pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Ve
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct LadderBranchEdit {
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub boundary: u8,
     pub expected: bool,
     pub present: bool,
 }
 
-fn blank_row(y: u8) -> Row {
+fn blank_row(y: u32) -> Row {
     let mut prefix = vec![0; 35];
     prefix[..4].copy_from_slice(&(u32::from(y) / 4).to_le_bytes());
     prefix[4..6].copy_from_slice(&[255, 67]);
     prefix[17] = 39;
-    prefix[21..25].copy_from_slice(&[94, y, 0, 0]);
-    prefix[25..29].copy_from_slice(&[94, y, 0, 0]);
-    prefix[29..33].copy_from_slice(&[1, y, 0, 0]);
+    prefix[21..25].copy_from_slice(&xy(94, y));
+    prefix[25..29].copy_from_slice(&xy(94, y));
+    prefix[29..33].copy_from_slice(&xy(1, y));
     Row {
         prefix,
         y,
         records: Vec::new(),
     }
 }
-fn branch_start(x: u8, y: u8, target_y: u8) -> Record {
+fn branch_start(x: u8, y: u32, target_y: u32) -> Record {
     let bytes = vec![
         0,
         0,
@@ -1177,9 +1166,7 @@ fn branch_start(x: u8, y: u8, target_y: u8) -> Record {
         2,
         0,
         x,
-        y,
-        0,
-        0,
+        y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2],
         0,
         0,
         0,
@@ -1187,9 +1174,7 @@ fn branch_start(x: u8, y: u8, target_y: u8) -> Record {
         0,
         0,
         x - 1,
-        target_y,
-        0,
-        0,
+        target_y.to_le_bytes()[0], target_y.to_le_bytes()[1], target_y.to_le_bytes()[2],
         0,
         0,
         0,
@@ -1204,16 +1189,16 @@ fn branch_start(x: u8, y: u8, target_y: u8) -> Record {
         element: None,
     }
 }
-fn branch_end(x: u8, source_y: u8) -> Record {
+fn branch_end(x: u8, source_y: u32) -> Record {
     Record {
-        bytes: vec![1, 0, 0, 0, 0, x, source_y, 0, 0],
+        bytes: vec![1, 0, 0, 0, 0, x, source_y.to_le_bytes()[0], source_y.to_le_bytes()[1], source_y.to_le_bytes()[2]],
         x,
         wire_end: None,
         element: None,
     }
 }
 impl EditableProgram {
-    fn materialize_row(&mut self, y: u8) -> usize {
+    fn materialize_row(&mut self, y: u32) -> usize {
         if let Some(i) = self.rows.iter().position(|row| row.y == y) {
             return i;
         }
@@ -1227,7 +1212,7 @@ impl EditableProgram {
         for (i, row) in self.rows.iter().enumerate() {
             for record in &row.records {
                 if record.bytes.starts_with(&[0, 0])
-                    && let Some(last) = self.rows.iter().position(|r| r.y == record.bytes[18])
+                    && let Some(last) = self.rows.iter().position(|r| r.y == y_at(&record.bytes, 18))
                 {
                     for edge in &mut connected[i..last] {
                         *edge = true;
@@ -1287,7 +1272,7 @@ pub(crate) fn edit_ladder_branch(
     let y = edit.raw_y;
     if !(1..=9).contains(&edit.boundary)
         || !y.is_multiple_of(4)
-        || usize::from(y) / 4 + 1 >= u16_at(&program.header, 4)?
+        || (y as usize) / 4 + 1 >= row_count(&program.header)?
     {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "branch needs two existing adjacent rows and boundary 1 through 9",
@@ -1299,7 +1284,7 @@ pub(crate) fn edit_ladder_branch(
         r.y == y
             && r.records
                 .iter()
-                .any(|r| r.bytes.starts_with(&[0, 0]) && r.x == x && r.bytes[18] == target_y)
+                .any(|r| r.bytes.starts_with(&[0, 0]) && r.x == x && y_at(&r.bytes, 18) == target_y)
     });
     if exists != edit.expected {
         return Err(XgwxError::InvalidLadderEdit {
@@ -1326,8 +1311,8 @@ pub(crate) fn edit_ladder_branch(
             r.bytes.starts_with(&[0, 0])
                 && r.x == x
                 && row.y < target_y
-                && r.bytes[18] > y
-                && (row.y != y || r.bytes[18] != target_y)
+                && y_at(&r.bytes, 18) > y
+                && (row.y != y || y_at(&r.bytes, 18) != target_y)
         })
     }) {
         return Err(XgwxError::InvalidLadderEdit {
@@ -1366,11 +1351,11 @@ pub(crate) fn edit_ladder_branch(
             .filter(|r| r.y == y || r.y == target_y)
         {
             row.records.retain(|r| {
-                !(row.y == y && r.bytes.starts_with(&[0, 0]) && r.x == x && r.bytes[18] == target_y)
+                !(row.y == y && r.bytes.starts_with(&[0, 0]) && r.x == x && y_at(&r.bytes, 18) == target_y)
                     && !(row.y == target_y
                         && r.bytes.starts_with(&[1, 0])
                         && r.x == x
-                        && r.bytes[6] == y)
+                        && y_at(&r.bytes, 6) == y)
             });
             merge_wires(row);
         }
@@ -1382,10 +1367,10 @@ pub(crate) fn edit_ladder_branch(
 }
 
 /// Insert one physical blank row before `raw_y`, preserving native sparse rows.
-pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u8) -> Result<Vec<u8>, XgwxError> {
+pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u32) -> Result<Vec<u8>, XgwxError> {
     let mut program = EditableProgram::parse(bytes)?;
-    let count = u16_at(&program.header, 4)?;
-    if !raw_y.is_multiple_of(4) || usize::from(raw_y) / 4 > count || count >= 61 {
+    let count = row_count(&program.header)?;
+    if !raw_y.is_multiple_of(4) || (raw_y as usize) / 4 > count || count >= XGK_MAX_ROWS {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "invalid insertion row or row limit reached",
         });
@@ -1393,8 +1378,8 @@ pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u8) -> Result<Vec<u8>, Xgwx
     let mut crossings = Vec::new();
     for row in &program.rows {
         for r in &row.records {
-            if r.bytes.starts_with(&[0, 0]) && row.y < raw_y && r.bytes[18] >= raw_y {
-                crossings.push((r.x, row.y, r.bytes[18] + 4));
+            if r.bytes.starts_with(&[0, 0]) && row.y < raw_y && y_at(&r.bytes, 18) >= raw_y {
+                crossings.push((r.x, row.y, y_at(&r.bytes, 18) + 4));
             }
         }
     }
@@ -1403,32 +1388,32 @@ pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u8) -> Result<Vec<u8>, Xgwx
         if old_y >= raw_y {
             row.y += 4;
             row.prefix[..4].copy_from_slice(&(u32::from(row.y) / 4).to_le_bytes());
-            row.prefix[22] = row.y;
-            row.prefix[30] = row.y;
+            put_y(&mut row.prefix, 22, row.y);
+            put_y(&mut row.prefix, 30, row.y);
         }
         for r in &mut row.records {
             if r.bytes.starts_with(&[0, 0]) {
-                if r.bytes[8] >= raw_y {
-                    r.bytes[8] += 4;
+                if y_at(&r.bytes, 8) >= raw_y {
+                    shift_y(&mut r.bytes, 8, 4);
                 }
-                if r.bytes[18] >= raw_y {
-                    r.bytes[18] += 4;
+                if y_at(&r.bytes, 18) >= raw_y {
+                    shift_y(&mut r.bytes, 18, 4);
                 }
             } else if r.bytes.starts_with(&[1, 0]) {
-                if r.bytes[6] >= raw_y {
-                    r.bytes[6] += 4;
+                if y_at(&r.bytes, 6) >= raw_y {
+                    shift_y(&mut r.bytes, 6, 4);
                 }
             } else if old_y >= raw_y {
-                r.bytes[6] = row.y;
+                put_y(&mut r.bytes, 6, row.y);
                 if r.wire_end.is_some() {
-                    r.bytes[16] = row.y;
+                    put_y(&mut r.bytes, 16, row.y);
                 }
                 if r.bytes.starts_with(&[0, 34]) {
                     let (_, end) = string_at(&r.bytes, 19)?;
                     let count = u16_at(&r.bytes, end)?;
                     let mut next = end + 2;
                     for _ in 0..count {
-                        r.bytes[next + 1] = row.y;
+                        put_y(&mut r.bytes, next + 1, row.y);
                         let (_, end) = string_at(&r.bytes, next + 10)?;
                         next = end;
                     }
@@ -1444,16 +1429,16 @@ pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u8) -> Result<Vec<u8>, Xgwx
                     if row.y == source_y
                         && r.bytes.starts_with(&[0, 0])
                         && r.x == x
-                        && r.bytes[18] == target_y
+                        && y_at(&r.bytes, 18) == target_y
                     {
-                        r.bytes[18] = raw_y;
+                        put_y(&mut r.bytes, 18, raw_y);
                     }
                     if row.y == target_y
                         && r.bytes.starts_with(&[1, 0])
                         && r.x == x
-                        && r.bytes[6] == source_y
+                        && y_at(&r.bytes, 6) == source_y
                     {
-                        r.bytes[6] = raw_y;
+                        put_y(&mut r.bytes, 6, raw_y);
                     }
                 }
             }
@@ -1465,7 +1450,7 @@ pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u8) -> Result<Vec<u8>, Xgwx
         }
         program.rows[i].records.sort_by_key(|r| r.x);
     }
-    program.header[4..6].copy_from_slice(&((count + 1) as u16).to_le_bytes());
+    set_row_count(&mut program.header, count + 1);
     program.rebuild_groups();
     let output = program.encode();
     EditableProgram::parse(&output)?;
@@ -1475,6 +1460,88 @@ pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u8) -> Result<Vec<u8>, Xgwx
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wide_rows_preserve_function_comment_and_branch_coordinates_across_shifts() {
+        let mut bytes =
+            insert_ladder_instruction(&[0; 8], 65532 * 4, "MOV", &["1".into(), "D100".into()])
+                .unwrap();
+        bytes =
+            insert_ladder_comparison(&bytes, 65533 * 4, 0, ">=", &["D100".into(), "D102".into()])
+                .unwrap();
+        bytes = edit_ladder_branch(
+            &bytes,
+            &LadderBranchEdit {
+                raw_y: 65532 * 4,
+                boundary: 4,
+                expected: false,
+                present: true,
+            },
+        )
+        .unwrap();
+        bytes = edit_ladder_comment(
+            &bytes,
+            &LadderCommentEdit {
+                kind: LadderCommentKind::Output,
+                raw_y: 65532 * 4,
+                expected: None,
+                replacement: "Wide output".into(),
+            },
+        )
+        .unwrap();
+        let original = bytes.clone();
+        bytes = edit_ladder_comment(
+            &bytes,
+            &LadderCommentEdit {
+                kind: LadderCommentKind::Rung,
+                raw_y: 0,
+                expected: None,
+                replacement: "Wide rung".into(),
+            },
+        )
+        .unwrap();
+        let shifted = EditableProgram::parse(&bytes).unwrap();
+        assert_eq!(row_count(&shifted.header).unwrap(), 65535);
+        assert_eq!(header_size(&shifted.header).unwrap(), 12);
+        assert_eq!(shifted.rows.last().unwrap().y, 65534 * 4);
+        assert!(insert_ladder_row(&bytes, 0).is_err());
+        let restored = delete_ladder_rung_comment(&bytes, 0, "Wide rung").unwrap();
+        assert_eq!(restored, original);
+        assert_eq!(header_size(&restored).unwrap(), 8);
+    }
+
+    #[test]
+    fn xgk_last_row_is_sparse_and_rejects_overflow() {
+        let edit = LadderCellEdit {
+            raw_y: 65534 * 4,
+            column: 0,
+            expected: None,
+            replacement: Some(LadderEditElement {
+                kind: LadderEditKind::NormallyOpen,
+                operand: "M00000".into(),
+            }),
+        };
+        let bytes = edit_ladder_cell(&[0; 8], &edit).unwrap();
+        let parsed = EditableProgram::parse(&bytes).unwrap();
+        assert_eq!(parsed.rows.len(), 1);
+        assert_eq!(parsed.rows[0].y, 65534 * 4);
+        assert_eq!(row_count(&parsed.header).unwrap(), 65535);
+        assert!(
+            edit_ladder_cell(
+                &bytes,
+                &LadderCellEdit {
+                    raw_y: 65535 * 4,
+                    ..edit.clone()
+                }
+            )
+            .is_err()
+        );
+        assert!(edit_ladder_cell(&bytes, &edit).is_err());
+        assert!(
+            insert_ladder_instruction(&bytes, 65535 * 4, "MOV", &["1".into(), "D100".into()])
+                .is_err()
+        );
+        assert_eq!(parsed.encode(), bytes);
+    }
     #[test]
     fn d_register_bits_use_one_hexadecimal_index() {
         for bit in "0123456789ABCDEF".chars() {
@@ -1699,7 +1766,7 @@ mod tests {
         ].into_iter().enumerate() {
             let mut bytes = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
             for (index, spec) in crate::ladder_comparison_catalog().chunks(39).nth(batch).unwrap().iter().enumerate() {
-                let y = 8 + index as u8 * 4;
+                let y = 8 + index as u32 * 4;
                 bytes = insert_ladder_row(&bytes, y).unwrap();
                 let bit = spec.mnemonic.starts_with('4') || spec.mnemonic.starts_with('8');
                 let mut operands = if bit { vec!["D100.0".into(), "D102.0".into()] } else { vec!["D100".into(), "D104".into()] };
@@ -1941,7 +2008,7 @@ mod tests {
                 .records
                 .retain(|record| !record.bytes.starts_with(&[0, 34]));
             let actual =
-                insert_ladder_instruction(&source.encode(), row as u8 * 4, name, &[]).unwrap();
+                insert_ladder_instruction(&source.encode(), row as u32 * 4, name, &[]).unwrap();
             assert_eq!(actual, native.as_slice(), "{name} native payload differs");
         }
         let offset = 122;
@@ -2457,7 +2524,7 @@ mod tests {
         let source = include_bytes!("../fixtures/ladder-edit/R17.bin");
         for (raw_y, column, replacement) in [
             (1, 2, element(LadderEditKind::NormallyOpen, "M1")),
-            (8, 2, element(LadderEditKind::NormallyOpen, "M1")),
+            (65535 * 4, 2, element(LadderEditKind::NormallyOpen, "M1")),
             (0, 10, element(LadderEditKind::NormallyOpen, "M1")),
             (0, 2, element(LadderEditKind::Output, "M1")),
             (0, 2, element(LadderEditKind::NormallyOpen, "MOV M1 M2")),

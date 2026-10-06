@@ -185,7 +185,7 @@ fn render_ladder(ui: &mut egui::Ui, program: &LadderProgramData, zoom: f32, show
 
 struct LadderLayout {
     raw_xs: Vec<u8>,
-    raw_ys: Vec<u8>,
+    raw_ys: Vec<u32>,
     x_positions: Vec<f32>,
     y_positions: Vec<f32>,
     cell_height: f32,
@@ -304,7 +304,7 @@ impl LadderLayout {
             .and_then(|index| self.x_positions.get(index).copied())
     }
 
-    fn y_for(&self, raw_y: u8) -> f32 {
+    fn y_for(&self, raw_y: u32) -> f32 {
         self.raw_ys
             .iter()
             .position(|candidate| *candidate == raw_y)

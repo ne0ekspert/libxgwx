@@ -98,49 +98,49 @@ pub enum LdToIlError {
         offset: usize,
         marker: [u8; 2],
         raw_x: u8,
-        raw_y: u8,
+        raw_y: u32,
     },
     UnsupportedCell {
         offset: usize,
         raw_x: u8,
-        raw_y: u8,
+        raw_y: u32,
         value: String,
     },
     DisconnectedCell {
         offset: usize,
         raw_x: u8,
-        raw_y: u8,
+        raw_y: u32,
         value: String,
     },
     BranchWithoutInput {
         raw_x: u8,
-        raw_y_start: u8,
-        raw_y_end: u8,
+        raw_y_start: u32,
+        raw_y_end: u32,
     },
     BranchWithoutOutput {
         raw_x: u8,
-        raw_y_start: u8,
-        raw_y_end: u8,
+        raw_y_start: u32,
+        raw_y_end: u32,
     },
     StatefulBranchFanout {
         raw_x: u8,
-        raw_y_start: u8,
-        raw_y_end: u8,
+        raw_y_start: u32,
+        raw_y_end: u32,
     },
     AmbiguousActionOrder {
         first_raw_x: u8,
-        first_raw_y: u8,
+        first_raw_y: u32,
         second_raw_x: u8,
-        second_raw_y: u8,
+        second_raw_y: u32,
     },
     NetworkWithoutOutput {
-        raw_y_start: u8,
-        raw_y_end: u8,
+        raw_y_start: u32,
+        raw_y_end: u32,
     },
     CoordinateOverflow {
         offset: usize,
         raw_x: u8,
-        raw_y: u8,
+        raw_y: u32,
     },
 }
 
@@ -322,7 +322,7 @@ fn convert_program(program: &LadderProgramData) -> Result<IlProgram, LdToIlError
     })
 }
 
-fn logical_networks(structure: &LadderStructure) -> Vec<Vec<u8>> {
+fn logical_networks(structure: &LadderStructure) -> Vec<Vec<u32>> {
     let mut rows = structure
         .rungs
         .iter()
@@ -348,7 +348,7 @@ fn logical_networks(structure: &LadderStructure) -> Vec<Vec<u8>> {
         }
     }
 
-    let mut grouped = BTreeMap::<usize, Vec<u8>>::new();
+    let mut grouped = BTreeMap::<usize, Vec<u32>>::new();
     for (index, raw_y) in rows.into_iter().enumerate() {
         let root = find(&mut parents, index);
         grouped.entry(root).or_default().push(raw_y);
@@ -375,7 +375,7 @@ fn union(parents: &mut [usize], left: usize, right: usize) {
 
 fn convert_network<'a>(
     structure: &'a LadderStructure,
-    rows: &[u8],
+    rows: &[u32],
 ) -> Result<Vec<Action<'a>>, LdToIlError> {
     let cells = structure
         .rungs
@@ -391,7 +391,7 @@ fn convert_network<'a>(
     let mut event_xs = cells.iter().map(|cell| cell.raw_x).collect::<BTreeSet<_>>();
     event_xs.extend(branches.iter().map(|line| line.raw_x));
 
-    let mut states = HashMap::<u8, RowState>::new();
+    let mut states = HashMap::<u32, RowState>::new();
     let mut actions = Vec::new();
 
     for raw_x in event_xs {
@@ -482,7 +482,7 @@ fn reject_duplicate_cells(cells: &[&LadderCell]) -> Result<(), LdToIlError> {
 
 fn apply_condition(
     structure: &LadderStructure,
-    states: &mut HashMap<u8, RowState>,
+    states: &mut HashMap<u32, RowState>,
     cell: &LadderCell,
 ) -> Result<(), LdToIlError> {
     let boundary_x = cell
@@ -552,10 +552,10 @@ fn apply_condition(
 
 fn apply_branch(
     structure: &LadderStructure,
-    network_rows: &[u8],
+    network_rows: &[u32],
     cells: &[&LadderCell],
     branches: &[&LadderVerticalLine],
-    states: &mut HashMap<u8, RowState>,
+    states: &mut HashMap<u32, RowState>,
     line: &LadderVerticalLine,
 ) -> Result<(), LdToIlError> {
     let branch_rows = network_rows
@@ -616,7 +616,7 @@ fn apply_branch(
 
 fn row_has_right_target(
     structure: &LadderStructure,
-    raw_y: u8,
+    raw_y: u32,
     raw_x: u8,
     cells: &[&LadderCell],
     branches: &[&LadderVerticalLine],
@@ -632,7 +632,7 @@ fn row_has_right_target(
     })
 }
 
-fn row_connects_between(structure: &LadderStructure, raw_y: u8, from_x: u8, to_x: u8) -> bool {
+fn row_connects_between(structure: &LadderStructure, raw_y: u32, from_x: u8, to_x: u8) -> bool {
     if to_x < from_x {
         return false;
     }
@@ -646,7 +646,7 @@ fn row_connects_between(structure: &LadderStructure, raw_y: u8, from_x: u8, to_x
         .any(|line| line.raw_y == raw_y && horizontal_connects(line, from_x, to_x))
 }
 
-fn row_connects_from_left(structure: &LadderStructure, raw_y: u8, to_x: u8) -> bool {
+fn row_connects_from_left(structure: &LadderStructure, raw_y: u32, to_x: u8) -> bool {
     to_x <= 1
         || structure.horizontal_lines.iter().any(|line| {
             let start = line.raw_x_start.min(line.raw_x_end);
@@ -660,7 +660,7 @@ fn horizontal_connects(line: &LadderHorizontalLine, from_x: u8, to_x: u8) -> boo
     start <= from_x.saturating_add(1) && end.saturating_add(1) >= to_x
 }
 
-fn line_contains_y(line: &LadderVerticalLine, raw_y: u8) -> bool {
+fn line_contains_y(line: &LadderVerticalLine, raw_y: u32) -> bool {
     raw_y >= line.raw_y_start && raw_y <= line.raw_y_end
 }
 
@@ -1218,14 +1218,14 @@ mod tests {
 
     fn test_cell(
         raw_x: u8,
-        raw_y: u8,
+        raw_y: u32,
         value: &str,
         contact: Option<LadderContact>,
         coil: Option<LadderCoil>,
         kind: LadderElementKind,
     ) -> LadderCell {
         LadderCell {
-            offset: usize::from(raw_y) * 256 + usize::from(raw_x),
+            offset: (raw_y as usize) * 256 + usize::from(raw_x),
             raw_x,
             raw_y,
             kind,
@@ -1236,7 +1236,7 @@ mod tests {
         }
     }
 
-    fn vertical(raw_x: u8, raw_y_start: u8, raw_y_end: u8) -> LadderVerticalLine {
+    fn vertical(raw_x: u8, raw_y_start: u32, raw_y_end: u32) -> LadderVerticalLine {
         LadderVerticalLine {
             raw_x,
             raw_y_start,
@@ -1244,7 +1244,7 @@ mod tests {
         }
     }
 
-    fn horizontal(raw_y: u8, raw_x_start: u8, raw_x_end: u8) -> LadderHorizontalLine {
+    fn horizontal(raw_y: u32, raw_x_start: u8, raw_x_end: u8) -> LadderHorizontalLine {
         LadderHorizontalLine {
             raw_y,
             raw_x_start,

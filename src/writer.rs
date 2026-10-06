@@ -4214,7 +4214,7 @@ impl XgwxDocument {
     /// The captured shape is an addressed BOOL contact at the left rail, a
     /// long wire, and a BOOL coil at the right rail. A new single-row group is
     /// inserted without moving any existing row, including after the last
-    /// stored network, extending the stored row range by one when necessary.
+    /// stored network, extending the stored row range across sparse gaps when necessary.
     #[allow(clippy::too_many_arguments)]
     pub fn insert_iec_ld_rung(
         &mut self,
@@ -11403,7 +11403,7 @@ impl XgwxDocument {
     pub fn insert_ladder_instruction(
         &mut self,
         program_index: usize,
-        raw_y: u8,
+        raw_y: u32,
         mnemonic: &str,
         operands: &[String],
     ) -> Result<(), XgwxError> {
@@ -11417,7 +11417,7 @@ impl XgwxDocument {
     pub fn insert_ladder_comparison(
         &mut self,
         program_index: usize,
-        raw_y: u8,
+        raw_y: u32,
         column: u8,
         mnemonic: &str,
         operands: &[String],
@@ -11465,7 +11465,7 @@ impl XgwxDocument {
     pub fn delete_ladder_rung_comment(
         &mut self,
         program_index: usize,
-        raw_y: u8,
+        raw_y: u32,
         expected: &str,
     ) -> Result<(), XgwxError> {
         self.edit_ladder_payload(program_index, |payload| {
@@ -11485,7 +11485,7 @@ impl XgwxDocument {
     }
 
     /// Insert a physical blank row before the selected row, as native Ctrl+L.
-    pub fn insert_ladder_row(&mut self, program_index: usize, raw_y: u8) -> Result<(), XgwxError> {
+    pub fn insert_ladder_row(&mut self, program_index: usize, raw_y: u32) -> Result<(), XgwxError> {
         self.edit_ladder_payload(program_index, |payload| {
             crate::ladder_write::insert_ladder_row(payload, raw_y)
         })
@@ -13350,8 +13350,9 @@ fn insert_iec_ld_linear_rung_bytes(
             .and_then(|value| value.try_into().ok())
             .ok_or(XgwxError::UnsupportedLadderLayout)?,
     );
-    if blank_row_index > max_rows
-        || blank_row_index >= u16::MAX / 4
+    // Empty canvas rows beyond the stored tail use the same sparse row
+    // envelope; the header extent is expanded below without shifting rows.
+    if blank_row_index >= u16::MAX / 4
         || group_count == u16::MAX
         || rows.iter().any(|row| row.row_index == blank_row_index)
         || graph.occupied_areas.iter().any(|area| {

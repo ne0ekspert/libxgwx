@@ -498,7 +498,7 @@ pub struct LadderStructure {
 /// One reconstructed LD row/rung.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LadderRung {
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub cells: Vec<LadderCell>,
 }
 
@@ -507,7 +507,7 @@ pub struct LadderRung {
 pub struct LadderCell {
     pub offset: usize,
     pub raw_x: u8,
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub kind: LadderElementKind,
     pub value: String,
     pub operands: Vec<String>,
@@ -519,22 +519,22 @@ pub struct LadderCell {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LadderVerticalLine {
     pub raw_x: u8,
-    pub raw_y_start: u8,
-    pub raw_y_end: u8,
+    pub raw_y_start: u32,
+    pub raw_y_end: u32,
 }
 
 /// One continuous vertical LD branch group.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LadderBranchGroup {
     pub raw_x: u8,
-    pub raw_y_start: u8,
-    pub raw_y_end: u8,
+    pub raw_y_start: u32,
+    pub raw_y_end: u32,
 }
 
 /// One decoded horizontal LD connection segment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LadderHorizontalLine {
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub raw_x_start: u8,
     pub raw_x_end: u8,
 }
@@ -544,7 +544,7 @@ pub struct LadderHorizontalLine {
 pub struct LadderRungComment {
     pub offset: usize,
     pub raw_x: u8,
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub text: String,
 }
 
@@ -553,7 +553,7 @@ pub struct LadderRungComment {
 pub struct LadderOutputComment {
     pub offset: usize,
     pub raw_x: u8,
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub text: String,
 }
 
@@ -563,7 +563,7 @@ pub struct LadderUnknownRecord {
     pub offset: usize,
     pub marker: [u8; 2],
     pub raw_x: u8,
-    pub raw_y: u8,
+    pub raw_y: u32,
     pub bytes: Vec<u8>,
 }
 

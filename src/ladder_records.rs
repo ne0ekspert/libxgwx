@@ -101,7 +101,7 @@ pub(crate) struct Record {
 #[derive(Debug, Clone)]
 pub(crate) struct Row {
     pub(crate) prefix: Vec<u8>,
-    pub(crate) y: u8,
+    pub(crate) y: u32,
     pub(crate) records: Vec<Record>,
 }
 #[derive(Debug)]
@@ -119,6 +119,47 @@ pub(crate) fn u16_at(bytes: &[u8], start: usize) -> Result<usize, XgwxError> {
     let b = bytes.get(start..start + 2).ok_or_else(unsupported)?;
     Ok(usize::from(u16::from_le_bytes([b[0], b[1]])))
 }
+/// Supported physical rows in the XGK ladder editor (manual section 5.1).
+pub(crate) const XGK_MAX_ROWS: usize = 65535;
+
+pub(crate) fn y_at(bytes: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes([bytes[offset], bytes[offset + 1], bytes[offset + 2], 0])
+}
+#[cfg(feature = "write")]
+pub(crate) fn put_y(bytes: &mut [u8], offset: usize, y: u32) {
+    bytes[offset..offset + 3].copy_from_slice(&y.to_le_bytes()[..3]);
+}
+#[cfg(feature = "write")]
+pub(crate) fn shift_y(bytes: &mut [u8], offset: usize, delta: i32) {
+    let y = y_at(bytes, offset).checked_add_signed(delta).unwrap();
+    put_y(bytes, offset, y);
+}
+#[cfg(feature = "write")]
+pub(crate) fn xy(x: u8, y: u32) -> [u8; 4] {
+    let b = y.to_le_bytes();
+    [x, b[0], b[1], b[2]]
+}
+pub(crate) fn row_count(header: &[u8]) -> Result<usize, XgwxError> {
+    let short = u16_at(header, 4)?;
+    if short != 65535 { return Ok(short); }
+    let bytes = header.get(6..10).ok_or_else(unsupported)?;
+    Ok(u32::from_le_bytes(bytes.try_into().unwrap()) as usize)
+}
+pub(crate) fn header_size(header: &[u8]) -> Result<usize, XgwxError> {
+    Ok(if u16_at(header, 4)? == 65535 { 12 } else { 8 })
+}
+#[cfg(feature = "write")]
+pub(crate) fn set_row_count(header: &mut Vec<u8>, count: usize) {
+    let old_size = header_size(header).unwrap();
+    let groups = u16_at(header, old_size - 2).unwrap() as u16;
+    header.truncate(4);
+    if count >= 65535 {
+        header.extend_from_slice(&65535u16.to_le_bytes());
+        header.extend_from_slice(&(count as u32).to_le_bytes());
+    } else { header.extend_from_slice(&(count as u16).to_le_bytes()); }
+    header.extend_from_slice(&groups.to_le_bytes());
+}
+
 pub(crate) fn string_at(bytes: &[u8], start: usize) -> Result<(String, usize), XgwxError> {
     if bytes.get(start..start + 3) != Some(&[255, 254, 255]) {
         return Err(unsupported());
@@ -132,9 +173,9 @@ pub(crate) fn string_at(bytes: &[u8], start: usize) -> Result<(String, usize), X
         .collect::<Vec<_>>();
     Ok((String::from_utf16(&units).map_err(|_| unsupported())?, end))
 }
-pub(crate) fn coordinate(bytes: &[u8], offset: usize, y: u8) -> Result<u8, XgwxError> {
+pub(crate) fn coordinate(bytes: &[u8], offset: usize, y: u32) -> Result<u8, XgwxError> {
     let b = bytes.get(offset..offset + 4).ok_or_else(unsupported)?;
-    if b[1] != y || b[2..] != [0, 0] {
+    if y_at(b, 1) != y {
         return Err(unsupported());
     }
     Ok(b[0])
@@ -145,14 +186,15 @@ impl EditableProgram {
         if bytes.len() < 8 || bytes[..4] != [0; 4] {
             return Err(unsupported());
         }
-        let row_count = u16_at(bytes, 4)?;
-        let group_count = u16_at(bytes, 6)?;
-        if row_count > 61 || group_count > row_count {
+        let header_len = header_size(bytes)?;
+        let row_count = row_count(bytes)?;
+        let group_count = u16_at(bytes, header_len - 2)?;
+        if row_count > XGK_MAX_ROWS || group_count > row_count {
             return Err(unsupported());
         }
         let mut rows = Vec::new();
         let mut group_headers = Vec::new();
-        let mut pos = 8;
+        let mut pos = header_len;
         for group in 0..group_count {
             let head = bytes.get(pos..pos + 10).ok_or_else(unsupported)?.to_vec();
             let count = u16_at(&head, 8)?;
@@ -168,7 +210,7 @@ impl EditableProgram {
             for _ in 0..count {
                 let prefix = bytes.get(pos..pos + 35).ok_or_else(unsupported)?.to_vec();
                 let index = u32::from_le_bytes(prefix[..4].try_into().unwrap()) as usize;
-                let y = (index.saturating_mul(4)) as u8;
+                let y = (index * 4) as u32;
                 if index >= row_count
                     || rows.last().is_some_and(|r: &Row| r.y >= y)
                     || prefix[4..9] != [255, 67, 0, 0, 0]
@@ -176,7 +218,8 @@ impl EditableProgram {
                     || prefix[14..17] != [0; 3]
                     || prefix[13] > 1
                     || coordinate(&prefix, 21, y)? > 94
-                    || prefix[27..29] != [0; 2]
+                    || y_at(&prefix, 26) >= XGK_MAX_ROWS as u32 * 4
+                    || !y_at(&prefix, 26).is_multiple_of(4)
                 {
                     return Err(unsupported());
                 }
@@ -208,7 +251,7 @@ impl EditableProgram {
             for row in &rows[*first..last] {
                 for r in &row.records {
                     if r.bytes.starts_with(&[0, 0]) {
-                        let target_y = r.bytes[18];
+                        let target_y = y_at(&r.bytes, 18);
                         if target_y <= row.y
                             || !rows[*first..last].iter().any(|target| {
                                 target.y == target_y
@@ -221,14 +264,14 @@ impl EditableProgram {
                             return Err(unsupported());
                         }
                     } else if r.bytes.starts_with(&[1, 0, 0, 0, 0]) {
-                        let source_y = r.bytes[6];
+                        let source_y = y_at(&r.bytes, 6);
                         if source_y >= row.y
                             || !rows[*first..last].iter().any(|source| {
                                 source.y == source_y
                                     && source.records.iter().any(|start| {
                                         start.bytes.starts_with(&[0, 0])
                                             && start.bytes[7..11] == r.bytes[5..9]
-                                            && start.bytes[18] == row.y
+                                            && y_at(&start.bytes, 18) == row.y
                                     })
                             })
                         {
@@ -239,7 +282,7 @@ impl EditableProgram {
             }
         }
         Ok(Self {
-            header: bytes[..8].to_vec(),
+            header: bytes[..header_len].to_vec(),
             rows,
             #[cfg(feature = "write")]
             group_headers,
@@ -249,11 +292,12 @@ impl EditableProgram {
     #[cfg(feature = "write")]
     pub(crate) fn encode(&self) -> Vec<u8> {
         let mut bytes = self.header.clone();
-        let count = u16_at(&self.header, 4)
+        let count = row_count(&self.header)
             .unwrap()
-            .max(self.rows.last().map_or(0, |r| usize::from(r.y) / 4 + 1));
-        bytes[4..6].copy_from_slice(&(count as u16).to_le_bytes());
-        bytes[6..8].copy_from_slice(&(self.group_headers.len() as u16).to_le_bytes());
+            .max(self.rows.last().map_or(0, |r| (r.y as usize) / 4 + 1));
+        set_row_count(&mut bytes, count);
+        let group_offset = bytes.len() - 2;
+        bytes[group_offset..].copy_from_slice(&(self.group_headers.len() as u16).to_le_bytes());
         for (index, row) in self.rows.iter().enumerate() {
             if let Some((_, header)) = self.group_headers.iter().find(|(first, _)| *first == index)
             {
@@ -287,7 +331,7 @@ fn validate_row_records(records: &[Record]) -> Result<(), XgwxError> {
             occupied = r.x + ((count - 1) * 3) as u8;
             for argument in 1..count {
                 let reference = records.get(index + argument).ok_or_else(unsupported)?;
-                let expected = [
+                let expected = vec![
                     argument as u8,
                     if argument == count - 1 { 0x24 } else { 0x23 },
                     0,
@@ -295,8 +339,8 @@ fn validate_row_records(records: &[Record]) -> Result<(), XgwxError> {
                     0,
                     r.x,
                     r.bytes[6],
-                    0,
-                    0,
+                    r.bytes[7],
+                    r.bytes[8],
                 ];
                 if reference.bytes != expected {
                     return Err(unsupported());
@@ -318,7 +362,7 @@ fn validate_row_records(records: &[Record]) -> Result<(), XgwxError> {
     Ok(())
 }
 
-fn parse_record(bytes: &[u8], pos: usize, y: u8) -> Result<(Record, usize), XgwxError> {
+fn parse_record(bytes: &[u8], pos: usize, y: u32) -> Result<(Record, usize), XgwxError> {
     let marker = bytes.get(pos..pos + 2).ok_or_else(unsupported)?;
     let mut element = None;
     let mut wire_end = None;
@@ -334,8 +378,8 @@ fn parse_record(bytes: &[u8], pos: usize, y: u8) -> Result<(Record, usize), Xgwx
             || !x.is_multiple_of(3)
             || b[11..17] != [0; 6]
             || b[17] != x - 1
-            || b[19..27] != [0; 8]
-            || !b[18].is_multiple_of(4)
+            || b[21..27] != [0; 6]
+            || !y_at(b, 18).is_multiple_of(4)
         {
             return Err(unsupported());
         }
@@ -344,11 +388,10 @@ fn parse_record(bytes: &[u8], pos: usize, y: u8) -> Result<(Record, usize), Xgwx
         let b = bytes.get(pos..pos + 9).ok_or_else(unsupported)?;
         x = b[5];
         if b[..5] != [1, 0, 0, 0, 0]
-            || b[7..9] != [0; 2]
-            || x == 0
+                        || x == 0
             || x > 93
             || !x.is_multiple_of(3)
-            || !b[6].is_multiple_of(4)
+            || !y_at(b, 6).is_multiple_of(4)
         {
             return Err(unsupported());
         }
@@ -454,7 +497,7 @@ pub(crate) fn exact_geometry(
     Vec<crate::LadderVerticalLine>,
 )> {
     let program = EditableProgram::parse(bytes).ok()?;
-    let mut horizontal = Vec::with_capacity(u16_at(&program.header, 4).ok()?);
+    let mut horizontal = Vec::with_capacity(program.rows.len());
     let mut vertical = Vec::new();
     for row in &program.rows {
         if row.prefix[13] != 0 {
@@ -465,7 +508,7 @@ pub(crate) fn exact_geometry(
                 vertical.push(crate::LadderVerticalLine {
                     raw_x: r.x,
                     raw_y_start: row.y,
-                    raw_y_end: r.bytes[18],
+                    raw_y_end: y_at(&r.bytes, 18),
                 });
             } else if let Some(end) = r.wire_end {
                 horizontal.push(crate::LadderHorizontalLine {

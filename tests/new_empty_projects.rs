@@ -92,3 +92,38 @@ fn native_blank_projects_accept_network_module_in_first_slot() {
         assert!(doc.networks().iter().all(|n| n.modules.is_empty()));
     }
 }
+
+#[test]
+fn sparse_iec_canvas_contacts_and_coils_preserve_existing_rows() {
+    let mut doc =
+        XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgi.xgwx")).unwrap();
+    doc.insert_iec_ld_single_element(0, 100, 1, "contact", "NO", "%MX0")
+        .unwrap();
+    let first = doc.ladder_programs().remove(0).unwrap();
+    doc.insert_iec_ld_single_element(0, 300, 94, "coil", "OUTPUT", "%MX1")
+        .unwrap();
+    let program = doc.ladder_programs().remove(0).unwrap();
+    assert_eq!(
+        program
+            .iec_row_frames()
+            .unwrap()
+            .iter()
+            .map(|row| row.row_index)
+            .collect::<Vec<_>>(),
+        vec![100, 300]
+    );
+    let original_row = first.iec_row_frames().unwrap().remove(0);
+    let preserved_row = program.iec_row_frames().unwrap().remove(0);
+    assert_eq!(
+        &first.data[original_row.start..original_row.end],
+        &program.data[preserved_row.start..preserved_row.end]
+    );
+    let saved = doc.to_verified_bytes().unwrap();
+    assert!(doc
+        .insert_iec_ld_single_element(0, 100, 1, "contact", "NO", "%MX2")
+        .is_err());
+    assert!(doc
+        .insert_iec_ld_single_element(0, 16383, 1, "contact", "NO", "%MX2")
+        .is_err());
+    assert_eq!(doc.to_verified_bytes().unwrap(), saved);
+}

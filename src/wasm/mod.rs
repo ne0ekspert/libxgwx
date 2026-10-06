@@ -171,7 +171,7 @@ pub fn edit_xgwx_ladder_cell_wasm(
 pub fn insert_xgwx_ladder_instruction_wasm(
     bytes: &[u8],
     program_index: usize,
-    raw_y: u8,
+    raw_y: u32,
     mnemonic: &str,
     operands_json: &str,
 ) -> Result<Vec<u8>, JsValue> {
@@ -191,7 +191,7 @@ pub fn insert_xgwx_ladder_instruction_wasm(
 pub fn insert_xgwx_ladder_comparison_wasm(
     bytes: &[u8],
     program_index: usize,
-    raw_y: u8,
+    raw_y: u32,
     column: u8,
     mnemonic: &str,
     operands_json: &str,
@@ -268,7 +268,7 @@ pub fn edit_xgwx_ladder_comment_wasm(
 pub fn delete_xgwx_ladder_rung_comment_wasm(
     bytes: &[u8],
     program_index: usize,
-    raw_y: u8,
+    raw_y: u32,
     expected: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
@@ -307,7 +307,7 @@ pub fn edit_xgwx_ladder_branch_wasm(
 pub fn insert_xgwx_ladder_row_wasm(
     bytes: &[u8],
     program_index: usize,
-    raw_y: u8,
+    raw_y: u32,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;

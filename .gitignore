@@ -3,3 +3,6 @@
 /pkg
 *.xgwx
 !fixtures/*.xgwx
+
+# Synthetic native row-boundary acceptance fixtures
+!fixtures/canvas-rows/*.xgwx

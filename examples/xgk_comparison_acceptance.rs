@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut document = source.clone();
         for (index, spec) in specs.iter().enumerate() {
             // Insert ahead of the captured END; never emit unreachable code.
-            let y = u8::try_from(8 + index * 4)?;
+            let y = u32::try_from(8 + index * 4)?;
             document.insert_ladder_row(0, y)?;
             document.insert_ladder_comparison(0, y, 0, spec.mnemonic, &operands(spec))?;
             document.insert_ladder_instruction(

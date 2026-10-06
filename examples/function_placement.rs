@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .enumerate()
         {
-            let y = u8::try_from((row + u16::try_from(i)?) * 4)?;
+            let y = u32::from((row + u16::try_from(i)?) * 4);
             doc.insert_ladder_instruction(
                 0,
                 y,
@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let row = row_count
                 .checked_add(u16::try_from(index)?)
                 .ok_or("row coordinate overflow")?;
-            let y = u8::try_from(row.checked_mul(4).ok_or("row coordinate overflow")?)?;
+            let y = u32::from(row.checked_mul(4).ok_or("row coordinate overflow")?);
             doc.insert_ladder_comparison(0, y, 0, spec.mnemonic, &["D100".into(), "D102".into()])?;
             doc.insert_ladder_instruction(0, y, "MOV", &["0".into(), format!("D{}", 200 + index)])?;
         }
@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .ok_or("missing row count")?
                 .try_into()?,
         );
-        let y = u8::try_from(row_count.checked_mul(4).ok_or("row coordinate overflow")?)?;
+        let y = u32::from(row_count.checked_mul(4).ok_or("row coordinate overflow")?);
         doc.insert_ladder_comparison(0, y, 0, "=", &["D100".into(), "D102".into()])?;
         doc.insert_ladder_instruction(0, y, "MOV", &["0".into(), "D104".into()])?;
         doc.insert_ladder_instruction(0, y + 4, "I2R", &["D100".into(), "D102".into()])?;

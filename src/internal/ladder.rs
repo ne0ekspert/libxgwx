@@ -169,14 +169,14 @@ pub(crate) fn push_ladder_marker_vertical_lines(data: &[u8], lines: &mut Vec<Lad
 pub(crate) struct LadderMarkerRecord {
     offset: usize,
     raw_x: u8,
-    raw_y: u8,
+    raw_y: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LadderMarkerVerticalSpan {
     raw_x: u8,
-    raw_y_start: u8,
-    raw_y_end: u8,
+    raw_y_start: u32,
+    raw_y_end: u32,
 }
 
 pub(crate) fn ladder_marker_vertical_spans(data: &[u8]) -> Vec<LadderMarkerVerticalSpan> {
@@ -269,7 +269,7 @@ pub(crate) fn marker_intermediate_branch_y(
     data: &[u8],
     start: LadderMarkerRecord,
     end: LadderMarkerRecord,
-) -> Option<u8> {
+) -> Option<u32> {
     marker_embedded_branch_coordinates(data, start.offset, start.raw_y, end.raw_y)
         .into_iter()
         .chain(marker_embedded_branch_coordinates(
@@ -286,9 +286,9 @@ pub(crate) fn marker_intermediate_branch_y(
 pub(crate) fn marker_embedded_branch_coordinates(
     data: &[u8],
     offset: usize,
-    raw_y_start: u8,
-    raw_y_end: u8,
-) -> Vec<(u8, u8)> {
+    raw_y_start: u32,
+    raw_y_end: u32,
+) -> Vec<(u8, u32)> {
     let end_relative = data
         .get(offset + 2..(offset + 48).min(data.len()))
         .and_then(|bytes| bytes.iter().position(|byte| *byte == 0xff))
@@ -303,8 +303,8 @@ pub(crate) fn marker_embedded_branch_coordinates(
 
 pub(crate) fn push_ladder_vertical_line_from_ff43(
     lines: &mut Vec<LadderVerticalLine>,
-    target: (u8, u8),
-    source: (u8, u8),
+    target: (u8, u32),
+    source: (u8, u32),
 ) {
     let (target_x, target_y) = target;
     let (source_x, source_y) = source;
@@ -448,7 +448,7 @@ pub(crate) fn push_ladder_marker_branch_horizontal_lines(
 pub(crate) fn is_shadowed_marker_branch_tap(
     spans: &[LadderMarkerVerticalSpan],
     span: &LadderMarkerVerticalSpan,
-    raw_y: u8,
+    raw_y: u32,
 ) -> bool {
     spans.iter().any(|other| {
         other.raw_y_start == raw_y && other.raw_y_end > span.raw_y_end && other.raw_x > span.raw_x
@@ -487,7 +487,7 @@ pub(crate) fn push_ladder_ff02_horizontal_lines(
 pub(crate) fn next_ladder_horizontal_stop_x(
     cells: &[LadderCell],
     raw_x: u8,
-    raw_y: u8,
+    raw_y: u32,
 ) -> Option<u8> {
     cells
         .iter()
@@ -546,7 +546,7 @@ pub(crate) fn marker_only_ladder_contact(marker: [u8; 2]) -> Option<LadderContac
 
 pub(crate) fn push_ladder_horizontal_line(
     lines: &mut Vec<LadderHorizontalLine>,
-    raw_y: u8,
+    raw_y: u32,
     raw_x_start: u8,
     raw_x_end: u8,
 ) {
@@ -708,11 +708,11 @@ pub(crate) fn decode_utf16_bytes(bytes: &[u8]) -> Option<String> {
     .ok()
 }
 
-pub(crate) fn ladder_record_coordinate(data: &[u8], offset: usize) -> Option<(u8, u8)> {
+pub(crate) fn ladder_record_coordinate(data: &[u8], offset: usize) -> Option<(u8, u32)> {
     ladder_record_coordinate_with_min_x(data, offset, 2)
 }
 
-pub(crate) fn ladder_rung_comment_coordinate(data: &[u8], offset: usize) -> Option<(u8, u8)> {
+pub(crate) fn ladder_rung_comment_coordinate(data: &[u8], offset: usize) -> Option<(u8, u32)> {
     ladder_record_coordinate_with_min_x(data, offset, 1)
 }
 
@@ -720,7 +720,7 @@ pub(crate) fn ladder_record_coordinate_with_min_x(
     data: &[u8],
     offset: usize,
     min_raw_x: u8,
-) -> Option<(u8, u8)> {
+) -> Option<(u8, u32)> {
     [5, 10, 17, 36]
         .iter()
         .filter_map(|relative| read_ladder_coordinate(data, offset + relative))
@@ -775,7 +775,7 @@ pub(crate) fn is_known_ladder_cell_record(
     offset: usize,
     marker: [u8; 2],
     raw_x: u8,
-    raw_y: u8,
+    raw_y: u32,
 ) -> bool {
     cells.iter().any(|cell| {
         cell.raw_x == raw_x
@@ -808,7 +808,7 @@ pub(crate) fn is_known_ladder_cell_marker(marker: [u8; 2]) -> bool {
     )
 }
 
-pub(crate) fn ladder_element_coordinate(data: &[u8], element: &LadderElement) -> Option<(u8, u8)> {
+pub(crate) fn ladder_element_coordinate(data: &[u8], element: &LadderElement) -> Option<(u8, u32)> {
     let preferred_offset = if !element.operands.is_empty() || is_ladder_operation(&element.value) {
         element.offset.checked_sub(14)
     } else {
@@ -825,12 +825,19 @@ pub(crate) fn ladder_element_coordinate(data: &[u8], element: &LadderElement) ->
         })
 }
 
-pub(crate) fn read_ladder_coordinate(data: &[u8], offset: usize) -> Option<(u8, u8)> {
+pub(crate) fn read_ladder_coordinate(data: &[u8], offset: usize) -> Option<(u8, u32)> {
     let bytes = data.get(offset..offset + 2)?;
     let raw_x = bytes[0];
-    let raw_y = bytes[1];
-
-    (raw_x > 0 && raw_x <= 0x80 && raw_y <= 0xf0 && raw_y % 4 == 0).then_some((raw_x, raw_y))
+    if raw_x == 0 || raw_x > 0x80 { return None; }
+    if let Some(bytes) = data.get(offset..offset + 4) {
+        let raw_y = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], 0]);
+        if raw_y < 65535 * 4 && raw_y.is_multiple_of(4) {
+            return Some((raw_x, raw_y));
+        }
+    }
+    // Best-effort decoding also accepts compact two-byte marker fixtures.
+    let raw_y = u32::from(bytes[1]);
+    (raw_y <= 0xf0 && raw_y.is_multiple_of(4)).then_some((raw_x, raw_y))
 }
 
 pub(crate) fn parse_ladder_element(

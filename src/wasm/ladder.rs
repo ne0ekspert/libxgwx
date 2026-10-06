@@ -1407,7 +1407,7 @@ impl WasmLadderStringSummary {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderRungSummary {
-    pub(super) raw_y: u8,
+    pub(super) raw_y: u32,
     pub(super) cell_count: usize,
 }
 
@@ -1425,7 +1425,7 @@ impl WasmLadderRungSummary {
 pub(super) struct WasmLadderCellSummary {
     pub(super) offset: usize,
     pub(super) raw_x: u8,
-    pub(super) raw_y: u8,
+    pub(super) raw_y: u32,
     pub(super) kind: &'static str,
     pub(super) value: String,
     pub(super) operands: Vec<String>,
@@ -1514,8 +1514,8 @@ impl WasmLadderCellSummary {
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderVerticalLineSummary {
     pub(super) raw_x: u8,
-    pub(super) raw_y_start: u8,
-    pub(super) raw_y_end: u8,
+    pub(super) raw_y_start: u32,
+    pub(super) raw_y_end: u32,
 }
 
 impl WasmLadderVerticalLineSummary {
@@ -1532,8 +1532,8 @@ impl WasmLadderVerticalLineSummary {
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderBranchGroupSummary {
     pub(super) raw_x: u8,
-    pub(super) raw_y_start: u8,
-    pub(super) raw_y_end: u8,
+    pub(super) raw_y_start: u32,
+    pub(super) raw_y_end: u32,
 }
 
 impl WasmLadderBranchGroupSummary {
@@ -1549,7 +1549,7 @@ impl WasmLadderBranchGroupSummary {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderHorizontalLineSummary {
-    pub(super) raw_y: u8,
+    pub(super) raw_y: u32,
     pub(super) raw_x_start: u8,
     pub(super) raw_x_end: u8,
 }
@@ -1569,7 +1569,7 @@ impl WasmLadderHorizontalLineSummary {
 pub(super) struct WasmLadderRungCommentSummary {
     pub(super) offset: usize,
     pub(super) raw_x: u8,
-    pub(super) raw_y: u8,
+    pub(super) raw_y: u32,
     pub(super) text: String,
 }
 
@@ -1589,7 +1589,7 @@ impl WasmLadderRungCommentSummary {
 pub(super) struct WasmLadderOutputCommentSummary {
     pub(super) offset: usize,
     pub(super) raw_x: u8,
-    pub(super) raw_y: u8,
+    pub(super) raw_y: u32,
     pub(super) text: String,
 }
 
@@ -1610,7 +1610,7 @@ pub(super) struct WasmLadderUnknownRecordSummary {
     pub(super) offset: usize,
     pub(super) marker: String,
     pub(super) raw_x: u8,
-    pub(super) raw_y: u8,
+    pub(super) raw_y: u32,
     pub(super) bytes: String,
 }
 
