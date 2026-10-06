@@ -1785,12 +1785,28 @@ impl XgwxDocument {
         self.apply_xml_replacements(replacements)
     }
 
-    /// Update one global variable while preserving the binary symbol layout.
+    /// Update one global variable, rebuilding bounded name/comment strings.
     pub fn update_variable(
         &mut self,
         variable_index: usize,
         patch: &VariablePatch,
     ) -> Result<(), XgwxError> {
+        if let Some(name) = patch.name.as_deref() {
+            let variables = self.variables()?;
+            if name.is_empty()
+                || variables.iter().enumerate().any(|(index, other)| {
+                    index != variable_index
+                        && other
+                            .name
+                            .as_deref()
+                            .is_some_and(|other| other.to_lowercase() == name.to_lowercase())
+                })
+            {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "global variable name must be nonempty and unique",
+                });
+            }
+        }
         let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
         let symbols = document
             .descendants()
@@ -1828,19 +1844,23 @@ impl XgwxDocument {
                 index: variable_index,
             })?;
 
+        // Apply numeric bytes before resizing strings, then text from right to
+        // left so all offsets still refer to the original symbol record.
+        if let Some(address_number) = patch.address_number {
+            let range = record[2].end_offset..record[2].end_offset + 4;
+            let bytes = payload
+                .get_mut(range)
+                .ok_or(XgwxError::InvalidVariableRecord {
+                    index: variable_index,
+                })?;
+            bytes.copy_from_slice(&address_number.to_le_bytes());
+        }
         patch_variable_string(
             &mut payload,
             variable_index,
-            "name",
-            &record[1],
-            patch.name.as_deref(),
-        )?;
-        patch_variable_string(
-            &mut payload,
-            variable_index,
-            "address area",
-            &record[2],
-            patch.address_area.as_deref(),
+            "description",
+            &record[4],
+            patch.description.as_deref(),
         )?;
         patch_variable_string(
             &mut payload,
@@ -1852,20 +1872,17 @@ impl XgwxDocument {
         patch_variable_string(
             &mut payload,
             variable_index,
-            "description",
-            &record[4],
-            patch.description.as_deref(),
+            "address area",
+            &record[2],
+            patch.address_area.as_deref(),
         )?;
-
-        if let Some(address_number) = patch.address_number {
-            let range = record[2].end_offset..record[2].end_offset + 4;
-            let bytes = payload
-                .get_mut(range)
-                .ok_or(XgwxError::InvalidVariableRecord {
-                    index: variable_index,
-                })?;
-            bytes.copy_from_slice(&address_number.to_le_bytes());
-        }
+        patch_variable_string(
+            &mut payload,
+            variable_index,
+            "name",
+            &record[1],
+            patch.name.as_deref(),
+        )?;
 
         let replacement_text = encode_payload_text(original_text, compressed, &payload)?;
         self.apply_xml_replacements(vec![(text_node.range(), replacement_text)])
@@ -2148,10 +2165,9 @@ impl XgwxDocument {
             || !replacement
                 .chars()
                 .all(|character| character.is_alphanumeric() || character == '_')
-            || symbols
-                .iter()
-                .enumerate()
-                .any(|(index, other)| index != symbol_index && other.name == replacement)
+            || symbols.iter().enumerate().any(|(index, other)| {
+                index != symbol_index && other.name.to_lowercase() == replacement.to_lowercase()
+            })
         {
             return Err(XgwxError::InvalidLadderEdit {
                 reason: "IEC local symbol name must be a unique identifier of at most 255 UTF-16 units",
@@ -12625,7 +12641,7 @@ fn escape_xml_text(value: &str) -> String {
 }
 
 fn patch_variable_string(
-    payload: &mut [u8],
+    payload: &mut Vec<u8>,
     variable_index: usize,
     field: &'static str,
     original: &LadderString,
@@ -12636,7 +12652,13 @@ fn patch_variable_string(
     };
     let expected_units = original.value.encode_utf16().count();
     let actual_units = replacement.encode_utf16().count();
-    if actual_units != expected_units {
+    let resizable = matches!(field, "name" | "description");
+    if resizable && (actual_units > 255 || replacement.chars().any(char::is_control)) {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "global variable text requires at most 255 UTF-16 units and no control characters",
+        });
+    }
+    if !resizable && actual_units != expected_units {
         return Err(XgwxError::VariableFieldLengthChanged {
             index: variable_index,
             field,
@@ -12645,7 +12667,28 @@ fn patch_variable_string(
         });
     }
 
-    let text_start = original.offset + UTF16_MARKER.len() + 1;
+    let length_offset = original.offset + UTF16_MARKER.len();
+    let text_start = length_offset + 1;
+    if payload.get(original.offset..length_offset) != Some(UTF16_MARKER)
+        || payload.get(length_offset).copied() != Some(expected_units as u8)
+        || payload
+            .get(text_start..original.end_offset)
+            .and_then(decode_utf16_bytes)
+            .as_deref()
+            != Some(&original.value)
+    {
+        return Err(XgwxError::InvalidVariableRecord {
+            index: variable_index,
+        });
+    }
+    if resizable {
+        let mut replacement_bytes = vec![actual_units as u8];
+        for unit in replacement.encode_utf16() {
+            replacement_bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        payload.splice(length_offset..original.end_offset, replacement_bytes);
+        return Ok(());
+    }
     let bytes = payload.get_mut(text_start..original.end_offset).ok_or(
         XgwxError::InvalidVariableRecord {
             index: variable_index,

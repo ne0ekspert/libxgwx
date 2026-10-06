@@ -1228,6 +1228,26 @@ fn rejects_unsafe_ladder_cell_edits_without_mutating_xml() {
 
 #[cfg(feature = "write")]
 #[test]
+fn variable_names_reject_case_insensitive_duplicates_atomically() {
+    let mut doc = XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx")).unwrap();
+    let original = doc.xml.clone();
+    for name in ["_0000_IN01", "_0000_in01", ""] {
+        assert!(
+            doc.update_variable(
+                0,
+                &VariablePatch {
+                    name: Some(name.to_owned()),
+                    ..VariablePatch::default()
+                },
+            )
+            .is_err()
+        );
+        assert_eq!(doc.xml, original);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
 fn writes_same_length_variable_fields_and_numeric_address() {
     let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
     let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
@@ -1267,11 +1287,11 @@ fn rejects_unsafe_variable_edits_without_mutating_xml() {
         .update_variable(
             0,
             &VariablePatch {
-                name: Some("length-changing-name".to_owned()),
+                data_type: Some("DWORD".to_owned()),
                 ..VariablePatch::default()
             },
         )
-        .expect_err("length-changing strings must fail");
+        .expect_err("length-changing type strings must fail");
     assert!(matches!(
         length_error,
         XgwxError::VariableFieldLengthChanged { .. }
@@ -1286,6 +1306,118 @@ fn rejects_unsafe_variable_edits_without_mutating_xml() {
         XgwxError::VariableNotFound { index: 999 }
     ));
     assert_eq!(doc.xml, original_xml);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn variable_length_text_matches_complete_native_symbols_payload() {
+    let mut doc = XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx")).unwrap();
+    for (index, name, description) in [
+        (
+            0,
+            "VariableNameLongerThanBefore",
+            "Longer comment for variable zero".to_owned(),
+        ),
+        (1, "V", "".to_owned()),
+        (2, "가변_이름", "길어진 변수 설명 😀".to_owned()),
+        (81, "LastVariableWithLongerName", "x".repeat(255)),
+    ] {
+        doc.update_variable(
+            index,
+            &VariablePatch {
+                name: Some(name.to_owned()),
+                description: Some(description),
+                ..VariablePatch::default()
+            },
+        )
+        .unwrap();
+    }
+    let xml = roxmltree::Document::parse(&doc.xml).unwrap();
+    let table = xml
+        .descendants()
+        .find(|node| node.has_tag_name("Symbols"))
+        .unwrap();
+    let payload = decode_base64_payload(table.text().unwrap(), true)
+        .unwrap()
+        .data;
+    assert_eq!(
+        payload.as_slice(),
+        include_bytes!("../fixtures/variables/global_text.bin")
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn variable_name_and_comment_resize_preserve_neighbors_and_numeric_fields() {
+    let mut doc = XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx")).unwrap();
+    let original = doc.variables().unwrap();
+    let original_program = doc.ladder_programs().remove(0).unwrap().data;
+    for (name, description, address) in [
+        ("Longer_variable_name", "길어진 설명과 Unicode 😀", 42),
+        ("V", "", 43),
+        ("변수_이름", "New comment", 44),
+    ] {
+        doc.update_variable(
+            0,
+            &VariablePatch {
+                name: Some(name.to_owned()),
+                description: Some(description.to_owned()),
+                address_number: Some(address),
+                ..VariablePatch::default()
+            },
+        )
+        .unwrap();
+        let reparsed = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
+        let variables = reparsed.variables().unwrap();
+        assert_eq!(variables.len(), original.len());
+        assert_eq!(variables[0].name.as_deref(), Some(name));
+        assert_eq!(variables[0].description.as_deref(), Some(description));
+        assert_eq!(variables[0].address_number, Some(address));
+        assert_eq!(variables[1..], original[1..]);
+        assert_eq!(
+            reparsed.ladder_programs().remove(0).unwrap().data,
+            original_program
+        );
+    }
+    let before = doc.xml.clone();
+    for description in ["x".repeat(256), "control\ncharacter".to_owned()] {
+        assert!(
+            doc.update_variable(
+                0,
+                &VariablePatch {
+                    description: Some(description),
+                    ..VariablePatch::default()
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(doc.xml, before);
+    }
+    let name = "n".repeat(255);
+    doc.update_variable(
+        0,
+        &VariablePatch {
+            name: Some(name.clone()),
+            ..VariablePatch::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        doc.variables().unwrap()[0].name.as_deref(),
+        Some(name.as_str())
+    );
+    let before = doc.xml.clone();
+    assert!(
+        doc.update_variable(
+            0,
+            &VariablePatch {
+                name: Some("n".repeat(256)),
+                ..VariablePatch::default()
+            }
+        )
+        .is_err()
+    );
+    assert_eq!(doc.xml, before);
 }
 
 #[test]

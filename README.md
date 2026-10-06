@@ -396,8 +396,9 @@ The API overview below complements the generated reference.
 - `update_iec_ld_comparison_function(...)` changes captured three-operand IEC
   EQ, GT, GE, LT, and LE blocks, updating the paired opcode and name.
 - `update_variable(...)` edits one decoded global symbol record by document
-  order. Name, address area, data type, and description replacements must keep
-  their UTF-16 length; the numeric address is updated in place.
+  order. Names and descriptions may grow or shrink up to 255 UTF-16 units;
+  names remain nonempty and unique without regard to case. Address area and
+  data type retain their UTF-16 length; the numeric address is updated in place.
 - `ladder_mnemonic_info(...)` and `known_ladder_mnemonics()` expose category
   and description metadata for known ladder instruction mnemonics.
 - `XgwxDocument::project_options()`, `parameters()`, `hsc_parameters()`,
