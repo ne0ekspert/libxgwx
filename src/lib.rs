@@ -60,6 +60,8 @@ mod iec_contact_write;
 mod iec_conversion_pair_write;
 #[cfg(feature = "write")]
 mod iec_function_write;
+#[cfg(feature = "write")]
+mod iec_output_wire_write;
 mod iec_graph;
 mod iec_ld;
 #[cfg(feature = "write")]

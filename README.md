@@ -721,3 +721,9 @@ See [CPU hardware validation](docs/cpu-hardware-validation.md) for the verified
 scope and native acceptance evidence.
 
 Structural contact/coil editing, row insertion and vertical branch connection editing are available for verified LD layouts; see [LD editing and native acceptance](docs/ladder-editing.md) for the API, supported operations and limits.
+
+IEC scalar BOOL outputs can drive a horizontal ladder wire: select ENO or a
+comparison OUT and use F5, Enter, or double-click. F5 on the following blank
+cell extends the wire. Arithmetic and conversion OUT fields keep their numeric
+destination. Comparisons accept two sources and an optional BOOL destination;
+wiring OUT replaces that assignment. Unsupported block layouts remain guarded.

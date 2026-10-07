@@ -1233,7 +1233,9 @@ pub(crate) fn insert(
             "IEC function requires room for its input and output cells",
         ));
     }
-    if operands.len() != usize::from(count)
+    let outputless_comparison =
+        spec(name).is_some_and(|(family, _, _)| family == 0x28) && operands.len() == 2;
+    if (operands.len() != usize::from(count) && !outputless_comparison)
         || operands.iter().any(|value| {
             value.is_empty()
                 || value.encode_utf16().count() > 255
@@ -1606,7 +1608,7 @@ pub(crate) fn insert(
     retained.push(new_body);
     *top = retained;
     for (index, operand) in operands.iter().enumerate() {
-        let output = index + 1 == operands.len();
+        let output = !outputless_comparison && index + 1 == operands.len();
         let expr_row = row + if output { 1 } else { index as u16 + 1 };
         let mut expr = expression(expr_row, if output { x + 3 } else { x - 3 }, operand);
         expr[11] = flags;
@@ -1633,6 +1635,17 @@ pub(crate) fn insert(
             y[1],
             0,
         ]);
+    }
+    if outputless_comparison {
+        // Keep OUT's reference even without an assignment, as native Delete
+        // on the output expression does. F5 can then wire this BOOL pin.
+        let y = (row * 4).to_le_bytes();
+        merged
+            .get_mut(&last)
+            .unwrap()
+            .1
+            .push(vec![count, 0x69, 0, 0, 0, x, y[0], y[1], 0]);
+        merged.get_mut(&(row + 1)).unwrap().0[29] = x + 3;
     }
     let new_count = group_count + 1 - (end - first);
     if new_count > usize::from(u16::MAX)

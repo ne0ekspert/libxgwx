@@ -558,3 +558,62 @@ contact/coil projects; local tests additionally exercise high-row function
 operands, branch references, comment shifts, row-count header transitions,
 stale edits and overflow rejection. IEC high-coordinate support remains limited
 to its separately validated writer range.
+
+## Keyboard deletion and exact wire removal
+
+The extension selects individual wire segments with visible hit targets and
+handles Delete/Backspace for wires, contacts, coils and function blocks. IEC
+rectangular element selections run as one atomic edit with one Undo entry.
+
+`delete_ladder_horizontal_wire` takes the decoded horizontal segment's raw Y,
+start X and end X (including the following boundary). It removes only that wire
+record. `delete_ladder_vertical_wire` takes raw X, start Y and end Y from an
+exact `branchConnections` entry and removes its reciprocal branch references.
+Other references, physical rows and elements are retained.
+
+`delete_iec_ld_horizontal_wire_record` removes one framed LongWire or ShortWire
+using its record offset and expected geometry. It decrements the owning row's
+record count and validates the resulting frames and graph. The narrower
+`delete_iec_ld_horizontal_wire` API retains its existing captured one-cell gap
+semantics. `delete_iec_ld_isolated_element` removes a sole contact/coil from its
+row after checking its expected operand; it retains the empty physical row.
+Existing guarded writers handle connected contacts/coils/function blocks.
+
+Deleted wires can leave a disconnected circuit. Native Check Program may report
+input/output errors until the user reconnects the circuit; structural parsing
+alone does not establish that the program can compile or run.
+
+Native Save As preserves all three new wire-removal payloads byte-for-byte;
+see [wire-deletion captures](../fixtures/ladder-wire-delete/README.md).
+
+### IEC function output wires
+
+Scalar functions expose selectable BOOL output pins. Select ENO or a comparison
+OUT and press F5 or Enter (or double-click the pin) to draw one horizontal cell;
+F5 at the next blank cell extends the same feed and advances the cursor. ADD,
+SUB, MUL, DIV, MOVE and the supported scalar conversions retain their data OUT
+assignments. Numeric OUT cannot be used as ladder power flow. Comparisons accept
+two source operands, with an optional third BOOL destination; wiring OUT replaces
+that destination. A comparison cannot use OUT and ENO as power-flow outputs at
+the same time. Noncanonical and instance-block layouts remain guarded.
+
+`insert_iec_ld_function_output_wire` and its WASM wrapper write the captured F5
+short-wire shape with expected function-name, pin-type, adjacency and occupancy
+checks. The output reference is retained when a comparison has no assignment.
+Public native fixtures and compiler/Save As evidence are in
+[`fixtures/function-output-wires`](../fixtures/function-output-wires/README.md).
+
+OUT values can be selected and removed with Delete or Backspace, or cleared in
+the VS Code single-value editor. Only output assignments are removed: function
+bodies, pin references, physical rows and other operands remain. The empty OUT
+pin opens its destination editor on double-click or Enter; BOOL outputs can also
+be wired with F5. Numeric outputs keep their data type and writable-variable
+checks. Native empty-string output placeholders can also be assigned a value.
+
+`delete_iec_ld_function_output_operand` and
+`assign_iec_ld_function_output_operand` have WASM wrappers. Native clearing of
+ADD, SUB, DIV, EQ and INT_TO_UDINT produces zero Check Program errors or warnings;
+the generated cleared payload and conversion reassignment match native Save As
+exactly. Local private-project checks clear and restore all 46 nonempty OUT
+assignments byte for byte; 14 additional OUT assignments are already blank.
+Those private-project checks do not constitute a native compile of every edit.

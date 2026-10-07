@@ -51,6 +51,92 @@ pub fn insert_xgwx_iec_ld_function_wasm(
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = insert_xgwx_iec_ld_function_output_wire)]
+pub fn insert_xgwx_iec_ld_function_output_wire_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    block_offset: usize,
+    expected_name: &str,
+    pin_name: &str,
+    start_x: u8,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.insert_iec_ld_function_output_wire(
+        program_index,
+        block_offset,
+        expected_name,
+        pin_name,
+        start_x,
+    )
+    .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_ladder_horizontal_wire)]
+pub fn delete_xgwx_ladder_horizontal_wire_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    raw_y: u32,
+    start_x: u8,
+    end_x: u8,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.delete_ladder_horizontal_wire(program_index, raw_y, start_x, end_x)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_ladder_vertical_wire)]
+pub fn delete_xgwx_ladder_vertical_wire_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    raw_x: u8,
+    start_y: u32,
+    end_y: u32,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.delete_ladder_vertical_wire(program_index, raw_x, start_y, end_y)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_iec_ld_horizontal_wire_record)]
+pub fn delete_xgwx_iec_ld_horizontal_wire_record_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    offset: usize,
+    start_x: u8,
+    end_x: u8,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.delete_iec_ld_horizontal_wire_record(program_index, offset, start_x, end_x)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_iec_ld_isolated_element)]
+pub fn delete_xgwx_iec_ld_isolated_element_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    offset: usize,
+    expected: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.delete_iec_ld_isolated_element(program_index, offset, expected)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
 #[wasm_bindgen]
 pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
@@ -2105,6 +2191,30 @@ pub fn insert_xgwx_iec_ld_function_cell_wasm(
 
 /// Replace a captured IEC LD function input/output expression.
 #[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_iec_ld_function_output_operand)]
+pub fn delete_xgwx_iec_ld_function_output_operand_wasm(
+    bytes: &[u8], program_index: usize, offset: usize, expected: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.delete_iec_ld_function_output_operand(program_index, offset, expected)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = assign_xgwx_iec_ld_function_output_operand)]
+pub fn assign_xgwx_iec_ld_function_output_operand_wasm(
+    bytes: &[u8], program_index: usize, block_offset: usize, expected_name: &str,
+    ordinal: u8, value: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.assign_iec_ld_function_output_operand(program_index, block_offset, expected_name, ordinal, value)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Replace a captured IEC LD function input/output expression.
+#[cfg(feature = "write")]
 #[wasm_bindgen(js_name = update_xgwx_iec_ld_function_operand)]
 pub fn update_xgwx_iec_ld_function_operand_wasm(
     bytes: &[u8],
@@ -2515,7 +2625,6 @@ mod tests {
             assert_eq!(before, serde_json::to_value(WasmDocumentSummary::from_document(&original)).unwrap());
         }
     }
-
 
 
     #[test]

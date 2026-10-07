@@ -6,3 +6,8 @@
 
 # Synthetic native row-boundary acceptance fixtures
 !fixtures/canvas-rows/*.xgwx
+
+# Synthetic native wire-deletion acceptance fixtures
+!fixtures/ladder-wire-delete/*.xgwx
+
+!fixtures/function-output-wires/*.xgwx

@@ -1130,6 +1130,76 @@ pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Ve
     Ok(program.encode())
 }
 
+/// Remove one exact horizontal wire record, preserving all elements and rows.
+pub(crate) fn delete_ladder_horizontal_wire(
+    bytes: &[u8],
+    raw_y: u32,
+    start_x: u8,
+    end_x: u8,
+) -> Result<Vec<u8>, XgwxError> {
+    let mut program = EditableProgram::parse(bytes)?;
+    let row = program
+        .rows
+        .iter_mut()
+        .find(|row| row.y == raw_y)
+        .ok_or_else(unsupported)?;
+    let index = row
+        .records
+        .iter()
+        .position(|r| {
+            r.x == start_x
+                && (r
+                    .wire_end
+                    .is_some_and(|end| end.checked_add(2) == Some(end_x))
+                    || r.bytes.starts_with(&[255, 1]) && r.x.checked_add(2) == Some(end_x))
+        })
+        .ok_or(XgwxError::InvalidLadderEdit {
+            reason: "wire changed since selection",
+        })?;
+    row.records.remove(index);
+    let output = program.encode();
+    EditableProgram::parse(&output)?;
+    Ok(output)
+}
+
+/// Remove one reciprocal branch reference pair, including a stretched span.
+pub(crate) fn delete_ladder_vertical_wire(
+    bytes: &[u8],
+    raw_x: u8,
+    start_y: u32,
+    end_y: u32,
+) -> Result<Vec<u8>, XgwxError> {
+    let mut program = EditableProgram::parse(bytes)?;
+    let source = program
+        .rows
+        .iter()
+        .position(|row| row.y == start_y)
+        .ok_or_else(unsupported)?;
+    let target = program
+        .rows
+        .iter()
+        .position(|row| row.y == end_y)
+        .ok_or_else(unsupported)?;
+    let first = program.rows[source]
+        .records
+        .iter()
+        .position(|r| r.bytes.starts_with(&[0, 0]) && r.x == raw_x && y_at(&r.bytes, 18) == end_y)
+        .ok_or(XgwxError::InvalidLadderEdit {
+            reason: "wire changed since selection",
+        })?;
+    let last = program.rows[target]
+        .records
+        .iter()
+        .position(|r| r.bytes.starts_with(&[1, 0]) && r.x == raw_x && y_at(&r.bytes, 6) == start_y)
+        .ok_or_else(unsupported)?;
+    program.rows[source].records.remove(first);
+    program.rows[target].records.remove(last);
+    program.rebuild_groups();
+    let output = program.encode();
+    EditableProgram::parse(&output)?;
+    Ok(output)
+}
+
 /// Toggle a vertical connection from this physical row to the next one.
 /// `boundary` is the grid boundary after columns 1 through 9.
 #[derive(Debug, Clone, PartialEq, Eq)]
