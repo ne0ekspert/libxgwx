@@ -431,6 +431,14 @@ name = "iec_x6_branch_delete_acceptance"
 required-features = ["write"]
 
 [[example]]
+name = "variable_text_acceptance"
+required-features = ["write"]
+
+[[example]]
+name = "xgk_canvas_acceptance"
+required-features = ["write"]
+
+[[example]]
 name = "xgk_comparison_acceptance"
 required-features = ["write"]
 
