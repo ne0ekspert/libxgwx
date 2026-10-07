@@ -137,6 +137,27 @@ pub fn delete_xgwx_iec_ld_isolated_element_wasm(
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+#[cfg(feature = "write")]
+#[wasm_bindgen]
+pub fn preview_xgwx_io_variables(bytes: &[u8]) -> Result<JsValue, JsValue> {
+    let doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let rows = doc
+        .preview_io_variables()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let json = serde_json::to_string(&rows).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    js_sys::JSON::parse(&json)
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen]
+pub fn generate_xgwx_io_variables(bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.generate_io_variables()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
 #[wasm_bindgen]
 pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {

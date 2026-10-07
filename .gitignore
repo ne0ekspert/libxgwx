@@ -11,3 +11,4 @@
 !fixtures/ladder-wire-delete/*.xgwx
 
 !fixtures/function-output-wires/*.xgwx
+!fixtures/io-variable-generation/*.xgwx

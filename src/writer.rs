@@ -1785,6 +1785,118 @@ impl XgwxDocument {
         self.apply_xml_replacements(replacements)
     }
 
+    /// Preview native-style digital I/O variables for the current XGK modules.
+    pub fn preview_io_variables(&self) -> Result<Vec<IoVariableGenerationRow>, XgwxError> {
+        crate::io_variables::plan(self)
+    }
+
+    /// Generate digital I/O variables, replacing duplicate names or addresses.
+    /// Unrelated symbol records and every program payload remain untouched.
+    pub fn generate_io_variables(&mut self) -> Result<(), XgwxError> {
+        let rows = self.preview_io_variables()?;
+        if rows.iter().all(|r| r.action == "unchanged") {
+            return Ok(());
+        }
+        let existing = self.variables()?;
+        let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let symbols = document
+            .descendants()
+            .find(|n| n.has_tag_name("Symbols"))
+            .ok_or(XgwxError::MissingSymbols)?;
+        let count = symbols
+            .attribute_node("Count")
+            .ok_or(XgwxError::MissingSymbols)?;
+        if count.value().parse::<usize>().ok() != Some(existing.len()) {
+            return Err(XgwxError::RewriteVerificationFailed);
+        }
+        let text = symbols.children().find(|n| n.is_text());
+        let original = text.and_then(|n| n.text()).unwrap_or_default();
+        let text_range = if let Some(text) = text {
+            text.range()
+        } else {
+            let raw = &self.xml[symbols.range()];
+            if raw.ends_with("/>") {
+                return Err(XgwxError::MissingSymbols);
+            }
+            let offset =
+                symbols.range().start + raw.find('>').ok_or(XgwxError::MissingSymbols)? + 1;
+            offset..offset
+        };
+        let compressed = symbols
+            .attribute("Compressed")
+            .is_some_and(|s| matches!(s, "1" | "true" | "TRUE" | "True"));
+        let payload = decode_base64_payload(original, compressed)?.data;
+        let strings = extract_utf16_marker_strings(&payload, false, true);
+        let starts = strings
+            .iter()
+            .filter(|s| s.value == "SV5.0")
+            .map(|s| s.offset)
+            .collect::<Vec<_>>();
+        if starts.len() != existing.len()
+            || starts.first().is_some_and(|&n| n != 0)
+            || existing.is_empty() && !payload.is_empty()
+        {
+            return Err(XgwxError::RewriteVerificationFailed);
+        }
+        let removed = rows
+            .iter()
+            .flat_map(|r| r.duplicate_indices.iter().copied())
+            .collect::<std::collections::HashSet<_>>();
+        let mut records = existing
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !removed.contains(i))
+            .map(|(i, v)| {
+                (
+                    v.name.clone().unwrap_or_default(),
+                    payload[starts[i]..starts.get(i + 1).copied().unwrap_or(payload.len())]
+                        .to_vec(),
+                )
+            })
+            .collect::<Vec<_>>();
+        records.extend(
+            rows.iter()
+                .map(|r| (r.name.clone(), crate::io_variables::symbol_record(r))),
+        );
+        records.sort_by_key(|(name, _)| name.to_lowercase());
+        let updated = records
+            .iter()
+            .flat_map(|(_, bytes)| bytes.iter().copied())
+            .collect::<Vec<_>>();
+        let replacement = encode_payload_text(original, true, &updated)?;
+        let mut replacements = vec![
+            (text_range, replacement),
+            (count.range_value(), records.len().to_string()),
+        ];
+        let mut attributes = String::new();
+        if let Some(attribute) = symbols.attribute_node("Compressed") {
+            replacements.push((attribute.range_value(), "1".into()));
+        } else {
+            attributes.push_str(" Compressed=\"1\"");
+        }
+        if symbols
+            .attribute(("urn:schemas-microsoft-com:datatypes", "dt"))
+            .is_none()
+        {
+            attributes
+                .push_str(" dt:dt=\"bin.base64\" xmlns:dt=\"urn:schemas-microsoft-com:datatypes\"");
+        }
+        if !attributes.is_empty() {
+            let offset = symbols.range().start
+                + self.xml[symbols.range()]
+                    .find('>')
+                    .ok_or(XgwxError::MissingSymbols)?;
+            replacements.push((offset..offset, attributes));
+        }
+        let mut changed = self.clone();
+        changed.apply_xml_replacements(replacements)?;
+        if changed.variables()?.len() != records.len() {
+            return Err(XgwxError::RewriteVerificationFailed);
+        }
+        *self = changed;
+        Ok(())
+    }
+
     /// Update one global variable, rebuilding bounded name/comment strings.
     pub fn update_variable(
         &mut self,

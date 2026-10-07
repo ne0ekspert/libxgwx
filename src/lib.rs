@@ -65,6 +65,10 @@ mod iec_output_wire_write;
 mod iec_graph;
 mod iec_ld;
 #[cfg(feature = "write")]
+mod io_variables;
+#[cfg(feature = "write")]
+pub use io_variables::IoVariableGenerationRow;
+#[cfg(feature = "write")]
 mod iec_long_feed_timer_write;
 #[cfg(feature = "write")]
 mod iec_open_spine_comparison_write;
