@@ -1560,7 +1560,7 @@ impl XgwxDocument {
     /// All XML outside the selected ProgramData and all other payload bytes
     /// are verified unchanged before the candidate is committed.
     pub fn edit_browser_iec(&mut self, index: usize, patch: &BrowserIecPatch) -> Result<(), XgwxError> {
-        let before = self.ladder_programs().into_iter().nth(index)
+        let before = self.ladder_program(index)
             .ok_or(XgwxError::ProgramNotFound { index })??;
         if before.project_type != Some(2) || before.version.as_deref() != Some("LD VER 1.1") {
             return Err(XgwxError::UnsupportedLadderLayout);
@@ -1617,7 +1617,7 @@ impl XgwxDocument {
                 _ => return Err(XgwxError::InvalidLadderEdit { reason: "unsupported browser ladder operation" }),
             }
         };
-        let after = candidate.ladder_programs().into_iter().nth(index)
+        let after = candidate.ladder_program(index)
             .ok_or(XgwxError::ProgramNotFound { index })??;
         if after.data != expected_payload || candidate.header != self.header || candidate.trailer != self.trailer {
             return Err(XgwxError::RewriteVerificationFailed);
@@ -2174,9 +2174,7 @@ impl XgwxDocument {
             });
         }
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -2326,9 +2324,7 @@ impl XgwxDocument {
             });
         }
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -2504,9 +2500,7 @@ impl XgwxDocument {
             .nth(program_index)
             .ok_or(XgwxError::UnsupportedLadderLayout)??;
         let verified_program = edited
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::UnsupportedLadderLayout)??;
         let verified_blocks = verified_program
             .iec_function_blocks()
@@ -2922,9 +2916,7 @@ impl XgwxDocument {
             },
         )?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3170,9 +3162,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3507,9 +3497,7 @@ impl XgwxDocument {
         replacement: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3547,9 +3535,7 @@ impl XgwxDocument {
         replacement: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3589,9 +3575,7 @@ impl XgwxDocument {
         replacement: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3652,9 +3636,7 @@ impl XgwxDocument {
         replacement: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3697,9 +3679,7 @@ impl XgwxDocument {
         replacement: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3754,9 +3734,7 @@ impl XgwxDocument {
         present: bool,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3831,9 +3809,7 @@ impl XgwxDocument {
         present: bool,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3872,9 +3848,7 @@ impl XgwxDocument {
         x: u8,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -3991,9 +3965,7 @@ impl XgwxDocument {
         x: u8,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4021,9 +3993,7 @@ impl XgwxDocument {
         expected_lower_row: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4054,9 +4024,7 @@ impl XgwxDocument {
         after_row_index: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4113,9 +4081,7 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         let parallel_code = iec_rung_contact_code(parallel_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4167,9 +4133,7 @@ impl XgwxDocument {
         blank_row_index: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4228,9 +4192,7 @@ impl XgwxDocument {
         let contact_code = iec_rung_contact_code(contact_kind)?;
         let coil_code = iec_rung_coil_code(coil_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4315,9 +4277,7 @@ impl XgwxDocument {
             });
         }
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4455,9 +4415,7 @@ impl XgwxDocument {
         let expected_contact_code = iec_rung_contact_code(expected_contact_kind)?;
         let expected_coil_code = iec_rung_coil_code(expected_coil_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4489,9 +4447,7 @@ impl XgwxDocument {
         expected_variable: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4674,9 +4630,7 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         let coil_code = iec_rung_coil_code(coil_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4838,9 +4792,7 @@ impl XgwxDocument {
         let expected_contact_code = iec_rung_contact_code(expected_contact_kind)?;
         let expected_coil_code = iec_rung_coil_code(expected_coil_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4877,9 +4829,7 @@ impl XgwxDocument {
         row_index: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4904,9 +4854,7 @@ impl XgwxDocument {
         row_index: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4962,9 +4910,7 @@ impl XgwxDocument {
         row_index: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -4990,9 +4936,7 @@ impl XgwxDocument {
         row_index: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -5019,9 +4963,7 @@ impl XgwxDocument {
         row_index: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -5075,9 +5017,7 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         let contact_code = iec_rung_contact_code(contact_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -5211,9 +5151,7 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         let contact_code = iec_rung_contact_code(contact_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -5369,9 +5307,7 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         let contact_code = iec_rung_contact_code(contact_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -5502,9 +5438,7 @@ impl XgwxDocument {
         expected_variable: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -5689,9 +5623,7 @@ impl XgwxDocument {
         expected_variable: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -5876,9 +5808,7 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         let expected_code = iec_rung_contact_code(expected_contact_kind)?;
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -5911,9 +5841,7 @@ impl XgwxDocument {
         expected_raw_x: u8,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -6021,9 +5949,7 @@ impl XgwxDocument {
         expected_raw_x: u8,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -6130,9 +6056,7 @@ impl XgwxDocument {
         replacement: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -6292,9 +6216,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -6360,9 +6282,7 @@ impl XgwxDocument {
         operands: &[String],
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -6399,9 +6319,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -6543,9 +6461,7 @@ impl XgwxDocument {
         elapsed: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -6700,9 +6616,7 @@ impl XgwxDocument {
             });
         }
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -6856,9 +6770,7 @@ impl XgwxDocument {
                 continue;
             }
             let inserted = candidate
-                .ladder_programs()
-                .into_iter()
-                .nth(program_index)
+                .ladder_program(program_index)
                 .ok_or(XgwxError::UnsupportedLadderLayout)??;
             let records = inserted
                 .iec_record_frames()
@@ -6890,9 +6802,7 @@ impl XgwxDocument {
             )?;
         }
         let inserted = candidate
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::UnsupportedLadderLayout)??;
         if inserted.iec_row_frames().map(|rows| rows.len()) != Some(before_rows + 2)
             || inserted.iec_function_blocks().map(|blocks| blocks.len()) != Some(before_blocks + 1)
@@ -6925,9 +6835,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -7111,9 +7019,7 @@ impl XgwxDocument {
         expected_first_row_index: u16,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -8057,9 +7963,7 @@ impl XgwxDocument {
             });
         }
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -8093,9 +7997,7 @@ impl XgwxDocument {
             destination_row_index,
         )?;
         let copied_program = edited
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::UnsupportedLadderLayout)??;
         let copied_record = copied_program
             .iec_record_frames()
@@ -8128,9 +8030,7 @@ impl XgwxDocument {
         keep_source: bool,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -8430,9 +8330,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -8461,9 +8359,7 @@ impl XgwxDocument {
         operands: &[String],
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -8502,9 +8398,7 @@ impl XgwxDocument {
                 });
             }
             let program = self
-                .ladder_programs()
-                .into_iter()
-                .nth(program_index)
+                .ladder_program(program_index)
                 .ok_or(XgwxError::ProgramNotFound {
                     index: program_index,
                 })??;
@@ -8535,9 +8429,7 @@ impl XgwxDocument {
                 reason: "unknown IEC function",
             })?;
         let mut program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -8849,9 +8741,7 @@ impl XgwxDocument {
             });
         }
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -9052,9 +8942,7 @@ impl XgwxDocument {
             });
         }
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -9222,9 +9110,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -9365,9 +9251,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -9559,9 +9443,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -9772,9 +9654,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -9971,9 +9851,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -10152,9 +10030,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -10457,9 +10333,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -10647,9 +10521,7 @@ impl XgwxDocument {
         program_index: usize,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -10807,9 +10679,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -11011,9 +10881,7 @@ impl XgwxDocument {
         expected_name: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -11194,9 +11062,7 @@ impl XgwxDocument {
         replacement: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -11242,9 +11108,7 @@ impl XgwxDocument {
         replacement: &str,
     ) -> Result<(), XgwxError> {
         let program = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -11290,9 +11154,7 @@ impl XgwxDocument {
         update: impl FnOnce(&[u8]) -> Result<Vec<u8>, XgwxError>,
     ) -> Result<(), XgwxError> {
         let original = self
-            .ladder_programs()
-            .into_iter()
-            .nth(program_index)
+            .ladder_program(program_index)
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
@@ -11536,9 +11398,7 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         let original_iec = if project_type == "2" {
             let program = self
-                .ladder_programs()
-                .into_iter()
-                .nth(program_index)
+                .ladder_program(program_index)
                 .ok_or(XgwxError::ProgramNotFound {
                     index: program_index,
                 })??;

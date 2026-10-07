@@ -161,6 +161,15 @@ impl XgwxDocument {
             .collect()
     }
 
+    /// Decode only the selected program, without inflating unrelated payloads.
+    /// The index uses the same document order as `ladder_programs`.
+    pub fn ladder_program(&self, index: usize) -> Option<Result<LadderProgramData, XgwxError>> {
+        self.root
+            .descendants_named("Program")
+            .nth(index)
+            .map(LadderProgramData::from_program_element)
+    }
+
     /// Return high-level summaries for all `<XGPD_HS_LINK>` elements.
     pub fn high_speed_links(&self) -> Vec<HighSpeedLinkSummary> {
         self.root

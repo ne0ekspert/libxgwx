@@ -2391,12 +2391,30 @@ impl WasmDocumentSummary {
     }
 }
 
+// Retain only the last summary's bounded set of programs. Exact XML equality
+// covers names, payloads and local metadata; CPU equality covers instruction
+// choices. No hash collisions, stale offsets or cross-workspace index reuse.
+struct CachedBrowserLadder {
+    element: XmlElement,
+    cpu_model: Option<&'static str>,
+    items: usize,
+    summary: WasmLadderProgramSummary,
+}
+
+thread_local! {
+    static BROWSER_LADDER_CACHE: std::cell::RefCell<Vec<CachedBrowserLadder>> = const {
+        std::cell::RefCell::new(Vec::new())
+    };
+}
+
 fn decode_browser_ladder(
     doc: &XgwxDocument,
     program_count: usize,
     warnings: &mut Vec<String>,
 ) -> (Vec<WasmLadderProgramSummary>, usize) {
     let mut ladder = Vec::new();
+    let previous = BROWSER_LADDER_CACHE.with(|cache| std::mem::take(&mut *cache.borrow_mut()));
+    let mut next_cache = Vec::new();
     let mut errors = 0;
     let mut decoded_bytes = 0usize;
     let mut item_count = 0usize;
@@ -2413,17 +2431,34 @@ fn decode_browser_ladder(
         .take(MAX_WASM_LADDER_PROGRAMS)
         .enumerate()
     {
-        let program = match LadderProgramData::from_program_element(element) {
-            Ok(program) => program,
-            Err(error) => {
-                errors += 1;
-                warnings.push(format!("ladder program {program_index}: {error}"));
-                continue;
+        let cached = previous.get(program_index).filter(|cached| {
+            cached.summary.program_index == program_index
+                && cached.cpu_model == cpu_model
+                && cached.element == *element
+        });
+        let (summary, program_items) = if let Some(cached) = cached {
+            (cached.summary.clone(), cached.items)
+        } else {
+            let program = match LadderProgramData::from_program_element(element) {
+                Ok(program) => program,
+                Err(error) => {
+                    errors += 1;
+                    warnings.push(format!("ladder program {program_index}: {error}"));
+                    continue;
+                }
+            };
+            // Check the byte budget before constructing editing-site summaries.
+            if decoded_bytes.saturating_add(program.decoded_len) > MAX_WASM_LADDER_DECODED_BYTES {
+                warnings.push(format!(
+                    "ladder program {program_index}: omitted after reaching the {MAX_WASM_LADDER_DECODED_BYTES}-byte browser decode budget"
+                ));
+                break;
             }
+            let summary = WasmLadderProgramSummary::from_program(program_index, &program, cpu_model);
+            let items = summary.source_item_count(&program);
+            (summary, items)
         };
-        let program_items = WasmLadderProgramSummary::source_item_count(&program);
-
-        if decoded_bytes.saturating_add(program.decoded_len) > MAX_WASM_LADDER_DECODED_BYTES {
+        if decoded_bytes.saturating_add(summary.decoded_len) > MAX_WASM_LADDER_DECODED_BYTES {
             warnings.push(format!(
                 "ladder program {program_index}: omitted after reaching the {MAX_WASM_LADDER_DECODED_BYTES}-byte browser decode budget"
             ));
@@ -2436,13 +2471,12 @@ fn decode_browser_ladder(
             break;
         }
 
-        decoded_bytes += program.decoded_len;
+        decoded_bytes += summary.decoded_len;
         item_count += program_items;
-        ladder.push(WasmLadderProgramSummary::from_program(
-            program_index,
-            &program,
-            cpu_model,
-        ));
+        next_cache.push(CachedBrowserLadder {
+            element: element.clone(), cpu_model, items: program_items, summary: summary.clone(),
+        });
+        ladder.push(summary);
     }
 
     if program_count > MAX_WASM_LADDER_PROGRAMS {
@@ -2451,12 +2485,38 @@ fn decode_browser_ladder(
         ));
     }
 
+    BROWSER_LADDER_CACHE.with(|cache| *cache.borrow_mut() = next_cache);
     (ladder, errors)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ladder_summary_cache_matches_fresh_decode_after_edit_and_undo() {
+        let original = XgwxDocument::parse(include_bytes!("../../fixtures/canvas-rows/iec-row300-native.xgwx")).unwrap();
+        let fresh = |doc: &XgwxDocument| {
+            BROWSER_LADDER_CACHE.with(|cache| cache.borrow_mut().clear());
+            serde_json::to_value(WasmDocumentSummary::from_document(doc)).unwrap()
+        };
+        let before = fresh(&original);
+        assert_eq!(before, serde_json::to_value(WasmDocumentSummary::from_document(&original)).unwrap());
+        let program = original.ladder_program(0).unwrap().unwrap();
+        let summary = WasmLadderProgramSummary::from_program(0, &program, None);
+        assert_eq!(summary.source_item_count(&program), WasmLadderProgramSummary::original_source_item_count(&program));
+        #[cfg(feature = "write")]
+        {
+            let mut edited = original.clone();
+            edited.insert_iec_ld_single_element(0, 400, 1, "contact", "NO", "%MX1").unwrap();
+            let cached = serde_json::to_value(WasmDocumentSummary::from_document(&edited)).unwrap();
+            assert_ne!(cached["ladder"], before["ladder"]);
+            assert_eq!(cached, fresh(&edited));
+            assert_eq!(before, serde_json::to_value(WasmDocumentSummary::from_document(&original)).unwrap());
+        }
+    }
+
+
 
     #[test]
     fn browser_summary_preserves_parameter_details() {

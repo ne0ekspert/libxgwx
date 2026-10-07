@@ -2,7 +2,7 @@ use crate::*;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderProgramSummary {
     pub(super) program_index: usize,
@@ -59,7 +59,8 @@ pub(super) struct WasmLadderProgramSummary {
 }
 
 impl WasmLadderProgramSummary {
-    pub(super) fn source_item_count(program: &LadderProgramData) -> usize {
+    #[cfg(test)]
+    pub(super) fn original_source_item_count(program: &LadderProgramData) -> usize {
         source_strings(program).len()
             + program.iec_row_frames().map_or(0, |frames| frames.len())
             + program.iec_record_frames().map_or(0, |frames| frames.len())
@@ -119,6 +120,37 @@ impl WasmLadderProgramSummary {
             + program.structure.output_comments.len()
             + program.structure.unknown_records.len()
             + program.instructions.len()
+    }
+
+    // Count the decoded collections already built for rendering. Keep the
+    // historical budget (including decoded, rather than padded, XGK rungs).
+    pub(super) fn source_item_count(&self, program: &LadderProgramData) -> usize {
+        self.source_strings.len()
+            + self.iec_rows.len()
+            + self.iec_records.len()
+            + self.iec_functions.len()
+            + self.iec_function_references.len()
+            + self.iec_function_operand_links.len()
+            + self.iec_terminal_function_deletion_sites.len()
+            + self.iec_standalone_function_deletion_sites.len()
+            + self.iec_standalone_function_insertion_sites.len()
+            + self.iec_function_cell_deletion_sites.len()
+            + self.iec_connected_arithmetic_deletion_sites.len()
+            + self.iec_function_cell_insertion_sites.len()
+            + self.iec_no_contact_insertion_sites.len()
+            + self.iec_no_contact_deletion_sites.len()
+            + self.iec_no_contact_cell_deletion_sites.len()
+            + self.iec_horizontal_wire_repair_sites.len()
+            + self.iec_geometry.as_ref().map_or(0, |g| g.horizontal.len() + g.vertical.len())
+            + program.structure.rungs.len()
+            + self.cells.len()
+            + self.vertical_lines.len()
+            + self.branch_groups.len()
+            + self.horizontal_lines.len()
+            + self.rung_comments.len()
+            + self.output_comments.len()
+            + self.unknown_records.len()
+            + self.instructions.len()
     }
 
     pub(super) fn from_program(
@@ -545,7 +577,7 @@ impl WasmLadderProgramSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecRowSummary {
     pub(super) group_index: usize,
@@ -567,7 +599,7 @@ impl WasmIecRowSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecRecordSummary {
     group_index: usize,
@@ -603,7 +635,7 @@ impl WasmIecRecordSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecFunctionReferenceSummary {
     group_index: usize,
@@ -641,7 +673,7 @@ impl WasmIecFunctionReferenceSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecFunctionOperandLinkSummary {
     group_index: usize,
@@ -673,7 +705,7 @@ impl WasmIecFunctionOperandLinkSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecTerminalFunctionDeletionSiteSummary {
     group_index: usize,
@@ -697,7 +729,7 @@ impl WasmIecTerminalFunctionDeletionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecTerminalFunctionInsertionSiteSummary {
     group_index: usize,
@@ -719,7 +751,7 @@ impl WasmIecTerminalFunctionInsertionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecStandaloneFunctionDeletionSiteSummary {
     group_index: usize,
@@ -743,7 +775,7 @@ impl WasmIecStandaloneFunctionDeletionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecStandaloneFunctionInsertionSiteSummary {
     group_index: usize,
@@ -763,7 +795,7 @@ impl WasmIecStandaloneFunctionInsertionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecFunctionCellDeletionSiteSummary {
     group_index: usize,
@@ -785,7 +817,7 @@ impl WasmIecFunctionCellDeletionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecConnectedArithmeticDeletionSiteSummary {
     group_index: usize,
@@ -807,7 +839,7 @@ impl WasmIecConnectedArithmeticDeletionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecWiredComparisonInsertionSiteSummary {
     group_index: usize,
@@ -815,7 +847,7 @@ pub(super) struct WasmIecWiredComparisonInsertionSiteSummary {
     raw_x: u8,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecFunctionCellInsertionSiteSummary {
     function_name: &'static str,
@@ -839,7 +871,7 @@ impl WasmIecFunctionCellInsertionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecNoContactInsertionSiteSummary {
     group_index: usize,
@@ -849,7 +881,7 @@ pub(super) struct WasmIecNoContactInsertionSiteSummary {
     end_x: u8,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecShortWireContactInsertionSiteSummary {
     group_index: usize,
@@ -869,7 +901,7 @@ impl WasmIecShortWireContactInsertionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecLeadingContactInsertionSiteSummary {
     group_index: usize,
@@ -899,7 +931,7 @@ impl WasmIecNoContactInsertionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecNoContactDeletionSiteSummary {
     group_index: usize,
@@ -921,7 +953,7 @@ impl WasmIecNoContactDeletionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecHorizontalWireRepairSiteSummary {
     group_index: usize,
@@ -941,7 +973,7 @@ impl WasmIecHorizontalWireRepairSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecHorizontalWireDeletionSiteSummary {
     group_index: usize,
@@ -961,7 +993,7 @@ impl WasmIecHorizontalWireDeletionSiteSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecFunctionSummary {
     group_index: usize,
@@ -1013,7 +1045,7 @@ impl WasmIecFunctionSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecFunctionPinSummary {
     name: String,
@@ -1055,7 +1087,7 @@ impl WasmIecFunctionPinSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecFunctionFieldSummary {
     offset: usize,
@@ -1071,7 +1103,7 @@ impl WasmIecFunctionFieldSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecGeometrySummary {
     horizontal: Vec<WasmIecHorizontalSummary>,
@@ -1095,7 +1127,7 @@ impl WasmIecGeometrySummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecHorizontalSummary {
     group_index: usize,
@@ -1117,7 +1149,7 @@ impl WasmIecHorizontalSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecVerticalSummary {
     group_index: usize,
@@ -1141,7 +1173,7 @@ impl WasmIecVerticalSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmIecCircuitGraphSummary {
     edges: Vec<WasmIecCircuitEdgeSummary>,
@@ -1184,7 +1216,7 @@ impl WasmIecCircuitGraphSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecCircuitEdgeSummary {
     kind: &'static str,
@@ -1215,7 +1247,7 @@ impl WasmIecCircuitEdgeSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecCircuitPointSummary {
     group_index: usize,
@@ -1233,7 +1265,7 @@ impl WasmIecCircuitPointSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecCircuitAreaSummary {
     kind: &'static str,
@@ -1268,7 +1300,7 @@ impl WasmIecCircuitAreaSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecFunctionBindingSummary {
     group_index: usize,
@@ -1307,7 +1339,7 @@ impl WasmIecFunctionBindingSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WasmIecPowerComponentSummary {
     group_index: usize,
@@ -1340,7 +1372,7 @@ fn source_strings(program: &LadderProgramData) -> Vec<LadderString> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderStringSummary {
     pub(super) offset: usize,
@@ -1404,7 +1436,7 @@ impl WasmLadderStringSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderRungSummary {
     pub(super) raw_y: u32,
@@ -1420,7 +1452,7 @@ impl WasmLadderRungSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderCellSummary {
     pub(super) offset: usize,
@@ -1510,7 +1542,7 @@ impl WasmLadderCellSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderVerticalLineSummary {
     pub(super) raw_x: u8,
@@ -1528,7 +1560,7 @@ impl WasmLadderVerticalLineSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderBranchGroupSummary {
     pub(super) raw_x: u8,
@@ -1546,7 +1578,7 @@ impl WasmLadderBranchGroupSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderHorizontalLineSummary {
     pub(super) raw_y: u32,
@@ -1564,7 +1596,7 @@ impl WasmLadderHorizontalLineSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderRungCommentSummary {
     pub(super) offset: usize,
@@ -1584,7 +1616,7 @@ impl WasmLadderRungCommentSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderOutputCommentSummary {
     pub(super) offset: usize,
@@ -1604,7 +1636,7 @@ impl WasmLadderOutputCommentSummary {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderUnknownRecordSummary {
     pub(super) offset: usize,
@@ -1634,7 +1666,7 @@ fn hex_bytes(bytes: &[u8]) -> String {
         .join(" ")
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderInstructionSummary {
     pub(super) mnemonic: String,
@@ -1694,7 +1726,7 @@ fn wasm_ladder_coil_label(coil: LadderCoil) -> &'static str {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmLadderInstructionChoice {
     #[serde(flatten)]
