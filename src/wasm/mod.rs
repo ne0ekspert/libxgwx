@@ -2328,6 +2328,7 @@ struct WasmDocumentSummary {
     iec_system_variables: Vec<WasmIecSystemVariableSummary>,
     hardware: WasmHardwareSummary,
     ladder: Vec<WasmLadderProgramSummary>,
+    sfc: Vec<SfcProgram>,
     networks: Vec<WasmNetworkSummary>,
     xgpd: Vec<WasmXgpdSummary>,
     cnet: Vec<WasmCnetSummary>,
@@ -2378,18 +2379,29 @@ impl WasmDocumentSummary {
             }
         };
         let variable_count = variable_summaries.as_ref().map(Vec::len);
+        let sfc_programs = doc.sfc_programs();
+        let sfc_indices = sfc_programs
+            .iter()
+            .map(|program| program.program_index)
+            .collect::<std::collections::HashSet<_>>();
         let local_variables = doc
             .iec_local_symbols()
             .into_iter()
             .enumerate()
-            .map(|(program_index, result)| match result {
-                Ok(symbols) => symbols
-                    .into_iter()
-                    .map(WasmIecLocalSymbolSummary::from_symbol)
-                    .collect(),
-                Err(error) => {
-                    warnings.push(format!("program {program_index} local symbols: {error}"));
-                    Vec::new()
+            .map(|(program_index, result)| {
+                if sfc_indices.contains(&program_index) {
+                    warnings.push(format!("program {program_index}: SFC local symbols are preserved but not decoded"));
+                    return Vec::new();
+                }
+                match result {
+                    Ok(symbols) => symbols
+                        .into_iter()
+                        .map(WasmIecLocalSymbolSummary::from_symbol)
+                        .collect(),
+                    Err(error) => {
+                        warnings.push(format!("program {program_index} local symbols: {error}"));
+                        Vec::new()
+                    }
                 }
             })
             .collect::<Vec<Vec<WasmIecLocalSymbolSummary>>>();
@@ -2440,6 +2452,7 @@ impl WasmDocumentSummary {
         let xgpd_configs = doc.xgpd_config_infos();
 
         Self {
+            sfc: sfc_programs,
             header: WasmHeaderSummary::from_header(&doc.header, doc.trailer.len()),
             project: WasmProjectSummary {
                 name: project.name,
@@ -2562,6 +2575,9 @@ fn decode_browser_ladder(
         .take(MAX_WASM_LADDER_PROGRAMS)
         .enumerate()
     {
+        if element.descendants_named("SFC_ProgramList").next().is_some() {
+            continue;
+        }
         let cached = previous.get(program_index).filter(|cached| {
             cached.summary.program_index == program_index
                 && cached.cpu_model == cpu_model
@@ -2729,4 +2745,16 @@ mod tests {
         let json = serde_json::to_value(WasmDocumentSummary::from_document(&doc)).unwrap();
         assert!(json.pointer("/hardware/cpuProfile").unwrap().is_null());
     }
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_sfc_entity)]
+pub fn edit_xgwx_sfc_entity_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
+    let patch: SfcEntityPatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_sfc_entity(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
 }

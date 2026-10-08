@@ -12,3 +12,6 @@
 
 !fixtures/function-output-wires/*.xgwx
 !fixtures/io-variable-generation/*.xgwx
+
+# Synthetic XG5000 SFC acceptance fixtures
+!fixtures/sfc/*.xgwx

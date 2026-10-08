@@ -43,6 +43,10 @@ pub use cnet_write::{CnetFieldEdit, CnetSettingsPatch};
 mod comparison_catalog;
 mod cpu;
 mod document;
+mod sfc;
+pub use sfc::{SfcBlock, SfcEntity, SfcProgram};
+#[cfg(feature = "write")]
+pub use sfc::SfcEntityPatch;
 mod error;
 #[cfg(feature = "write")]
 mod iec_chain_comparison_write;

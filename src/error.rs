@@ -199,6 +199,7 @@ pub enum XgwxError {
     AuthenticatedRewriteUnsupported,
     BrowserHardwareEdit(String),
     BrowserNetworkEdit(String),
+    SfcEdit(String),
     RewriteVerificationFailed,
 }
 
@@ -423,6 +424,7 @@ impl fmt::Display for XgwxError {
             }
             Self::InvalidLadderEdit { reason } => write!(f, "cannot edit ladder cell: {reason}"),
             Self::BrowserHardwareEdit(reason) => write!(f, "hardware edit rejected: {reason}"),
+            Self::SfcEdit(reason) => write!(f, "SFC edit rejected: {reason}"),
             Self::BrowserNetworkEdit(reason) => write!(f, "network edit rejected: {reason}"),
             Self::RewriteVerificationFailed => write!(f, "rewritten workspace failed XML or container preservation verification"),
             Self::AuthenticatedRewriteUnsupported => write!(

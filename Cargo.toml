@@ -449,3 +449,7 @@ required-features = ["write"]
 [[example]]
 name = "xgk_string_acceptance"
 required-features = ["write"]
+
+[[example]]
+name = "sfc_acceptance"
+required-features = ["write"]

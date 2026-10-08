@@ -727,3 +727,18 @@ comparison OUT and use F5, Enter, or double-click. F5 on the following blank
 cell extends the wire. Arithmetic and conversion OUT fields keep their numeric
 destination. Comparisons accept two sources and an optional BOOL destination;
 wiring OUT replaces that assignment. Unsupported block layouts remain guarded.
+
+### SFC charts
+
+`XgwxDocument::sfc_programs()` reads native SFC XML blocks and their positioned
+entities independently of binary ladder bodies. It retains unknown property
+attributes. The WASM summary exposes this model as `sfc`; the VS Code editor
+renders steps, transitions, labels, jumps, and variable actions in a dedicated
+SFC view.
+
+With `write`, `edit_sfc_entity(&SfcEntityPatch)` supports step comments
+and existing direct `%MX` BOOL transition conditions, with stale-value and
+position checks. Transition annotation cells are synchronized. Step names,
+qualifiers, program references, and structural changes remain read only.
+Native XG5000 checks and Save As comparisons are documented in
+[`fixtures/sfc/README.md`](fixtures/sfc/README.md).
