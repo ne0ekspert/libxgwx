@@ -44,9 +44,9 @@ mod comparison_catalog;
 mod cpu;
 mod document;
 mod sfc;
-pub use sfc::{SfcBlock, SfcEntity, SfcProgram, SfcRow};
+pub use sfc::{SfcBlock, SfcEntity, SfcProgram, SfcRow, SfcVariable};
 #[cfg(feature = "write")]
-pub use sfc::{SfcEntityPatch, SfcSequencePatch};
+pub use sfc::{SfcEntityPatch, SfcSequencePatch, SfcVariablePatch};
 mod error;
 #[cfg(feature = "write")]
 mod iec_chain_comparison_write;

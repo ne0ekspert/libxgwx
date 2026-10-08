@@ -190,6 +190,8 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
             initial: false,
             action: None,
             action_qualifier: None,
+            action_code: None,
+            transition_code: None,
             action_time: None,
         },
         SfcRow {
@@ -199,6 +201,8 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
             initial: true,
             action: Some("%MX10".into()),
             action_qualifier: None,
+            action_code: None,
+            transition_code: None,
             action_time: None,
         },
         SfcRow {
@@ -208,6 +212,8 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
             initial: false,
             action: None,
             action_qualifier: None,
+            action_code: None,
+            transition_code: None,
             action_time: None,
         },
         SfcRow {
@@ -217,10 +223,13 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
             initial: false,
             action: None,
             action_qualifier: None,
+            action_code: None,
+            transition_code: None,
             action_time: None,
         },
     ];
     let patch = SfcSequencePatch {
+        expected_rows: None,
         program_index: 0,
         block_index: 0,
         expected_entities: vec![],
@@ -243,6 +252,7 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
     let mut rows = rows;
     rows.swap(1, 2);
     doc.replace_sfc_sequence(&SfcSequencePatch {
+        expected_rows: None,
         expected_entities: block.entities.clone(),
         rows: rows.clone(),
         ..patch.clone()
@@ -257,6 +267,7 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
     );
     let expected = doc.sfc_programs()[0].blocks[0].entities.clone();
     doc.replace_sfc_sequence(&SfcSequencePatch {
+        expected_rows: None,
         expected_entities: expected,
         rows: vec![],
         ..patch
@@ -290,6 +301,7 @@ fn linear_chart_invalid_names_operands_targets_and_initial_steps_are_atomic() {
         }
         assert!(
             doc.replace_sfc_sequence(&SfcSequencePatch {
+                expected_rows: None,
                 program_index: 0,
                 block_index: 0,
                 expected_entities: block.entities.clone(),
@@ -330,6 +342,7 @@ fn branches_program_references_and_unknown_native_data_fail_closed() {
         let original = doc.xml.clone();
         assert!(
             doc.replace_sfc_sequence(&SfcSequencePatch {
+                expected_rows: None,
                 program_index: 0,
                 block_index: 0,
                 expected_entities: block.entities.clone(),
@@ -402,9 +415,12 @@ fn action_qualifiers_times_and_invalid_candidates_are_atomic() {
             initial: true,
             action: Some("%MX10".into()),
             action_qualifier: (qualifier != "N").then(|| qualifier.into()),
+            action_code: None,
+            transition_code: None,
             action_time: timed.then(|| "T#1m2s500ms".into()),
         }];
         let patch = SfcSequencePatch {
+            expected_rows: None,
             program_index: 0,
             block_index: 0,
             expected_entities: doc.sfc_programs()[0].blocks[0].entities.clone(),
@@ -434,6 +450,7 @@ fn action_qualifiers_times_and_invalid_candidates_are_atomic() {
             invalid[0].action_qualifier = Some(q.into());
             invalid[0].action_time = Some(t.into());
             let patch = SfcSequencePatch {
+                expected_rows: None,
                 program_index: 0,
                 block_index: 0,
                 expected_entities: doc.sfc_programs()[0].blocks[0].entities.clone(),
@@ -475,5 +492,207 @@ fn native_action_qualifier_save_as_retains_all_nine_types_times_and_symbols() {
         .zip(["1", "2", "4", "8", "16", "32", "64", "128", "256"])
     {
         assert_eq!(entity.properties["EntityAction"]["Qualifier"], q);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn native_st_programs_decode_and_generated_sources_roundtrip() {
+    use xgwx::SfcSequencePatch;
+    let mut doc = XgwxDocument::from_path("fixtures/sfc/native-st-programs.xgwx").unwrap();
+    let program = doc.sfc_programs().remove(0);
+    assert_eq!(program.blocks.len(), 3);
+    assert!(
+        program
+            .variables
+            .iter()
+            .any(|v| v.name == "Count" && v.data_type == "DINT")
+    );
+    assert!(
+        program
+            .variables
+            .iter()
+            .any(|v| v.name == "Delay" && v.data_type == "TON")
+    );
+    assert_eq!(program.variables.iter().filter(|v| v.system).count(), 2);
+    let block = &program.blocks[0];
+    let mut rows = block
+        .editable_rows
+        .clone()
+        .expect("captured ST chart is editable");
+    assert!(
+        rows[1]
+            .action_code
+            .as_ref()
+            .unwrap()
+            .contains("Delay(IN := TRUE")
+    );
+    assert!(
+        rows[2]
+            .transition_code
+            .as_ref()
+            .unwrap()
+            .contains("TRANS := Count")
+    );
+    rows[1].action_code = Some("Count := ADD(Count, 2);\r\nDelay(IN := TRUE, PT := T#1s);".into());
+    doc.replace_sfc_sequence(&SfcSequencePatch {
+        expected_rows: block.editable_rows.clone(),
+        program_index: 0,
+        block_index: 0,
+        expected_entities: block.entities.clone(),
+        rows: rows.clone(),
+    })
+    .unwrap();
+    let result = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
+    assert_eq!(result.sfc_programs()[0].blocks[0].editable_rows, Some(rows));
+    assert_eq!(result.sfc_variables(0).unwrap(), program.variables);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion() {
+    use xgwx::SfcVariablePatch;
+    let mut doc = XgwxDocument::from_path("fixtures/sfc/native-st-programs.xgwx").unwrap();
+    for ty in [
+        "WORD",
+        "DWORD",
+        "LWORD",
+        "INT",
+        "DINT",
+        "UINT",
+        "UDINT",
+        "LINT",
+        "ULINT",
+        "REAL",
+        "LREAL",
+        "TIME",
+        "TOF",
+        "TP",
+        "CTU_DINT",
+        "CTD_DINT",
+        "CTUD_DINT",
+        "R_TRIG",
+        "F_TRIG",
+        "RS",
+        "SR",
+    ] {
+        let name = format!("Var_{ty}");
+        let expected = doc.sfc_variables(0).unwrap();
+        doc.edit_sfc_variable(&SfcVariablePatch {
+            program_index: 0,
+            expected_variables: expected,
+            name: name.clone(),
+            data_type: ty.into(),
+            description: "typed declaration".into(),
+            remove: false,
+        })
+        .unwrap();
+        assert!(
+            doc.sfc_variables(0)
+                .unwrap()
+                .iter()
+                .any(|v| v.name == name && v.data_type == ty)
+        );
+    }
+    let expected = doc.sfc_variables(0).unwrap();
+    let bytes = doc.to_verified_bytes().unwrap();
+    for name in ["Count", "Delay", "TRANS", "GOTO_INIT"] {
+        assert!(
+            doc.edit_sfc_variable(&SfcVariablePatch {
+                program_index: 0,
+                expected_variables: expected.clone(),
+                name: name.into(),
+                data_type: "DINT".into(),
+                description: "".into(),
+                remove: true
+            })
+            .is_err()
+        );
+        assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
+    }
+    doc.edit_sfc_variable(&SfcVariablePatch {
+        program_index: 0,
+        expected_variables: expected,
+        name: "Var_WORD".into(),
+        data_type: "WORD".into(),
+        description: "".into(),
+        remove: true,
+    })
+    .unwrap();
+    assert!(
+        !doc.sfc_variables(0)
+            .unwrap()
+            .iter()
+            .any(|v| v.name == "Var_WORD")
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn native_st_save_as_retains_typed_variables_blocks_and_bool_references() {
+    let source = XgwxDocument::from_path("fixtures/sfc/st-programs-generated.xgwx").unwrap();
+    let native = XgwxDocument::from_path("fixtures/sfc/st-programs-native-roundtrip.xgwx").unwrap();
+    let a = source.sfc_programs().remove(0);
+    let b = native.sfc_programs().remove(0);
+    assert_eq!(a.variables, b.variables);
+    assert_eq!(a.variables_error, None);
+    assert_eq!(b.variables_error, None);
+    assert_eq!(a.blocks[0].editable_rows, b.blocks[0].editable_rows);
+    let rows = b.blocks[0].editable_rows.as_ref().unwrap();
+    assert_eq!(rows[3].action.as_deref(), Some("Value_BOOL"));
+    assert_eq!(rows[4].title, "Value_BOOL");
+    let mut doc = native.clone();
+    let mut edited = rows.clone();
+    edited[1].action_code = Some("Count := ADD(Count, 2);".into());
+    let patch = xgwx::SfcSequencePatch {
+        program_index: 0,
+        block_index: 0,
+        expected_entities: b.blocks[0].entities.clone(),
+        expected_rows: Some(rows.clone()),
+        rows: edited.clone(),
+    };
+    doc.replace_sfc_sequence(&patch).unwrap();
+    assert_eq!(doc.sfc_programs()[0].blocks[0].editable_rows, Some(edited));
+    let bytes = doc.to_verified_bytes().unwrap();
+    assert!(doc.replace_sfc_sequence(&patch).is_err());
+    assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn sfc_st_unknown_metadata_and_post_scan_actions_are_guarded() {
+    for (before, after) in [
+        ("ActionPostScan=\"0\"", "ActionPostScan=\"1\""),
+        ("CodeCount=\"50\"", "CodeCount=\"50\" Unknown=\"keep\""),
+        (
+            "LanguageType=\"1\" Language=\"4\"",
+            "LanguageType=\"1\" Language=\"1\"",
+        ),
+        (
+            "<Breakpoints></Breakpoints>",
+            "<Breakpoints><Breakpoint Line=\"0\"/></Breakpoints>",
+        ),
+    ] {
+        let mut source = XgwxDocument::from_path("fixtures/sfc/native-st-programs.xgwx").unwrap();
+        assert!(
+            source.xml.contains(before),
+            "missing capture pattern {before}"
+        );
+        source.xml = source.xml.replacen(before, after, 1);
+        let mut doc = XgwxDocument::parse(&source.to_bytes().unwrap()).unwrap();
+        let program = doc.sfc_programs().remove(0);
+        assert!(program.blocks[0].editable_rows.is_none());
+        let bytes = doc.to_verified_bytes().unwrap();
+        assert!(
+            doc.replace_sfc_sequence(&xgwx::SfcSequencePatch {
+                program_index: 0,
+                block_index: 0,
+                expected_entities: program.blocks[0].entities.clone(),
+                expected_rows: None,
+                rows: vec![]
+            })
+            .is_err()
+        );
+        assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
     }
 }

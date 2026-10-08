@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 pub struct SfcProgram {
     pub program_index: usize,
     pub blocks: Vec<SfcBlock>,
+    pub variables: Vec<SfcVariable>,
+    pub variables_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +51,17 @@ impl XgwxDocument {
             .enumerate()
             .filter_map(|(program_index, program)| {
                 let list = program.descendants_named("SFC_ProgramList").next()?;
+                let variables = self.sfc_variables(program_index);
+                let bool_names = variables
+                    .as_ref()
+                    .map(|vars| {
+                        vars.iter()
+                            .filter(|v| !v.system && v.data_type == "BOOL")
+                            .map(|v| v.name.to_lowercase())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let sources = st_sources(list);
                 let blocks = list
                     .descendants_named("SFC_ProgramProperty")
                     .enumerate()
@@ -89,10 +102,9 @@ impl XgwxDocument {
                             entities,
                             editable_rows: None,
                         };
-                        if list.descendants_named("SFC_ProgramProperty").count() == 1
-                            && linear_container_supported(block)
-                        {
-                            result.editable_rows = result.linear_rows();
+                        if sources.is_some() && linear_container_supported(block) {
+                            result.editable_rows =
+                                result.linear_rows(sources.as_ref().unwrap(), &bool_names);
                         }
                         result
                     })
@@ -100,6 +112,8 @@ impl XgwxDocument {
                 Some(SfcProgram {
                     program_index,
                     blocks,
+                    variables_error: variables.as_ref().err().map(ToString::to_string),
+                    variables: variables.unwrap_or_default(),
                 })
             })
             .collect()
@@ -261,10 +275,24 @@ pub struct SfcRow {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub action_time: Option<String>,
+    #[cfg_attr(
+        feature = "wasm",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub action_code: Option<String>,
+    #[cfg_attr(
+        feature = "wasm",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub transition_code: Option<String>,
 }
 
 impl SfcBlock {
-    fn linear_rows(&self) -> Option<Vec<SfcRow>> {
+    fn linear_rows(
+        &self,
+        sources: &BTreeMap<String, (u32, String)>,
+        bool_names: &[String],
+    ) -> Option<Vec<SfcRow>> {
         if !self.main || self.language_type != Some(3) || self.language != Some(2) {
             return None;
         }
@@ -305,9 +333,14 @@ impl SfcBlock {
             if p.len() != keys.len() || keys.iter().any(|k| !p.contains_key(*k)) {
                 return None;
             }
-            if ["Bookmark", "BreakPoint", "PropertyProgram", "StepVariable"]
+            if ["Bookmark", "BreakPoint", "StepVariable"]
                 .iter()
                 .any(|k| p[*k] != "0")
+            {
+                return None;
+            }
+            if !matches!(p["PropertyProgram"].as_str(), "0" | "1")
+                || p["PropertyProgram"] == "1" && !matches!(e.type_code, Some(1 | 2))
             {
                 return None;
             }
@@ -367,6 +400,30 @@ impl SfcBlock {
                 title: p["Title"].clone(),
                 comment: p["Comment"].clone(),
                 initial: p["InitialStep"] == "1",
+                action_code: if adjacent.type_code == Some(2)
+                    && adjacent.properties["EntityStep"]["PropertyProgram"] == "1"
+                {
+                    let (kind, source) =
+                        sources.get(&adjacent.properties["EntityStep"]["Title"])?;
+                    if *kind != 1 {
+                        return None;
+                    }
+                    Some(source.clone())
+                } else {
+                    None
+                },
+                transition_code: if p["PropertyProgram"] == "1" {
+                    if kind != "transition" {
+                        return None;
+                    }
+                    let (kind, source) = sources.get(&p["Title"])?;
+                    if *kind != 2 {
+                        return None;
+                    }
+                    Some(source.clone())
+                } else {
+                    None
+                },
                 action,
                 action_qualifier: if adjacent.type_code == Some(2) {
                     let q = qualifier_name(&adjacent.properties["EntityAction"]["Qualifier"])?;
@@ -382,7 +439,7 @@ impl SfcBlock {
                 },
             });
         }
-        validate_rows(&rows).ok()?;
+        validate_rows(&rows, bool_names).ok()?;
         Some(rows)
     }
 }
@@ -493,7 +550,7 @@ fn valid_action_time(time: &str) -> bool {
     parts > 0 && total <= u32::MAX as u64
 }
 
-fn validate_rows(rows: &[SfcRow]) -> Result<(), crate::XgwxError> {
+fn validate_rows(rows: &[SfcRow], bool_names: &[String]) -> Result<(), crate::XgwxError> {
     let fail = |s: &str| crate::XgwxError::SfcEdit(s.into());
     if rows.len() > 512 {
         return Err(fail("linear charts support at most 512 rows"));
@@ -506,14 +563,34 @@ fn validate_rows(rows: &[SfcRow]) -> Result<(), crate::XgwxError> {
                 .all(|(i, c)| c == b'_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()))
     };
     let bool_address = |s: &str| {
-        s.strip_prefix("%MX").is_some_and(|n| {
-            !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()) && n.parse::<u16>().is_ok()
-        })
+        bool_names.contains(&s.to_lowercase())
+            || s.strip_prefix("%MX").is_some_and(|n| {
+                !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()) && n.parse::<u16>().is_ok()
+            })
     };
     let mut steps = std::collections::BTreeSet::new();
     let mut labels = std::collections::BTreeSet::new();
     let mut initial_count = 0;
     for row in rows {
+        if row.action_code.is_some() && (row.kind != "step" || row.action.is_none())
+            || row.transition_code.is_some() && row.kind != "transition"
+        {
+            return Err(fail("ST source requires an action or transition program"));
+        }
+        for code in [&row.action_code, &row.transition_code]
+            .into_iter()
+            .flatten()
+        {
+            if code.encode_utf16().count() > 65536
+                || code
+                    .chars()
+                    .any(|c| c == '\0' || (c.is_control() && !matches!(c, '\r' | '\n' | '\t')))
+            {
+                return Err(fail(
+                    "ST source is too long or contains invalid control characters",
+                ));
+            }
+        }
         if row.comment.len() > 65536 {
             return Err(fail("comment is too long"));
         }
@@ -538,16 +615,29 @@ fn validate_rows(rows: &[SfcRow]) -> Result<(), crate::XgwxError> {
                         return Err(fail("this action qualifier does not use a time"));
                     }
                 }
-                if row.action.as_deref().is_some_and(|a| !bool_address(a)) {
-                    return Err(fail("actions require a direct %MX BOOL address"));
+                if row.action.as_deref().is_some_and(|a| {
+                    if row.action_code.is_some() {
+                        !identifier(a)
+                    } else {
+                        !bool_address(a)
+                    }
+                }) {
+                    return Err(fail(
+                        "actions require a direct %MX address or declared BOOL variable",
+                    ));
                 }
             }
-            "transition" if bool_address(&row.title) => {}
+            "transition"
+                if if row.transition_code.is_some() {
+                    identifier(&row.title)
+                } else {
+                    bool_address(&row.title)
+                } => {}
             "label" if identifier(&row.title) && labels.insert(&row.title) => {}
             "jump" if identifier(&row.title) => {}
             _ => {
                 return Err(fail(
-                    "use unique label identifiers and direct %MX BOOL transitions",
+                    "use unique label identifiers and %MX or declared BOOL transitions",
                 ));
             }
         }
@@ -581,6 +671,8 @@ pub struct SfcSequencePatch {
     pub block_index: usize,
     pub expected_entities: Vec<SfcEntity>,
     pub rows: Vec<SfcRow>,
+    #[cfg_attr(feature = "wasm", serde(default))]
+    pub expected_rows: Option<Vec<SfcRow>>,
 }
 
 #[cfg(feature = "write")]
@@ -601,6 +693,17 @@ impl XgwxDocument {
             .blocks
             .get(patch.block_index)
             .ok_or_else(|| fail("SFC block is absent"))?;
+        if patch
+            .expected_rows
+            .as_ref()
+            .is_some_and(|rows| block.editable_rows.as_ref() != Some(rows))
+            || block.editable_rows.as_ref().is_some_and(|rows| {
+                rows.iter()
+                    .any(|r| r.action_code.is_some() || r.transition_code.is_some())
+            }) && patch.expected_rows.is_none()
+        {
+            return Err(fail("stale or missing SFC source snapshot"));
+        }
         if block.entities != patch.expected_entities {
             return Err(fail("stale SFC chart"));
         }
@@ -609,7 +712,13 @@ impl XgwxDocument {
                 "only captured linear main charts with direct BOOL operands and supported actions support structural editing",
             ));
         }
-        validate_rows(&patch.rows)?;
+        let bool_names = program
+            .variables
+            .iter()
+            .filter(|v| !v.system && v.data_type == "BOOL")
+            .map(|v| v.name.to_lowercase())
+            .collect::<Vec<_>>();
+        validate_rows(&patch.rows, &bool_names)?;
         let xml = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
         let node = xml
             .descendants()
@@ -669,7 +778,11 @@ impl XgwxDocument {
                 "jump" => 5,
                 _ => 6,
             };
-            grid_xml.push_str(&entity(kind, row, 0, &r.title, &r.comment, r.initial));
+            let mut value = entity(kind, row, 0, &r.title, &r.comment, r.initial);
+            if r.transition_code.is_some() {
+                value = value.replace("PropertyProgram=\"0\"", "PropertyProgram=\"1\"");
+            }
+            grid_xml.push_str(&value);
         }
         for (row, r) in patch.rows.iter().enumerate() {
             let (kind, title) = if r.kind == "step" {
@@ -693,6 +806,9 @@ impl XgwxDocument {
                             escape(r.action_time.as_deref().unwrap_or(""))
                         ),
                     );
+            }
+            if r.action_code.is_some() && kind == 2 {
+                action_xml = action_xml.replace("PropertyProgram=\"0\"", "PropertyProgram=\"1\"");
             }
             grid_xml.push_str(&action_xml);
         }
@@ -755,8 +871,513 @@ impl XgwxDocument {
             .find(|a| a.name() == "StepCount")
             .ok_or_else(|| fail("step count is absent"))?;
         replacements.push((count.range_value(), "0".into()));
+        let list = block_node
+            .parent()
+            .ok_or_else(|| fail("SFC block list is absent"))?;
+        let mut desired = BTreeMap::<String, (u32, String)>::new();
+        for row in &patch.rows {
+            for (name, kind, code) in [
+                (row.action.as_deref().unwrap_or(""), 1, &row.action_code),
+                (row.title.as_str(), 2, &row.transition_code),
+            ] {
+                if let Some(code) = code {
+                    if name.eq_ignore_ascii_case(&block.name) {
+                        return Err(fail("program name conflicts with main block"));
+                    }
+                    let value = (kind, code.clone());
+                    if desired
+                        .keys()
+                        .any(|k| k.eq_ignore_ascii_case(name) && k != name)
+                    {
+                        return Err(fail("program names must be unique ignoring case"));
+                    }
+                    if desired
+                        .insert(name.to_string(), value.clone())
+                        .is_some_and(|old| old != value)
+                    {
+                        return Err(fail("shared programs require matching source and kind"));
+                    }
+                }
+            }
+        }
+        let previous = block.editable_rows.as_ref().unwrap();
+        let mut orphan_count = 0;
+        let mut extra = String::new();
+        // All non-main blocks have been checked as the captured ST layout by st_sources.
+        for old in list.children().filter(|n| {
+            n.has_tag_name("SFC_ProgramProperty") && n.attribute("MainBlock") == Some("0")
+        }) {
+            let name = old.attribute("PragramName").unwrap_or("");
+            if let Some((kind, code)) = desired.remove(name) {
+                replacements.push((old.range(), st_block_xml(name, kind, &code)));
+            } else if previous.iter().any(|r| {
+                r.action_code.is_some() && r.action.as_deref() == Some(name)
+                    || r.transition_code.is_some() && r.title == name
+            }) {
+                replacements.push((old.range(), String::new()));
+            } else {
+                orphan_count += 1;
+            }
+        }
+        for (name, (kind, code)) in desired {
+            extra.push_str(&st_block_xml(&name, kind, &code));
+        }
+        if !extra.is_empty() {
+            let end = list.range().end - "</SFC_ProgramListData>".len();
+            replacements.push((end..end, extra));
+        }
+        let outer = list
+            .parent()
+            .ok_or_else(|| fail("SFC program list is absent"))?;
+        if let Some(attr) = outer.attributes().find(|a| a.name() == "ProgramCount") {
+            let count = patch
+                .rows
+                .iter()
+                .flat_map(|r| {
+                    [
+                        (r.action.as_deref().unwrap_or(""), &r.action_code),
+                        (r.title.as_str(), &r.transition_code),
+                    ]
+                })
+                .filter(|(_, c)| c.is_some())
+                .map(|(n, _)| n)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                + 1
+                + orphan_count;
+            replacements.push((attr.range_value(), count.to_string()));
+        }
         let mut candidate = self.clone();
         candidate.apply_xml_replacements(replacements)?;
+        candidate.to_verified_bytes()?;
+        *self = candidate;
+        Ok(())
+    }
+}
+
+// Native ST CodeList contains exactly CodeCount UTF-16 units, compressed with bzip2.
+fn read_st_source(block: &XmlElement) -> Option<String> {
+    let st = block.children.iter().find(|n| n.name == "ST_Program")?;
+    if st.attribute("Version") != Some("Ver 1.1")
+        || st.attributes.len() != 2
+        || number(st, "StepCount").is_none()
+        || st.children.len() != 3
+        || st
+            .children
+            .iter()
+            .any(|n| !["CodeList", "Breakpoints", "Bookmarks"].contains(&n.name.as_str()))
+        || st
+            .children
+            .iter()
+            .filter(|n| n.name != "CodeList")
+            .any(|n| {
+                !n.children.is_empty() || !n.text.trim().is_empty() || !n.attributes.is_empty()
+            })
+    {
+        return None;
+    }
+    let code = st.children.iter().find(|n| n.name == "CodeList")?;
+    if !code.children.is_empty()
+        || code
+            .attributes
+            .iter()
+            .any(|a| !["CodeCount", "dt", "Compressed"].contains(&a.name.as_str()))
+    {
+        return None;
+    }
+    let count = number(code, "CodeCount")? as usize;
+    if count > 65536 {
+        return None;
+    }
+    let raw = if code.text.trim().is_empty() {
+        Vec::new()
+    } else {
+        crate::decode_base64_payload(&code.text, code.attribute("Compressed") == Some("1"))
+            .ok()?
+            .data
+    };
+    if raw.len() != count * 2 {
+        return None;
+    }
+    String::from_utf16(
+        &raw.chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .collect::<Vec<_>>(),
+    )
+    .ok()
+}
+fn st_sources(list: &XmlElement) -> Option<BTreeMap<String, (u32, String)>> {
+    let mut result = BTreeMap::new();
+    let mut main_count = 0;
+    for block in list.descendants_named("SFC_ProgramProperty") {
+        if block.attribute("MainBlock") == Some("1") {
+            main_count += 1;
+            continue;
+        }
+        let kind = number(block, "LanguageType")?;
+        if !matches!(kind, 1 | 2)
+            || number(block, "Language") != Some(4)
+            || block.attribute("MainBlock") != Some("0")
+            || block.attribute("Comment") != Some("")
+            || block.attributes.len() != 5
+            || block.children.len() != if kind == 1 { 3 } else { 2 }
+            || block.children.iter().any(|n| {
+                !["SFC_ProgramData", "SFC_ProgramDataAction", "ST_Program"]
+                    .contains(&n.name.as_str())
+            })
+        {
+            return None;
+        }
+        if let Some(action) = block
+            .children
+            .iter()
+            .find(|n| n.name == "SFC_ProgramDataAction")
+        {
+            if kind != 1
+                || action.attributes.len() != 1
+                || action.attribute("ActionPostScan") != Some("0")
+                || !action.children.is_empty()
+                || !action.text.trim().is_empty()
+            {
+                return None;
+            }
+        }
+        let cache = block
+            .children
+            .iter()
+            .find(|n| n.name == "SFC_ProgramData")?;
+        if !cache.children.is_empty()
+            || !cache.text.trim().is_empty()
+            || cache.attributes.len() != 9
+            || cache.attributes.iter().any(|a| {
+                ![
+                    "UploadProgramSize",
+                    "DocRungTableOffset",
+                    "DocRungTableSize",
+                    "PreDocStepCount",
+                    "PostDocStepCount",
+                    "Variable",
+                    "InitVariable",
+                    "NFE",
+                    "NFE1",
+                ]
+                .contains(&a.name.as_str())
+            })
+        {
+            return None;
+        }
+        let name = block.attribute("PragramName")?.to_string();
+        if result
+            .insert(name, (kind, read_st_source(block)?))
+            .is_some()
+        {
+            return None;
+        }
+    }
+    (main_count == 1).then_some(result)
+}
+#[cfg(feature = "write")]
+fn encode_sfc_payload(bytes: &[u8]) -> String {
+    use base64::Engine;
+    use std::io::Write;
+    let mut encoder = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::best());
+    encoder.write_all(bytes).expect("writing into a vector");
+    base64::engine::general_purpose::STANDARD.encode(encoder.finish().expect("vector compression"))
+}
+#[cfg(feature = "write")]
+fn st_block_xml(name: &str, kind: u32, source: &str) -> String {
+    let bytes = source
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+    format!(
+        "<SFC_ProgramProperty LanguageType=\"{kind}\" Language=\"4\" PragramName=\"{name}\" Comment=\"\" MainBlock=\"0\"><SFC_ProgramData UploadProgramSize=\"0\" DocRungTableOffset=\"0\" DocRungTableSize=\"0\" PreDocStepCount=\"0\" PostDocStepCount=\"0\" Variable=\"\" InitVariable=\"\" NFE=\"\" NFE1=\"\"/>{}<ST_Program Version=\"Ver 1.1\" StepCount=\"0\"><CodeList CodeCount=\"{}\" dt:dt=\"bin.base64\" xmlns:dt=\"urn:schemas-microsoft-com:datatypes\" Compressed=\"1\">{}</CodeList><Breakpoints/><Bookmarks/></ST_Program></SFC_ProgramProperty>",
+        if kind == 1 {
+            "<SFC_ProgramDataAction ActionPostScan=\"0\"/>"
+        } else {
+            ""
+        },
+        bytes.len() / 2,
+        encode_sfc_payload(&bytes)
+    )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct SfcVariable {
+    pub name: String,
+    pub data_type: String,
+    pub description: String,
+    pub system: bool,
+}
+impl XgwxDocument {
+    /// Decode regular IEC declarations while retaining the two captured SFC system records.
+    pub fn sfc_variables(
+        &self,
+        program_index: usize,
+    ) -> Result<Vec<SfcVariable>, crate::XgwxError> {
+        Ok(self
+            .sfc_symbols(program_index)?
+            .into_iter()
+            .map(|s| SfcVariable {
+                system: matches!(s.name.as_str(), "TRANS" | "GOTO_INIT"),
+                name: s.name,
+                data_type: s.type_reference.or(s.data_type).unwrap_or_default(),
+                description: s.description.unwrap_or_default(),
+            })
+            .collect())
+    }
+    fn sfc_symbols(
+        &self,
+        program_index: usize,
+    ) -> Result<Vec<crate::IecLocalSymbol>, crate::XgwxError> {
+        use base64::Engine;
+        let fail = || crate::XgwxError::SfcEdit("unsupported SFC variable table".into());
+        let program = self
+            .root
+            .descendants_named("Program")
+            .nth(program_index)
+            .ok_or_else(fail)?;
+        if program
+            .descendants_named("SFC_ProgramList")
+            .next()
+            .is_none()
+        {
+            return Err(fail());
+        }
+        let mut table = program
+            .descendants_named("LocalVar")
+            .next()
+            .and_then(|n| n.descendants_named("Symbols").next())
+            .ok_or_else(fail)?
+            .clone();
+        if number(&table, "Count") == Some(0) {
+            return crate::IecLocalSymbol::from_symbols_element(&table);
+        }
+        let mut bytes =
+            crate::decode_base64_payload(&table.text, table.attribute("Compressed") == Some("1"))?
+                .data;
+        // Class 11/12 and the SFC-only flag differ from ordinary VAR declarations.
+        for (name, class) in [("GOTO_INIT", 11_u32), ("TRANS", 12_u32)] {
+            let mut marker = vec![0xff, 0xfe, 0xff, name.len() as u8];
+            marker.extend(name.encode_utf16().flat_map(u16::to_le_bytes));
+            let hits = bytes
+                .windows(marker.len())
+                .enumerate()
+                .filter_map(|(i, b)| (b == marker).then_some(i))
+                .collect::<Vec<_>>();
+            if hits.len() != 1 {
+                return Err(fail());
+            }
+            let start = hits[0] + marker.len();
+            if bytes.get(start..start + 12)
+                != Some(
+                    [
+                        class.to_le_bytes(),
+                        1_u32.to_le_bytes(),
+                        4_u32.to_le_bytes(),
+                    ]
+                    .concat()
+                    .as_slice(),
+                )
+            {
+                return Err(fail());
+            }
+            bytes[start..start + 4].copy_from_slice(&1_u32.to_le_bytes());
+            bytes[start + 8..start + 12].fill(0);
+        }
+        table.text = base64::engine::general_purpose::STANDARD.encode(bytes);
+        for a in &mut table.attributes {
+            if a.name == "Compressed" {
+                a.value = "0".into();
+            }
+        }
+        crate::IecLocalSymbol::from_symbols_element(&table)
+    }
+}
+#[cfg(feature = "write")]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct SfcVariablePatch {
+    pub program_index: usize,
+    pub expected_variables: Vec<SfcVariable>,
+    pub name: String,
+    pub data_type: String,
+    pub description: String,
+    pub remove: bool,
+}
+#[cfg(feature = "write")]
+impl XgwxDocument {
+    /// Insert a primitive/standard FB instance, or remove an unreferenced declaration.
+    pub fn edit_sfc_variable(&mut self, patch: &SfcVariablePatch) -> Result<(), crate::XgwxError> {
+        let fail = |s: &str| crate::XgwxError::SfcEdit(s.into());
+        if self.sfc_variables(patch.program_index)? != patch.expected_variables {
+            return Err(fail("stale SFC variable table"));
+        }
+        let name = &patch.name;
+        if name.is_empty()
+            || name.len() > 32
+            || !name
+                .bytes()
+                .enumerate()
+                .all(|(i, c)| c == b'_' || c.is_ascii_alphabetic() || i > 0 && c.is_ascii_digit())
+            || ["TRANS", "GOTO_INIT"]
+                .iter()
+                .any(|n| n.eq_ignore_ascii_case(name))
+        {
+            return Err(fail(
+                "use a unique variable identifier of at most 32 characters",
+            ));
+        }
+        let symbols = self.sfc_symbols(patch.program_index)?;
+        let xml = roxmltree::Document::parse(&self.xml).map_err(crate::XgwxError::Xml)?;
+        let program = xml
+            .descendants()
+            .filter(|n| n.has_tag_name("Program"))
+            .nth(patch.program_index)
+            .unwrap();
+        let table = program
+            .descendants()
+            .find(|n| n.has_tag_name("LocalVar"))
+            .and_then(|n| n.descendants().find(|n| n.has_tag_name("Symbols")))
+            .ok_or_else(|| fail("SFC symbols are absent"))?;
+        let mut bytes = crate::decode_base64_payload(
+            table.text().unwrap_or_default(),
+            table.attribute("Compressed") == Some("1"),
+        )?
+        .data;
+        if patch.remove {
+            let index = symbols
+                .iter()
+                .position(|s| s.name == *name)
+                .ok_or_else(|| fail("variable is absent"))?;
+            let sfc = self
+                .sfc_programs()
+                .into_iter()
+                .find(|p| p.program_index == patch.program_index)
+                .unwrap();
+            for block in &sfc.blocks {
+                if block.entities.iter().any(|e| {
+                    e.properties
+                        .values()
+                        .any(|p| p.values().any(|v| v.eq_ignore_ascii_case(name)))
+                }) {
+                    return Err(fail("variable is used by the chart"));
+                }
+            }
+            let node = self
+                .root
+                .descendants_named("Program")
+                .nth(patch.program_index)
+                .unwrap();
+            for block in node
+                .descendants_named("SFC_ProgramProperty")
+                .filter(|b| b.attribute("MainBlock") == Some("0"))
+            {
+                let source = read_st_source(block)
+                    .ok_or_else(|| fail("cannot check references in this program language"))?;
+                if source
+                    .split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .any(|t| t.eq_ignore_ascii_case(name))
+                {
+                    return Err(fail("variable is used by ST source"));
+                }
+            }
+            bytes.drain(
+                symbols[index].record_offset
+                    ..symbols
+                        .get(index + 1)
+                        .map_or(bytes.len(), |s| s.record_offset),
+            );
+        } else {
+            if symbols.iter().any(|s| s.name.eq_ignore_ascii_case(name)) {
+                return Err(fail("variable name is already declared"));
+            }
+            if patch.description.encode_utf16().count() > 255
+                || patch.description.chars().any(char::is_control)
+            {
+                return Err(fail(
+                    "variable description is too long or contains control characters",
+                ));
+            }
+            let fb = matches!(
+                patch.data_type.as_str(),
+                "TON"
+                    | "TOF"
+                    | "TP"
+                    | "CTU_DINT"
+                    | "CTD_DINT"
+                    | "CTUD_DINT"
+                    | "R_TRIG"
+                    | "F_TRIG"
+                    | "RS"
+                    | "SR"
+            );
+            let code = if fb {
+                24
+            } else {
+                crate::iec_symbols::iec_primitive_type_code(&patch.data_type)
+                    .ok_or_else(|| fail("unsupported variable type"))?
+            };
+            fn field(b: &mut Vec<u8>, s: &str) {
+                b.extend([0xff, 0xfe, 0xff, s.encode_utf16().count() as u8]);
+                b.extend(s.encode_utf16().flat_map(u16::to_le_bytes));
+            }
+            let mut record = Vec::new();
+            field(&mut record, "PB50");
+            field(&mut record, name);
+            record.extend(1_u32.to_le_bytes());
+            record.extend(code.to_le_bytes());
+            if fb {
+                field(&mut record, &patch.data_type);
+                record.extend(0_u32.to_le_bytes());
+                field(&mut record, "");
+            } else {
+                record.extend(0_u32.to_le_bytes());
+                field(&mut record, "");
+            }
+            field(&mut record, "");
+            field(&mut record, &patch.description);
+            field(&mut record, "");
+            record.extend(u32::MAX.to_le_bytes());
+            record.extend(0_u32.to_le_bytes());
+            record.extend(u32::MAX.to_le_bytes());
+            record.extend([0; 24]);
+            field(&mut record, "");
+            field(&mut record, "");
+            let offset = symbols
+                .iter()
+                .find(|s| s.name.to_lowercase() > name.to_lowercase())
+                .map_or(bytes.len(), |s| s.record_offset);
+            bytes.splice(offset..offset, record);
+        }
+        let count = table.attributes().find(|a| a.name() == "Count").unwrap();
+        let text = table
+            .children()
+            .find(|n| n.is_text())
+            .ok_or_else(|| fail("symbol payload is absent"))?;
+        use base64::Engine;
+        let encoded = if table.attribute("Compressed") == Some("1") {
+            encode_sfc_payload(&bytes)
+        } else {
+            base64::engine::general_purpose::STANDARD.encode(&bytes)
+        };
+        let mut candidate = self.clone();
+        candidate.apply_xml_replacements(vec![
+            (
+                count.range_value(),
+                (if patch.remove {
+                    symbols.len() - 1
+                } else {
+                    symbols.len() + 1
+                })
+                .to_string(),
+            ),
+            (text.range(), encoded),
+        ])?;
+        candidate.sfc_variables(patch.program_index)?;
         candidate.to_verified_bytes()?;
         *self = candidate;
         Ok(())

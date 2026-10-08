@@ -461,3 +461,7 @@ required-features = ["write"]
 [[example]]
 name = "sfc_actions_acceptance"
 required-features = ["write"]
+
+[[example]]
+name = "sfc_st_acceptance"
+required-features = ["write"]

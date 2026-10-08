@@ -12,6 +12,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         initial,
         action: action.map(String::from),
         action_qualifier: None,
+        action_code: None,
+        transition_code: None,
         action_time: None,
     };
     let rows = vec![
@@ -27,6 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let apply = |doc: &mut XgwxDocument, rows| {
         let expected = doc.sfc_programs()[0].blocks[0].entities.clone();
         doc.replace_sfc_sequence(&SfcSequencePatch {
+            expected_rows: None,
             program_index: 0,
             block_index: 0,
             expected_entities: expected,

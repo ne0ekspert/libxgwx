@@ -8,6 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         initial,
         action,
         action_qualifier,
+        action_code: None,
+        transition_code: None,
         action_time,
     };
     let mut rows = vec![row("label", "Cycle".into(), false, None, None, None)];
@@ -36,6 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     rows.push(row("jump", "Cycle".into(), false, None, None, None));
     doc.replace_sfc_sequence(&SfcSequencePatch {
+        expected_rows: None,
         program_index: 0,
         block_index: 0,
         expected_entities: doc.sfc_programs()[0].blocks[0].entities.clone(),

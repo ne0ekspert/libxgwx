@@ -48,12 +48,12 @@ This harness mocks the VS Code document host; the native checks use real XG5000.
 
 Supported structural writes are dense two-column linear main blocks with
 steps, direct `%MX` BOOL transitions, labels/jumps, and one direct BOOL action per step.
-Unknown properties, branches, bookmarks/breakpoints, program-backed entities,
-nested blocks, and unknown qualifiers remain guarded. Existing bounded comment
+Unknown properties, branches, bookmarks/breakpoints, unsupported program languages,
+nested charts, and unknown qualifiers remain guarded. Existing bounded comment
 and condition edits remain available independently of structural support.
 
-SFC local symbols are preserved as native XML/payload data; their binary record
-format is not decoded by the IEC ladder local-variable decoder.
+SFC local symbols retain their native records. A separate SFC decoder recognizes
+the reserved TRANS/GOTO_INIT classes alongside ordinary IEC declarations.
 
 
 `action-qualifiers.xgwx` contains all nine variable action qualifiers: N=1,
@@ -65,3 +65,29 @@ qualifiers, times, typed rows, and local symbol payloads are retained.
 The native qualifier picker and an independently created L action confirm
 that qualifier codes are bit flags. Variable-action auxiliary fields remain
 empty and TimeIndex is zero; other layouts are guarded.
+
+ST and typed-variable acceptance on 2026-10-08:
+
+- `native-st-programs.xgwx`: native ST action `UpdateValues`, ST transition
+  `Ready`, DINT `Count`, and TON `Delay`. Action code increments Count and calls
+  Delay; the transition assigns `TRANS := Count >= 10 AND Delay.Q`.
+- `st-programs-generated.xgwx`: `sfc_st_acceptance` adds all 19 primitive IEC
+  types and instances of TON, TOF, TP, CTU_DINT, CTD_DINT, CTUD_DINT, R_TRIG,
+  F_TRIG, RS, and SR. The ST action calls every instance, uses ADD, writes WORD,
+  DWORD and LWORD values, and the ST transition reads Count and Delay.Q. Named
+  BOOL `Value_BOOL` is also used as a variable action and transition.
+- `st-programs-native-roundtrip.xgwx`: native Save As of that generated file.
+
+Both native ST and generated ST projects passed offline XG5000 4.82.1 strict
+all-program Check Program with **0 errors, 0 warnings**. Save As preserves the
+complete row/source model and all declared types, instance types, descriptions,
+and reserved variables. Native compilation names and allocations are regenerated.
+
+ST action blocks use LanguageType=1; transition blocks use LanguageType=2;
+both use Language=4. The entity's PropertyProgram is 1. CodeList is a compressed
+UTF-16LE payload with CodeCount measured in UTF-16 units. Standard instances have
+primitive selector code 24 with their native FB type reference. SFC system locals
+use classes 11 and 12 with flag 4. Their raw records are preserved during insertion
+and deletion. The ST writer guards bookmarks, breakpoints, post-scan actions,
+unknown metadata and unsupported nested-program languages. Counter names are
+native typed variants, and latch ST parameter names are R_1 and S_1.
