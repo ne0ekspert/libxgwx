@@ -2758,3 +2758,13 @@ pub fn edit_xgwx_sfc_entity_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>
     doc.edit_sfc_entity(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
 }
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = replace_xgwx_sfc_sequence)]
+pub fn replace_xgwx_sfc_sequence_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
+    let patch: crate::SfcSequencePatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.replace_sfc_sequence(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}

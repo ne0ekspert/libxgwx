@@ -738,7 +738,16 @@ SFC view.
 
 With `write`, `edit_sfc_entity(&SfcEntityPatch)` supports step comments
 and existing direct `%MX` BOOL transition conditions, with stale-value and
-position checks. Transition annotation cells are synchronized. Step names,
-qualifiers, program references, and structural changes remain read only.
+position checks. Transition annotation cells are synchronized.
+`replace_sfc_sequence(&SfcSequencePatch)` creates and replaces captured linear
+main charts using typed `SfcRow` values and a complete expected-entity snapshot.
+It supports steps, direct `%MX` transitions, labels/jumps, and one direct BOOL
+action per step with N, R, S, L, D, P, SD, DS, or SL qualifier. Timed
+actions use bounded TIME literals such as `T#2s` or `T#500ms`. It regenerates annotations/placeholders and invalidates
+compiled caches while preserving identities and local symbol payloads.
+The summary's `editableRows` is `null` for unsupported layouts. Branches,
+nested blocks, unknown qualifiers, program references, bookmarks/breakpoints,
+and unknown data remain guarded. Incomplete sequences can be saved and require
+completion before XG5000 program checks pass.
 Native XG5000 checks and Save As comparisons are documented in
 [`fixtures/sfc/README.md`](fixtures/sfc/README.md).
