@@ -111,6 +111,9 @@ pub enum XgwxError {
         from: String,
         to: String,
     },
+    UnsupportedXgiCpuChange {
+        reason: &'static str,
+    },
     FixedCpuModule {
         base: u32,
         slot: u32,
@@ -321,6 +324,9 @@ impl fmt::Display for XgwxError {
                 f,
                 "CPU change from {from} to {to} requires an unsupported hardware/program migration"
             ),
+            Self::UnsupportedXgiCpuChange { reason } => {
+                write!(f, "XGI CPU change is unavailable: {reason}")
+            }
             Self::FixedCpuModule { base, slot } => write!(
                 f,
                 "CPU built-in module at base {base}, slot {slot} cannot be removed or replaced"

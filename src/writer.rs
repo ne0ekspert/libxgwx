@@ -855,14 +855,18 @@ impl XgwxDocument {
     ///
     /// This updates the authoritative `<Configuration Type>` value while
     /// preserving the existing basic parameters, programs, hardware, and
-    /// network configuration. Only changes between XGK models are supported;
-    /// retained hardware must fit the target CPU. Other model changes require
+    /// network configuration. XGK changes require retained hardware to fit.
+    /// Captured XGI model changes support validated SFC projects with default
+    /// parameters and empty I/O tables. Other model changes require
     /// a migration and are rejected. Selecting the current type is a no-op.
     pub fn select_cpu(&mut self, model: &str) -> Result<(), XgwxError> {
         let entry = crate::cpu::find_cpu(model)?;
         let current = self.hardware_cpu()?;
         if current.type_code == entry.type_code {
             return Ok(());
+        }
+        if current.family == "XGI" && entry.family == "XGI" {
+            return self.select_sfc_xgi_cpu(current, entry);
         }
         if current.family != "XGK" || entry.family != "XGK" {
             return Err(XgwxError::UnsupportedCpuChange {
@@ -912,6 +916,247 @@ impl XgwxDocument {
             .ok_or(XgwxError::MissingConfigurationAttribute { attribute: "Type" })?;
         changed.apply_xml_replacements(vec![(range, entry.type_code.to_string())])?;
         *self = changed;
+        Ok(())
+    }
+
+    fn select_sfc_xgi_cpu(
+        &mut self,
+        current: &CpuCatalogEntry,
+        target: &CpuCatalogEntry,
+    ) -> Result<(), XgwxError> {
+        let unsupported = |reason| XgwxError::UnsupportedXgiCpuChange { reason };
+        let defaults: &[(u32, &[u8])] = &[
+            (100, include_bytes!("../fixtures/sfc/cpu-cpuu-native.xgwx")),
+            (102, include_bytes!("../fixtures/sfc/cpu-cpuh-native.xgwx")),
+            (104, include_bytes!("../fixtures/sfc/cpu-cpus-native.xgwx")),
+            (106, include_bytes!("../fixtures/sfc/new-xgi-sfc.xgwx")),
+            (107, include_bytes!("../fixtures/sfc/cpu-cpuud-native.xgwx")),
+            (111, include_bytes!("../fixtures/sfc/cpu-cpuun-native.xgwx")),
+        ];
+        if !defaults.iter().any(|(code, _)| *code == current.type_code)
+            || !defaults.iter().any(|(code, _)| *code == target.type_code)
+        {
+            return Err(unsupported(
+                "this XGI model has no captured SFC CPU conversion",
+            ));
+        }
+        let programs = self.sfc_programs();
+        if programs.is_empty()
+            || programs.len() != self.programs().len()
+            || programs.iter().any(|p| {
+                p.variables_error.is_some()
+                    || !p.blocks.iter().any(|b| b.main && b.editable_rows.is_some())
+            })
+        {
+            return Err(unsupported(
+                "the workspace must contain only supported SFC programs",
+            ));
+        }
+        if !self.modules().is_empty() || !self.network_modules().is_empty() {
+            return Err(unsupported(
+                "configured I/O and network modules require a hardware migration",
+            ));
+        }
+        let profiles = defaults
+            .iter()
+            .map(|(code, bytes)| Ok((*code, XgwxDocument::parse(bytes)?)))
+            .collect::<Result<Vec<_>, XgwxError>>()?;
+        let source = &profiles
+            .iter()
+            .find(|(code, _)| *code == current.type_code)
+            .unwrap()
+            .1;
+        let destination = &profiles
+            .iter()
+            .find(|(code, _)| *code == target.type_code)
+            .unwrap()
+            .1;
+        let reserved = |doc: &XgwxDocument| {
+            doc.root.descendants_named("XGIBasicParam").next().map(|p| {
+                (0..5)
+                    .map(|i| {
+                        p.attribute(&format!("OUTPUT_PARAMETER_RESERVED_{i}"))
+                            .map(str::to_owned)
+                    })
+                    .collect::<Vec<_>>()
+            })
+        };
+        let loop_reserved = Some(
+            ["2578", "45", "0", "0", "0"]
+                .map(|v| Some(v.to_owned()))
+                .to_vec(),
+        );
+        if !profiles
+            .iter()
+            .any(|(_, doc)| reserved(self) == reserved(doc))
+            && reserved(self) != loop_reserved
+        {
+            return Err(unsupported("unknown reserved basic-parameter values"));
+        }
+        fn normalized(mut element: XmlElement) -> XmlElement {
+            element.text = element.text.trim().into();
+            // The captured blank, loop and CPU-change defaults differ in these reserved
+            // fields. Accept only those encodings above and preserve them;
+            // their meaning is not established by the CPU conversion capture.
+            if element.name == "XGIBasicParam" {
+                element.attributes.retain(|a| {
+                    !(0..5).any(|i| a.name == format!("OUTPUT_PARAMETER_RESERVED_{i}"))
+                });
+            }
+            element.attributes.sort_by(|a, b| a.name.cmp(&b.name));
+            element.children = element.children.into_iter().map(normalized).collect();
+            element
+        }
+        let parameters = |doc: &XgwxDocument| {
+            doc.root
+                .descendants_named("Parameters")
+                .cloned()
+                .map(normalized)
+                .collect::<Vec<_>>()
+        };
+        if parameters(self) != parameters(source) {
+            return Err(unsupported(
+                "custom or unknown parameters cannot be reset by CPU selection",
+            ));
+        }
+        let parsed = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let configuration = parsed
+            .descendants()
+            .find(|n| n.has_tag_name("Configuration"))
+            .ok_or(XgwxError::MissingConfiguration)?;
+        let basic = parsed
+            .descendants()
+            .find(|n| n.has_tag_name("XGIBasicParam"))
+            .ok_or_else(|| unsupported("missing XGI basic parameters"))?;
+        let target_basic = destination
+            .root
+            .descendants_named("XGIBasicParam")
+            .next()
+            .unwrap();
+        let mut replacements = vec![];
+        let attr = |node: roxmltree::Node<'_, '_>, name| {
+            node.attributes()
+                .find(|a| a.name() == name)
+                .map(|a| a.range_value())
+        };
+        replacements.push((
+            attr(configuration, "Type")
+                .ok_or(XgwxError::MissingConfigurationAttribute { attribute: "Type" })?,
+            target.type_code.to_string(),
+        ));
+        let flags: u32 = configuration
+            .attribute("Attribute")
+            .and_then(|a| a.parse().ok())
+            .ok_or_else(|| unsupported("missing configuration flags"))?;
+        // Native CPU changes clear 0x80000; Check Program/Save As sets it
+        // again for every model. Only 0x8000 tracks the CPUUN local Ethernet
+        // capability. Preserve all other flags and invalidate the native state.
+        let target_flags: u32 = destination.configurations()[0].attribute.unwrap();
+        let flags = (flags & !0x88000) | (target_flags & 0x8000);
+        replacements.push((attr(configuration, "Attribute").unwrap(), flags.to_string()));
+        for name in [
+            "M_AREA_SIZE_0",
+            "M_AREA_SIZE_1",
+            "M_AREA_SIZE_2",
+            "M_AREA_SIZE_3",
+            "M_AREA_LATCH1_END",
+            "M_AREA_LATCH_G1_END",
+        ] {
+            replacements.push((
+                attr(basic, name).ok_or_else(|| unsupported("missing memory parameters"))?,
+                target_basic.attribute(name).unwrap().into(),
+            ));
+        }
+        let parameter_parent = parsed
+            .descendants()
+            .find(|n| n.has_tag_name("Parameters"))
+            .unwrap();
+        if (current.type_code == 111) != (target.type_code == 111) {
+            let project = parsed.root_element();
+            let count: u32 = project
+                .attribute("WksNodeCount")
+                .and_then(|v| v.parse().ok())
+                .ok_or_else(|| unsupported("missing workspace node count"))?;
+            let count = if target.type_code == 111 {
+                count.checked_add(1)
+            } else {
+                count.checked_sub(1)
+            }
+            .ok_or_else(|| unsupported("invalid workspace node count"))?;
+            replacements.push((attr(project, "WksNodeCount").unwrap(), count.to_string()));
+        }
+        let basic_parameter = basic.parent().unwrap();
+        let fenet = parameter_parent.children().find(|n| {
+            n.has_tag_name("Parameter") && n.attribute("Type") == Some("FENET PARAMETER")
+        });
+        if current.type_code == 111 && target.type_code != 111 {
+            let fenet = fenet.ok_or_else(|| unsupported("missing CPUUN Ethernet parameters"))?;
+            let gap = basic_parameter.range().end..fenet.range().start;
+            let start = if self.xml[gap.clone()].trim().is_empty() {
+                gap.start
+            } else {
+                fenet.range().start
+            };
+            replacements.push((start..fenet.range().end, String::new()));
+            let motion = parameter_parent
+                .descendants()
+                .find(|n| n.has_tag_name("MotionParamInfo"))
+                .ok_or_else(|| unsupported("missing CPUUN motion defaults"))?;
+            let base_info = motion
+                .parent()
+                .unwrap()
+                .children()
+                .find(|n| n.has_tag_name("BaseInfo"))
+                .unwrap();
+            let gap = base_info.range().end..motion.range().start;
+            let start = if self.xml[gap.clone()].trim().is_empty() {
+                gap.start
+            } else {
+                motion.range().start
+            };
+            replacements.push((start..motion.range().end, String::new()));
+        } else if current.type_code != 111 && target.type_code == 111 {
+            let native = roxmltree::Document::parse(&destination.xml).map_err(XgwxError::Xml)?;
+            let basic = native
+                .descendants()
+                .find(|n| n.has_tag_name("XGIBasicParam"))
+                .unwrap()
+                .parent()
+                .unwrap();
+            let fenet = native
+                .descendants()
+                .find(|n| {
+                    n.has_tag_name("Parameter") && n.attribute("Type") == Some("FENET PARAMETER")
+                })
+                .unwrap();
+            let insert = basic_parameter.range().end;
+            replacements.push((
+                insert..insert,
+                destination.xml[basic.range().end..fenet.range().end].into(),
+            ));
+            let motion = native
+                .descendants()
+                .find(|n| n.has_tag_name("MotionParamInfo"))
+                .unwrap();
+            let native_base = motion
+                .parent()
+                .unwrap()
+                .children()
+                .find(|n| n.has_tag_name("BaseInfo"))
+                .unwrap();
+            let base_info = parameter_parent
+                .descendants()
+                .find(|n| n.has_tag_name("BaseInfo"))
+                .unwrap();
+            let insert = base_info.range().end;
+            replacements.push((
+                insert..insert,
+                destination.xml[native_base.range().end..motion.range().end].into(),
+            ));
+        }
+        let mut candidate = self.clone();
+        candidate.apply_xml_replacements(replacements)?;
+        *self = candidate;
         Ok(())
     }
 

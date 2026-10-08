@@ -710,8 +710,11 @@ CPU and hardware writes are CPU-aware: XGK model changes check retained base
 and slot limits; cross-family and compact-model conversions are rejected.
 The CPU catalog also recognizes XGI models, including
 `XGI-CPUE` (configuration type `106`). An XGI configuration can select its
-existing model without changing the file; conversion to another XGI model is
-still rejected because its parameters and hardware have not been migrated.
+existing model without changing the file. XGI-CPUE, CPUS, CPUH, CPUU, CPUU/D and CPUUN can switch between models
+for validated SFC projects with captured default parameters and empty I/O tables.
+Changes update model flags and default M memory ranges while preserving source.
+CPUUN additionally creates/removes its default local Ethernet and empty motion
+sections. CPUS/P, custom parameters and configured hardware require migration.
 XGI supports LD, SFC, and ST programs; the `ProgramData` version identifies
 the language of an individual program. See [XGI CPU support](docs/xgi-cpu.md).
 The XGK module catalog cannot edit compact hardware. The captured XBM-DR16S

@@ -74,3 +74,51 @@ Generated inputs, native resaves R00/R01/R02, screenshots, the verifier snapshot
 results and SHA-256 checksums are retained locally under
 `target/xg5000-cpu-acceptance-20260909/` (ignored build artifacts). The earlier
 2026-09-08 acceptance records remain historical evidence. No PLC was connected.
+
+## SFC CPU changes, 2026-10-08
+
+`select_cpu` supports switches among XGI-CPUE, CPUS, CPUH, CPUU, CPUU/D and
+CPUUN for supported SFC-only workspaces with captured default parameters and
+empty I/O tables. All 30 directional changes and six no-op selections are
+covered by Rust and WASM tests, including ST source and declaration preservation.
+
+| Models | Configuration types | M_AREA_SIZE_0..3 | Default latch ends |
+| --- | --- | ---: | ---: |
+| CPUE | 106 | 32 | 8191 |
+| CPUS | 104 | 64 | 16383 |
+| CPUH / CPUU / CPUU/D | 102 / 100 / 107 | 256 | 65535 |
+| CPUUN | 111 | 512 | 131071 |
+
+Values are the native parameter fields, not independently derived memory limits.
+The writer updates the captured CPUUN capability bit (`0x8000`) and clears
+`0x80000` after a model change, matching native CPU changes. Native Check Program
+and Save As set `0x80000` on all six models; same-model selections preserve it.
+Other configuration flags are preserved. The eight empty base
+placeholders remain, matching native XG5000. CPUUN also adds the captured default
+`FENET PARAMETER`, empty `MotionParamInfo`, and one workspace tree node; switching
+away removes those defaults and decrements `WksNodeCount` with checked arithmetic.
+No customized Ethernet or motion configuration is discarded.
+
+Native XG5000 4.82.1 warns that CPU changes reset all parameters. The writer
+therefore rejects custom or unknown parameters rather than resetting them.
+Only captured sets of the five `OUTPUT_PARAMETER_RESERVED_0..4` fields are
+accepted; their bytes are preserved and their meaning remains unverified.
+Configured I/O/network modules, CPUS/P, cross-family changes and unsupported
+SFC layouts remain unavailable.
+
+`fixtures/sfc/cpu-*-native.xgwx` captures native PLC Properties changes and
+model defaults. `sfc_cpu_acceptance` generates all six models from the typed
+ST fixture, or accepts a second argument naming a native-saved input project.
+Generated CPUH, CPUU, CPUU/D and CPUUN projects each passed strict all-program
+Check Program with **0 errors, 0 warnings, 23 messages**, joining the previously
+validated CPUE/CPUS pair. The native-saved CPUUN → CPUE conversion passed the same
+check after removing the default Ethernet and motion sections. Native Save As
+results are `cpu-*-roundtrip.xgwx`; tests compare chart rows, ST source, primitive
+and FB declarations, CPU identities and continued editability.
+
+Switching a generated CPUE project through any supported model and back restores
+its XML except for the cleared validation-state bit, which native checking sets
+again. Recreating CPUUN-only default sections in a native-saved project
+can normalize parameter whitespace; source code and settings remain intact.
+Acceptance is offline in XG5000 4.82.1, with no PLC connected. Configured hardware,
+custom parameter migration and PLC execution are outside this validation.

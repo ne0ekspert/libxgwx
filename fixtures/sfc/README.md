@@ -91,3 +91,30 @@ use classes 11 and 12 with flag 4. Their raw records are preserved during insert
 and deletion. The ST writer guards bookmarks, breakpoints, post-scan actions,
 unknown metadata and unsupported nested-program languages. Counter names are
 native typed variants, and latch ST parameter names are R_1 and S_1.
+
+CPU-selection acceptance on 2026-10-08:
+
+- `cpu-cpus-native.xgwx`: native PLC Properties change from CPUE to CPUS,
+  capturing default parameter and configuration-flag differences.
+- `cpu-cpus-roundtrip.xgwx`: native Save As of the `sfc_cpu_acceptance` CPUS output.
+- `cpu-cpue-roundtrip.xgwx`: native Save As after the generated CPUS → CPUE reversal.
+
+Both generated projects passed strict all-program Check Program with 0 errors,
+0 warnings and 23 messages. Native Save As preserved chart rows, ST source and
+all declarations. Supported CPU changes require default parameters and empty
+I/O tables; see [CPU validation](../../docs/cpu-hardware-validation.md#sfc-cpu-changes-2026-10-08).
+
+Additional CPU captures and round trips on 2026-10-08 use suffixes `cpuh`, `cpuu`,
+`cpuud` (CPUU/D), and `cpuun`. The `cpu-<suffix>-native.xgwx` files capture PLC
+Properties changes; `cpu-<suffix>-roundtrip.xgwx` files are native Save As results
+of the corresponding generated typed ST projects. Each generated project passed
+strict all-program Check Program with 0 errors, 0 warnings and 23 messages.
+CPUUN introduces a default local Ethernet section and empty motion metadata.
+The generated conversion back from native CPUUN to CPUE passed the same check;
+`cpu-cpuun-to-cpue-roundtrip.xgwx` preserves that result. Rust/WASM tests cover
+all 30 directional model changes and protect custom Ethernet/motion settings.
+
+`cpu-cpuun-to-cpue-native.xgwx` captures the native Properties change before
+Check Program. It confirms that `0x80000` is cleared even when the target is
+CPUE. Check Program and Save As set this bit on every supported model; CPU
+changes invalidate it, while `0x8000` records CPUUN's local Ethernet capability.

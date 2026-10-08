@@ -696,3 +696,216 @@ fn sfc_st_unknown_metadata_and_post_scan_actions_are_guarded() {
         assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
     }
 }
+#[cfg(feature = "write")]
+#[test]
+fn sfc_cpu_conversion_updates_native_defaults_preserving_programs_and_reserved_data() {
+    let source =
+        XgwxDocument::parse(include_bytes!("../fixtures/sfc/st-programs-generated.xgwx")).unwrap();
+    let profiles = [
+        ("XGI-CPUE", "new-xgi-sfc", 106, "32", "8191"),
+        ("XGI-CPUS", "cpu-cpus-native", 104, "64", "16383"),
+        ("XGI-CPUH", "cpu-cpuh-native", 102, "256", "65535"),
+        ("XGI-CPUU", "cpu-cpuu-native", 100, "256", "65535"),
+        ("XGI-CPUU/D", "cpu-cpuud-native", 107, "256", "65535"),
+        ("XGI-CPUUN", "cpu-cpuun-native", 111, "512", "131071"),
+    ];
+    for (from, _, _, _, _) in profiles {
+        let mut seed = source.clone();
+        seed.select_cpu(from).unwrap();
+        // Exercise all 30 model changes plus the six no-op selections.
+        for (to, fixture, code, size, end) in profiles {
+            let mut doc = seed.clone();
+            doc.select_cpu(to).unwrap();
+            assert_eq!(
+                doc.root.attribute("WksNodeCount"),
+                Some(if code == 111 { "19" } else { "18" })
+            );
+            assert_eq!(
+                doc.configurations()[0].type_code,
+                Some(code),
+                "{from} -> {to}"
+            );
+            assert_eq!(doc.sfc_programs(), source.sfc_programs());
+            let native = XgwxDocument::from_path(format!("fixtures/sfc/{fixture}.xgwx")).unwrap();
+            assert_eq!(
+                doc.configurations()[0].attribute,
+                Some(if from == to {
+                    seed.configurations()[0].attribute.unwrap()
+                } else {
+                    (seed.configurations()[0].attribute.unwrap() & !0x88000)
+                        | (native.configurations()[0].attribute.unwrap() & 0x8000)
+                })
+            );
+            let basic = doc.root.descendants_named("XGIBasicParam").next().unwrap();
+            for key in [
+                "M_AREA_SIZE_0",
+                "M_AREA_SIZE_1",
+                "M_AREA_SIZE_2",
+                "M_AREA_SIZE_3",
+            ] {
+                assert_eq!(basic.attribute(key), Some(size));
+            }
+            for key in ["M_AREA_LATCH1_END", "M_AREA_LATCH_G1_END"] {
+                assert_eq!(basic.attribute(key), Some(end));
+            }
+            assert_eq!(
+                doc.root.descendants_named("Safety_Comm").count(),
+                usize::from(code == 111)
+            );
+            assert_eq!(
+                doc.root.descendants_named("MotionParamInfo").count(),
+                usize::from(code == 111)
+            );
+            assert_eq!(basic.attribute("OUTPUT_PARAMETER_RESERVED_0"), Some("2578"));
+            doc = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
+            doc.select_cpu(from).unwrap();
+            let flags = seed.configurations()[0].attribute.unwrap();
+            let expected = if from == to {
+                seed.xml.clone()
+            } else {
+                seed.xml.replacen(
+                    &format!("Attribute=\"{flags}\""),
+                    &format!("Attribute=\"{}\"", flags & !0x80000),
+                    1,
+                )
+            };
+            assert!(doc.xml == expected, "{from} -> {to} -> {from}");
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn sfc_cpu_conversion_rejects_custom_parameters_hardware_and_unknown_models_atomically() {
+    let source = XgwxDocument::parse(NATIVE).unwrap();
+    for xml in [
+        source
+            .xml
+            .replace("SCAN_WD_TIME_0=\"500\"", "SCAN_WD_TIME_0=\"600\""),
+        source.xml.replace("CPUType=\"43009\"", "CPUType=\"1\""),
+        source.xml.replace(
+            "OUTPUT_PARAMETER_RESERVED_0=\"2578\"",
+            "OUTPUT_PARAMETER_RESERVED_0=\"123\"",
+        ),
+        source.xml.replace("SlotCount=\"12\"", "SlotCount=\"10\""),
+        source.xml.replace(
+            "<Base Base=\"7\" SlotCount=\"12\">",
+            "<Base Base=\"7\" SlotCount=\"12\"><Module Base=\"7\" Slot=\"0\" Id=\"1\" />",
+        ),
+        source.xml.replace(
+            "</Parameters>",
+            "<Parameter Type=\"UNKNOWN\"/></Parameters>",
+        ),
+    ] {
+        let mut candidate = source.clone();
+        candidate.xml = xml;
+        let mut doc = XgwxDocument::parse(&candidate.to_bytes().unwrap()).unwrap();
+        let before = doc.clone();
+        assert!(doc.select_cpu("XGI-CPUS").is_err());
+        assert_eq!(doc, before);
+    }
+    let mut doc = source.clone();
+    for target in ["XGI-CPUS/P", "XGK-CPUSN", "XGB-XBMS"] {
+        assert!(doc.select_cpu(target).is_err(), "{target}");
+        assert_eq!(doc, source);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn native_cpu_save_as_preserves_st_sources_and_declarations_in_all_models() {
+    let source = XgwxDocument::from_path("fixtures/sfc/st-programs-generated.xgwx").unwrap();
+    let expected = source.sfc_programs().remove(0);
+    for (file, code, opposite) in [
+        ("cpu-cpus-roundtrip", 104, "XGI-CPUE"),
+        ("cpu-cpue-roundtrip", 106, "XGI-CPUS"),
+        ("cpu-cpuun-to-cpue-roundtrip", 106, "XGI-CPUUN"),
+        ("cpu-cpuh-roundtrip", 102, "XGI-CPUE"),
+        ("cpu-cpuu-roundtrip", 100, "XGI-CPUE"),
+        ("cpu-cpuud-roundtrip", 107, "XGI-CPUE"),
+        ("cpu-cpuun-roundtrip", 111, "XGI-CPUE"),
+    ] {
+        let mut native = XgwxDocument::from_path(format!("fixtures/sfc/{file}.xgwx")).unwrap();
+        assert_eq!(native.configurations()[0].type_code, Some(code));
+        assert_ne!(native.configurations()[0].attribute.unwrap() & 0x80000, 0);
+        let actual = native.sfc_programs().remove(0);
+        assert_eq!(actual.variables, expected.variables);
+        assert_eq!(
+            actual.blocks[0].editable_rows,
+            expected.blocks[0].editable_rows
+        );
+        assert_eq!(actual.variables_error, None);
+        native.select_cpu(opposite).unwrap();
+        assert_eq!(native.configurations()[0].attribute.unwrap() & 0x80000, 0);
+        assert_eq!(native.sfc_programs().remove(0), actual);
+        native.to_verified_bytes().unwrap();
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn sfc_cpuun_migration_preserves_custom_flags_and_rejects_custom_ethernet_or_motion() {
+    let mut doc = XgwxDocument::parse(NATIVE).unwrap();
+    let original_flags = doc.configurations()[0].attribute.unwrap();
+    doc.xml = doc.xml.replace(
+        &format!("Attribute=\"{original_flags}\""),
+        &format!("Attribute=\"{}\"", original_flags ^ 1),
+    );
+    doc = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
+    doc.select_cpu("XGI-CPUUN").unwrap();
+    assert_eq!(
+        doc.configurations()[0].attribute.unwrap() & !0x88000,
+        (original_flags ^ 1) & !0x88000
+    );
+    for xml in [
+        doc.xml
+            .replace("IPAddress=\"1861920960\"", "IPAddress=\"1\""),
+        doc.xml.replace("Addr=\"100\"", "Addr=\"101\""),
+        doc.xml.replace(
+            "QlpoOTFBWSZTWeHQde4AAADAAMAAAAGgACGYGYT4WF3JFOFCQ4dB17g=",
+            "UNKNOWN",
+        ),
+    ] {
+        assert_ne!(xml, doc.xml);
+        let mut changed = doc.clone();
+        changed.xml = xml;
+        let mut changed = XgwxDocument::parse(&changed.to_bytes().unwrap()).unwrap();
+        let original = changed.clone();
+        assert!(changed.select_cpu("XGI-CPUE").is_err());
+        assert_eq!(changed, original);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn sfc_cpuun_workspace_node_count_changes_are_checked_and_atomic() {
+    for (code, count, target) in [(106, "4294967295", "XGI-CPUUN"), (111, "0", "XGI-CPUE")] {
+        let mut source = XgwxDocument::parse(NATIVE).unwrap();
+        source
+            .select_cpu(if code == 106 { "XGI-CPUE" } else { "XGI-CPUUN" })
+            .unwrap();
+        let old = source.root.attribute("WksNodeCount").unwrap();
+        source.xml = source.xml.replace(
+            &format!("WksNodeCount=\"{old}\""),
+            &format!("WksNodeCount=\"{count}\""),
+        );
+        let mut source = XgwxDocument::parse(&source.to_bytes().unwrap()).unwrap();
+        let before = source.clone();
+        assert!(source.select_cpu(target).is_err());
+        assert_eq!(source, before);
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn native_cpuun_to_cpue_change_clears_validation_state_before_checking() {
+    let native = XgwxDocument::from_path("fixtures/sfc/cpu-cpuun-to-cpue-native.xgwx").unwrap();
+    assert_eq!(native.configurations()[0].type_code, Some(106));
+    assert_eq!(native.configurations()[0].attribute.unwrap() & 0x88000, 0);
+    let mut checked = XgwxDocument::from_path("fixtures/sfc/cpu-cpuun-roundtrip.xgwx").unwrap();
+    checked.select_cpu("XGI-CPUE").unwrap();
+    assert_eq!(
+        checked.configurations()[0].attribute,
+        native.configurations()[0].attribute
+    );
+}

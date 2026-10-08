@@ -342,7 +342,7 @@ fn xgi_cpu_selection_recognizes_current_model_but_rejects_migration() {
     assert_eq!(doc.xml, xml);
     assert!(matches!(
         doc.select_cpu("XGI-CPUS"),
-        Err(XgwxError::UnsupportedCpuChange { .. })
+        Err(XgwxError::UnsupportedXgiCpuChange { .. })
     ));
     assert_eq!(doc.xml, xml);
 }
