@@ -489,3 +489,11 @@ required-features = ["write"]
 [[example]]
 name = "sfc_branch_limit_acceptance"
 required-features = ["write"]
+
+[[example]]
+name = "program_create_acceptance"
+required-features = ["write"]
+
+[[example]]
+name = "program_delete_acceptance"
+required-features = ["write"]

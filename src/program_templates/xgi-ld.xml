@@ -1,0 +1,15 @@
+<Program Task="스캔 프로그램" Version="256" LocalVariable="1" Kind="0" InstanceName="" Comment="" ObjectId="1cd63133-b503-41d2-b225-7ec1a30dd868" FindProgram="1" FindVar="1" Encrytption="">NewProgram<Body UniqueDocId="1cd63133-b503-41d2-b225-7ec1a30dd868">
+							<LDRoutine BinaryEncoded="1">
+								<ProgramData Version="LD VER 1.1" ProjectType="2" ENOControlOption="0" Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWZb7RKYAAABAAEQAIAAhAIKDF3JFOFCQlvtEpg==</ProgramData>
+								<OnlineUploadData Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWY5iHkIAAA3eAOAQQAEwAAYEEQAAAaAAMQAACvKMj1MnqSRSSVXekyB44y38
+XckU4UJCOYh5CA==</OnlineUploadData>
+							</LDRoutine>
+						</Body>
+						<LocalVar Version="Ver 2.0" NotUseExternalVar="0" ProgramKind="1" MultiUserRunEdit="0" SymDocGUID="dbbff05a_6f68_49d3_8d96_6f3f18060eca">
+							<Symbols Count="0"></Symbols>
+							<TempVar Count="0"></TempVar>
+						</LocalVar>
+						<RungTable BinaryEncoded="1">
+							<RungTableData dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes"></RungTableData>
+						</RungTable>
+					</Program>

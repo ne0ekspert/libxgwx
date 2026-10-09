@@ -203,6 +203,9 @@ pub enum XgwxError {
     BrowserHardwareEdit(String),
     BrowserNetworkEdit(String),
     SfcEdit(String),
+    ProgramCreation(String),
+    ProgramDeletion(String),
+    ProgramReorder(String),
     RewriteVerificationFailed,
 }
 
@@ -430,6 +433,9 @@ impl fmt::Display for XgwxError {
             }
             Self::InvalidLadderEdit { reason } => write!(f, "cannot edit ladder cell: {reason}"),
             Self::BrowserHardwareEdit(reason) => write!(f, "hardware edit rejected: {reason}"),
+            Self::ProgramDeletion(reason) => write!(f, "program deletion rejected: {reason}"),
+            Self::ProgramReorder(reason) => write!(f, "program reorder rejected: {reason}"),
+            Self::ProgramCreation(reason) => write!(f, "program creation rejected: {reason}"),
             Self::SfcEdit(reason) => write!(f, "SFC edit rejected: {reason}"),
             Self::BrowserNetworkEdit(reason) => write!(f, "network edit rejected: {reason}"),
             Self::RewriteVerificationFailed => write!(f, "rewritten workspace failed XML or container preservation verification"),

@@ -1,0 +1,10 @@
+<Program Task="스캔 프로그램" Version="256" LocalVariable="0" Kind="0" InstanceName="" Comment="" ObjectId="6e21ead1-7ec8-45fe-8bca-1bc17dbbe5f0" FindProgram="1" FindVar="1" Encrytption="">NewProgram<Body UniqueDocId="6e21ead1-7ec8-45fe-8bca-1bc17dbbe5f0">
+							<LDRoutine BinaryEncoded="1">
+								<ProgramData Version="LD VER 1.1" ProjectType="1" ENOControlOption="0" Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWZb7RKYAAABAAEQAIAAhAIKDF3JFOFCQlvtEpg==</ProgramData>
+								<OnlineUploadData Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoORdyRThQkAAAAAA=</OnlineUploadData>
+							</LDRoutine>
+						</Body>
+						<RungTable BinaryEncoded="1">
+							<RungTableData dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes"></RungTableData>
+						</RungTable>
+					</Program>

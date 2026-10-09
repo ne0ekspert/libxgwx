@@ -793,3 +793,28 @@ retain their original step ownership. Each path still requires an odd nonzero
 count of alternating nodes and the captured split/join entry/exit types. The
 extension can extend one selected path, remove one pair from it, or extend all
 paths together.
+
+### Creating scan programs
+
+`create_program(&NewProgram)` appends a blank LD or SFC program using captured
+native templates, with unique program/symbol GUIDs and a unique identifier name.
+It binds to the existing scan task, updates the workspace node count, and
+preserves existing program records. XGK supports LD creation; XGI supports LD,
+and the captured SFC CPU models support SFC. Unsupported CPU/language combinations,
+duplicate names/identities and ambiguous configurations are rejected atomically.
+The WASM entry point is `create_xgwx_program(bytes, patch)`. Native Save As
+coverage and expected blank-program diagnostics are documented in
+[creation fixtures](fixtures/program-create/README.md).
+
+`delete_program(program_index, expected_object_id)` removes a top-level program
+and its local declarations, checks the selected identity, and updates the workspace
+node count. Other program records, shared globals, hardware and scan tasks remain
+intact. The WASM export is `delete_xgwx_program`; the extension uses its normal
+document edit history so deletion supports Undo.
+
+`move_program(from, to, expected_object_id, expected_target_id)` moves a program
+into its final list index. It checks source and destination identities, preserves
+complete program XML records and task assignments, and leaves workspace counts
+unchanged. The WASM export is `move_xgwx_program`. The extension provides sidebar
+dragging with insertion feedback and the normal Undo/Save lifecycle. XG5000 executes
+programs in list order within their scan/task; task scheduling remains independent.

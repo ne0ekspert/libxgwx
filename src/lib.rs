@@ -99,6 +99,10 @@ mod mnemonic;
 mod model;
 #[cfg(feature = "write")]
 mod writer;
+#[cfg(feature = "write")]
+mod program_create;
+#[cfg(feature = "write")]
+pub use program_create::NewProgram;
 
 #[cfg(feature = "wasm")]
 mod wasm;

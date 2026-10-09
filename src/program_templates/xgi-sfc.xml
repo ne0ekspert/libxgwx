@@ -1,0 +1,19 @@
+<Program Task="스캔 프로그램" Version="256" LocalVariable="1" Kind="3" InstanceName="" Comment="" ObjectId="6cb029f8-9def-4b95-8909-31a6cd4ebc67" FindProgram="1" FindVar="1" Encrytption="">NewProgram<Body>
+							<SFC_ProgramList UploadSize="0" ProgramCount="1"><SFC_ProgramListData><SFC_ProgramProperty LanguageType="3" Language="2" PragramName="NewProgram" Comment="" MainBlock="1"><SFC_ProgramData UploadProgramSize="0" DocRungTableOffset="0" DocRungTableSize="0" PreDocStepCount="0" PostDocStepCount="0" Variable="" InitVariable="" NFE="" NFE1=""></SFC_ProgramData>
+										<SFC_ProgramDataBlock StartEnd="" StepTransition="" StopRestart="" StopMode="" NumberActiveStep="" ContinuousTransition=""></SFC_ProgramDataBlock>
+										<SFC_Program StepCount="0"><EntityContainer BookmarkCount="0"><EntityGrid RowSize="0" ColSize="0"><EntityPropertyList></EntityPropertyList>
+												</EntityGrid>
+											</EntityContainer>
+										</SFC_Program>
+									</SFC_ProgramProperty>
+								</SFC_ProgramListData>
+							</SFC_ProgramList>
+						</Body>
+						<LocalVar Version="Ver 2.0" NotUseExternalVar="0" ProgramKind="2" MultiUserRunEdit="0" SymDocGUID="843b76d2_1fd1_49ec_b7be_0644d1029788"><Symbols Count="2" Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWR/a71gAAEruAOYsAIRCADCh3ACAAaAASEpqEaGgB+pAkSmgDQGj1PklJFaz
+JmAiIbkbHA2Xb9dilLljoguIhDBpFmLkYWdBBIBATMCKAz8XckU4UJAf2u9Y</Symbols>
+							<TempVar Count="0"></TempVar>
+						</LocalVar>
+						<RungTable BinaryEncoded="1">
+							<RungTableData dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes"></RungTableData>
+						</RungTable>
+					</Program>

@@ -559,6 +559,35 @@ pub fn set_xgwx_module_input_filter_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Move the identified program to its final index and return verified workspace bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = move_xgwx_program)]
+pub fn move_xgwx_program_wasm(bytes: &[u8], from: usize, to: usize, expected_object_id: &str, expected_target_id: &str) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.move_program(from, to, expected_object_id, expected_target_id).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Delete the identified top-level program and return verified workspace bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_program)]
+pub fn delete_xgwx_program_wasm(bytes: &[u8], program_index: usize, expected_object_id: &str) -> Result<Vec<u8>, JsValue> {
+    let mut doc=XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.delete_program(program_index,expected_object_id).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Append a captured blank program and return verified workspace bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = create_xgwx_program)]
+pub fn create_xgwx_program_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("program request is not JSON-serializable"))?;
+    let patch = serde_json::from_str::<NewProgram>(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.create_program(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Apply supported program metadata changes and return rewritten `.xgwx` bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = update_xgwx_program)]
