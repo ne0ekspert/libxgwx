@@ -48,7 +48,7 @@ This harness mocks the VS Code document host; the native checks use real XG5000.
 
 Supported structural writes are dense two-column linear main blocks with
 steps, direct `%MX` BOOL transitions, labels/jumps, and one direct BOOL action per step.
-Unknown properties, branches, bookmarks/breakpoints, unsupported program languages,
+Unknown properties, unsupported branch shapes, bookmarks/breakpoints, unsupported program languages,
 nested charts, and unknown qualifiers remain guarded. Existing bounded comment
 and condition edits remain available independently of structural support.
 
@@ -118,3 +118,78 @@ all 30 directional model changes and protect custom Ethernet/motion settings.
 Check Program. It confirms that `0x80000` is cleared even when the target is
 CPUE. Check Program and Save As set this bit on every supported model; CPU
 changes invalidate it, while `0x8000` records CPUUN's local Ethernet capability.
+
+Balanced branch acceptance on 2026-10-08/09:
+
+- `branch-alternative-native.xgwx`: native two-path alternative split/join around
+  the ST `Ready` transition, with `%MX2` on the other path.
+- `branch-parallel-native.xgwx`: native two-path simultaneous split/join around
+  `S1`, with `S2` on the other path.
+- `branch-parallel-three-native.xgwx`: native expansion to three simultaneous
+  paths, confirming every even column stores its branch endpoint.
+- `branch-<kind>-generated.xgwx`: Rust `sfc_branch_acceptance` edits a side
+  operand/name and adds a side variable action while retaining existing ST.
+- `branch-<kind>-three-generated.xgwx`: webview/WASM creation from the typed ST
+  source, followed by Add path and Extend paths (three equal-height paths).
+- Corresponding `*-roundtrip.xgwx` files are XG5000 Save As results. All four
+  generated charts pass strict all-program Check Program with **0 errors,
+  0 warnings, 23 messages**. Tests compare positioned nodes, branch boundaries,
+  ST source and declared types/instances after native resaving.
+
+Branch entities use Type=4 and EntityBranch BranchType 0/1 for alternative
+split/join, 2/3 for simultaneous split/join; Priority=-1 keeps default
+left-to-right alternative order. Type=8 is the horizontal connector. Simultaneous
+endpoints render a double line. Positioned rows retain dense column-major native
+grid storage. Nested/crossing ranges, gaps, uneven paths, custom priorities and
+extra unknown metadata are guarded. No PLC was connected.
+
+## Multiple actions per step
+
+`multi-action-two-native.xgwx` captures an ST action followed by a timed L BOOL
+variable action. `multi-action-three-native.xgwx` adds a P reference to the same
+ST program. `multi-action-branch-native.xgwx` captures an extra BOOL action in a
+simultaneous path, including the empty Type=7 continuation on its sibling path.
+
+`multi-action-{linear,branch}-generated.xgwx` replace the last additional action
+with a distinct P ST program (`PulseUpdate`, `Count := Count + 3;`). Both pass
+XG5000 4.82.1 strict all-program Check Program with 0 errors and 0 warnings.
+`multi-action-{linear,branch}-roundtrip.xgwx` are the native Save As results;
+editable rows, individual action qualifiers/timers/sources, and declarations
+match the generated input. These validate file compatibility without a PLC.
+Reproduce generation with `cargo run --features write --example
+sfc_multi_actions_acceptance`.
+
+## Advanced declarations
+
+These declaration captures were made in offline XG5000 on 2026-10-09:
+
+- `declarations-array-native.xgwx`: native zero-based BOOL array declaration.
+- `declarations-initial-retain-native.xgwx`: Count has initial value `7` and Retain.
+- `declarations-string-native.xgwx`: adds STRING StatusText with `'Hello'`.
+- `declarations-array-initial-native.xgwx`: captures both initializer and additional
+  member-override maps. Its uncaptured overrides deliberately keep declarations
+  read only, preventing loss of per-member metadata.
+- `declarations-generated.xgwx`: creates initialized 1D DINT, 2D WORD, and 3D BOOL
+  arrays, retained array and TON declarations, REAL/TIME initial values, and edits
+  Count and STRING settings. ST actions and a transition use the new declarations.
+- `declarations-roundtrip.xgwx`: native strict all-program Check Program / Save As
+  result; declarations and editable rows match the generated file.
+
+Generate with `cargo run --features write --example sfc_declarations_acceptance`.
+The array record contains six counted member maps; the third carries initial
+values. Captured overrides in other maps stay guarded. Array bounds are zero
+based; nonzero lower bounds were rejected by native XG5000 during file loading.
+These checks establish file compatibility; no PLC was connected.
+
+## SFC clipboard branch acceptance
+
+`clipboard-branch-generated.xgwx` copies the `Ready` transition and complete
+simultaneous branch (including stacked actions) from `multi-action-branch-native`
+and inserts them after its original join. The webview clipboard planner remaps
+copied step and ST-program names; action operands and ST text remain unchanged.
+`clipboard-branch-roundtrip.xgwx` is XG5000 4.82.1 Save As (`CLIPRES`) on XGI-CPUE,
+offline, with logic/syntax, strict type, duplicate-coil and all-program checks.
+Native checks found zero errors and reported duplicate outputs from the preserved
+action operands. Save As retained exact editable rows, ST text and declarations.
+No PLC execution was tested. The extension clipboard test reproduces this edit
+and compares both fixture row sets.

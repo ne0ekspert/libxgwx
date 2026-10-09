@@ -184,6 +184,8 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
         .clone();
     let rows = vec![
         SfcRow {
+            position: None,
+            branch_end: None,
             kind: "label".into(),
             title: "Cycle".into(),
             comment: "".into(),
@@ -195,6 +197,8 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
             action_time: None,
         },
         SfcRow {
+            position: None,
+            branch_end: None,
             kind: "step".into(),
             title: "Idle".into(),
             comment: "Ready & <go>\n다음".into(),
@@ -206,6 +210,8 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
             action_time: None,
         },
         SfcRow {
+            position: None,
+            branch_end: None,
             kind: "transition".into(),
             title: "%MX2".into(),
             comment: "".into(),
@@ -217,6 +223,8 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
             action_time: None,
         },
         SfcRow {
+            position: None,
+            branch_end: None,
             kind: "jump".into(),
             title: "Cycle".into(),
             comment: "".into(),
@@ -409,6 +417,8 @@ fn action_qualifiers_times_and_invalid_candidates_are_atomic() {
     ] {
         let timed = ["L", "D", "SD", "DS", "SL"].contains(&qualifier);
         let rows = vec![SfcRow {
+            position: None,
+            branch_end: None,
             kind: "step".into(),
             title: "S0".into(),
             comment: "".into(),
@@ -585,6 +595,8 @@ fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion
             data_type: ty.into(),
             description: "typed declaration".into(),
             remove: false,
+            declaration: None,
+            update: false,
         })
         .unwrap();
         assert!(
@@ -604,7 +616,9 @@ fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion
                 name: name.into(),
                 data_type: "DINT".into(),
                 description: "".into(),
-                remove: true
+                remove: true,
+                declaration: None,
+                update: false,
             })
             .is_err()
         );
@@ -617,6 +631,8 @@ fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion
         data_type: "WORD".into(),
         description: "".into(),
         remove: true,
+            declaration: None,
+            update: false,
     })
     .unwrap();
     assert!(

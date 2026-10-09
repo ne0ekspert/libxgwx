@@ -2,6 +2,8 @@ use xgwx::{SfcRow, SfcSequencePatch, XgwxDocument};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut doc = XgwxDocument::from_path("fixtures/sfc/new-xgi-sfc.xgwx")?;
     let row = |kind: &str, title: &str, initial, action: Option<&str>| SfcRow {
+        position: None,
+        branch_end: None,
         kind: kind.into(),
         title: title.into(),
         comment: if title == "Run" {

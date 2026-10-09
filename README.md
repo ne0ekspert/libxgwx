@@ -744,13 +744,42 @@ and existing direct `%MX` BOOL transition conditions, with stale-value and
 position checks. Transition annotation cells are synchronized.
 `replace_sfc_sequence(&SfcSequencePatch)` creates and replaces captured linear
 main charts using typed `SfcRow` values and a complete expected-entity snapshot.
-It supports steps, direct `%MX` transitions, labels/jumps, and one direct BOOL
-action per step with N, R, S, L, D, P, SD, DS, or SL qualifier. Timed
+It supports steps, direct `%MX` transitions, labels/jumps, and direct BOOL
+actions with N, R, S, L, D, P, SD, DS, or SL qualifiers. Timed
 actions use bounded TIME literals such as `T#2s` or `T#500ms`. It regenerates annotations/placeholders and invalidates
 compiled caches while preserving identities and local symbol payloads.
-The summary's `editableRows` is `null` for unsupported layouts. Branches,
-nested blocks, unknown qualifiers, program references, bookmarks/breakpoints,
-and unknown data remain guarded. Incomplete sequences can be saved and require
+The summary's `editableRows` is `null` for unsupported layouts. Unsupported
+branch topologies, nested blocks, unknown qualifiers, non-ST program references,
+bookmarks/breakpoints, and unknown data remain guarded. Incomplete sequences can be saved and require
 completion before XG5000 program checks pass.
 Native XG5000 checks and Save As comparisons are documented in
 [`fixtures/sfc/README.md`](fixtures/sfc/README.md).
+
+Balanced SFC branches support alternative and simultaneous split/join pairs, up
+to eight equal-height paths, and positioned step/transition editing while
+retaining ST sources, action qualifiers and local declarations. The extension
+provides branch creation, adding/removing paths, extending every path by a
+step/transition pair, and collapsing a branch back to its first path. Nested or
+crossing branches, unequal path heights, custom branch priorities, and unknown
+native records remain guarded. See [SFC fixtures](fixtures/sfc/README.md).
+
+SFC steps can contain multiple independent variable or ST actions. Additional
+slots use captured native Type=7 continuation rows, with adjacent Type=2 actions.
+Balanced branch paths receive empty continuation padding when another path needs
+an action slot. Qualifiers, timers, and ST sources remain attached to each action;
+shared ST names retain one shared source. Continuations cannot introduce step
+names, comments, initial status, or actions after a transition. The 512 physical
+row limit includes continuation padding. Mixed linear and simultaneous-branch
+stacks have native strict Check Program and Save As retention coverage in
+`fixtures/sfc/multi-action-*`.
+
+SFC declarations also support fixed 32-byte STRING values, Retain, literal
+initial values, and up to three zero-based array dimensions. Array values use
+counted per-member initializer maps; a comma-separated prefix or repeat literal
+such as `4(2)` initializes elements in native index order. Unspecified elements
+use their defaults. Primitive BOOL/integer/real/TIME literals and quoted ASCII
+strings are validated locally. Existing declarations can change description,
+initial value and Retain; changing type or bounds is restricted to unreferenced
+declarations. System variables, mapped declarations, custom structures, arrays
+of STRING/FB instances, sparse initializers and uncaptured member overrides
+remain guarded. Stale declarations and failed validation leave the file intact.

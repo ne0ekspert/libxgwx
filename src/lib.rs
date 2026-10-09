@@ -44,7 +44,9 @@ mod comparison_catalog;
 mod cpu;
 mod document;
 mod sfc;
-pub use sfc::{SfcBlock, SfcEntity, SfcProgram, SfcRow, SfcVariable};
+pub use sfc::{
+    SfcArrayBound, SfcBlock, SfcDeclaration, SfcEntity, SfcPosition, SfcProgram, SfcRow, SfcVariable,
+};
 #[cfg(feature = "write")]
 pub use sfc::{SfcEntityPatch, SfcSequencePatch, SfcVariablePatch};
 mod error;

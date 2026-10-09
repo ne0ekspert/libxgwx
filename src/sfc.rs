@@ -1,5 +1,8 @@
 use crate::{XgwxDocument, XmlElement};
 use std::collections::BTreeMap;
+mod branches;
+mod declarations;
+pub use declarations::{SfcArrayBound,SfcDeclaration};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
@@ -56,7 +59,7 @@ impl XgwxDocument {
                     .as_ref()
                     .map(|vars| {
                         vars.iter()
-                            .filter(|v| !v.system && v.data_type == "BOOL")
+                            .filter(|v| !v.system && v.data_type == "BOOL" && v.declaration.as_ref().is_none_or(|d|d.dimensions.is_empty()))
                             .map(|v| v.name.to_lowercase())
                             .collect::<Vec<_>>()
                     })
@@ -104,7 +107,9 @@ impl XgwxDocument {
                         };
                         if sources.is_some() && linear_container_supported(block) {
                             result.editable_rows =
-                                result.linear_rows(sources.as_ref().unwrap(), &bool_names);
+                                result.linear_rows(sources.as_ref().unwrap(), &bool_names).or_else(|| {
+                                    branches::decode_rows(&result, sources.as_ref().unwrap(), &bool_names)
+                                });
                         }
                         result
                     })
@@ -255,7 +260,7 @@ impl XgwxDocument {
     }
 }
 
-/// One row in the captured two-column, linear SFC layout.
+/// A linear row or positioned node/boundary in a captured balanced SFC chart.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
@@ -285,6 +290,24 @@ pub struct SfcRow {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub transition_code: Option<String>,
+    #[cfg_attr(
+        feature = "wasm",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub position: Option<SfcPosition>,
+    #[cfg_attr(
+        feature = "wasm",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub branch_end: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
+pub struct SfcPosition {
+    pub row: u32,
+    pub column: u32,
 }
 
 impl SfcBlock {
@@ -313,7 +336,7 @@ impl SfcBlock {
             {
                 return None;
             }
-            if e.type_code == Some(10) {
+            if matches!(e.type_code, Some(7 | 10)) {
                 if e.properties.len() != 1 {
                     return None;
                 }
@@ -371,11 +394,16 @@ impl SfcBlock {
                 1 => "transition",
                 5 => "jump",
                 6 => "label",
+                7 => "continuation",
                 _ => return None,
             };
-            let p = &e.properties["EntityStep"];
+            let empty = BTreeMap::from([
+                ("Title".into(), String::new()), ("Comment".into(), String::new()),
+                ("InitialStep".into(), "0".into()), ("PropertyProgram".into(), "0".into()),
+            ]);
+            let p = e.properties.get("EntityStep").unwrap_or(&empty);
             let adjacent = positions.get(&(row, 1))?;
-            let action = if kind == "step" {
+            let action = if matches!(kind, "step" | "continuation") {
                 match adjacent.type_code? {
                     10 => None,
                     2 if adjacent.properties["EntityStep"]["InitialStep"] == "0"
@@ -396,6 +424,8 @@ impl SfcBlock {
                 None
             };
             rows.push(SfcRow {
+                position: None,
+                branch_end: None,
                 kind: kind.into(),
                 title: p["Title"].clone(),
                 comment: p["Comment"].clone(),
@@ -480,7 +510,11 @@ fn linear_container_supported(block: &XmlElement) -> bool {
             && e.children
                 .iter()
                 .enumerate()
-                .all(|(i, c)| !e.children[..i].iter().any(|n| n.name == c.name))
+                .all(|(i, c)| {
+                    c.children.is_empty()
+                        && c.text.trim().is_empty()
+                        && !e.children[..i].iter().any(|n| n.name == c.name)
+                })
     })
 }
 
@@ -552,7 +586,8 @@ fn valid_action_time(time: &str) -> bool {
 
 fn validate_rows(rows: &[SfcRow], bool_names: &[String]) -> Result<(), crate::XgwxError> {
     let fail = |s: &str| crate::XgwxError::SfcEdit(s.into());
-    if rows.len() > 512 {
+    branches::validate_layout(rows)?;
+    if rows.len() > 4096 {
         return Err(fail("linear charts support at most 512 rows"));
     }
     let identifier = |s: &str| {
@@ -572,7 +607,7 @@ fn validate_rows(rows: &[SfcRow], bool_names: &[String]) -> Result<(), crate::Xg
     let mut labels = std::collections::BTreeSet::new();
     let mut initial_count = 0;
     for row in rows {
-        if row.action_code.is_some() && (row.kind != "step" || row.action.is_none())
+        if row.action_code.is_some() && (!matches!(row.kind.as_str(), "step" | "continuation") || row.action.is_none())
             || row.transition_code.is_some() && row.kind != "transition"
         {
             return Err(fail("ST source requires an action or transition program"));
@@ -595,11 +630,16 @@ fn validate_rows(rows: &[SfcRow], bool_names: &[String]) -> Result<(), crate::Xg
             return Err(fail("comment is too long"));
         }
         match row.kind.as_str() {
-            "step" => {
-                if !identifier(&row.title) || !steps.insert(&row.title) {
+            "alternative_split" | "alternative_join" | "parallel_split" | "parallel_join"
+                if row.title.is_empty() => {}
+            "step" | "continuation" => {
+                if row.kind == "step" && (!identifier(&row.title) || !steps.insert(&row.title)) {
                     return Err(fail(
                         "step names must be unique identifiers of at most 32 characters",
                     ));
+                }
+                if row.kind == "continuation" && (!row.title.is_empty() || row.initial || !row.comment.is_empty()) {
+                    return Err(fail("action continuation rows have no step name, comment, or initial status"));
                 }
                 initial_count += usize::from(row.initial);
                 let qualifier = row.action_qualifier.as_deref().unwrap_or("N");
@@ -644,7 +684,7 @@ fn validate_rows(rows: &[SfcRow], bool_names: &[String]) -> Result<(), crate::Xg
         if row.action.is_none() && (row.action_qualifier.is_some() || row.action_time.is_some()) {
             return Err(fail("action properties require an action operand"));
         }
-        if row.kind != "step" && (row.initial || row.action.is_some() || !row.comment.is_empty()) {
+        if !matches!(row.kind.as_str(), "step" | "continuation") && (row.initial || row.action.is_some() || !row.comment.is_empty()) {
             return Err(fail(
                 "only steps support initial status, comments, and actions",
             ));
@@ -709,13 +749,13 @@ impl XgwxDocument {
         }
         if block.editable_rows.is_none() {
             return Err(fail(
-                "only captured linear main charts with direct BOOL operands and supported actions support structural editing",
+                "only captured linear or balanced branch charts with supported operands and actions support structural editing",
             ));
         }
         let bool_names = program
             .variables
             .iter()
-            .filter(|v| !v.system && v.data_type == "BOOL")
+            .filter(|v| !v.system && v.data_type == "BOOL" && v.declaration.as_ref().is_none_or(|d|d.dimensions.is_empty()))
             .map(|v| v.name.to_lowercase())
             .collect::<Vec<_>>();
         validate_rows(&patch.rows, &bool_names)?;
@@ -757,7 +797,7 @@ impl XgwxDocument {
             let mut s = format!(
                 "<EntityProperty Type=\"{kind}\" Col=\"{col}\" Row=\"{row}\"><EntityBasic Virtural=\"0\"/>"
             );
-            if kind != 10 {
+            if !matches!(kind, 7 | 10) {
                 s.push_str(&format!("<EntityStep Title=\"{}\" InnerVariableName=\"\" Comment=\"{}\" Bookmark=\"0\" BreakPoint=\"0\" PropertyProgram=\"0\" InitialStep=\"{}\" StepVariable=\"0\"/>",escape(title),escape(comment),u8::from(initial)));
             }
             if kind == 2 {
@@ -776,6 +816,7 @@ impl XgwxDocument {
                 "step" => 0,
                 "transition" => 1,
                 "jump" => 5,
+                "continuation" => 7,
                 _ => 6,
             };
             let mut value = entity(kind, row, 0, &r.title, &r.comment, r.initial);
@@ -785,7 +826,7 @@ impl XgwxDocument {
             grid_xml.push_str(&value);
         }
         for (row, r) in patch.rows.iter().enumerate() {
-            let (kind, title) = if r.kind == "step" {
+            let (kind, title) = if matches!(r.kind.as_str(), "step" | "continuation") {
                 if let Some(a) = &r.action {
                     (2, a.as_str())
                 } else {
@@ -813,6 +854,9 @@ impl XgwxDocument {
             grid_xml.push_str(&action_xml);
         }
         grid_xml.push_str("</EntityPropertyList></EntityGrid>");
+        if patch.rows.iter().any(|r| r.position.is_some()) {
+            grid_xml = branches::grid_xml(&patch.rows)?;
+        }
         let mut replacements = vec![(grid.range(), grid_xml)];
         // XG5000 regenerates these compilation caches after structural edits.
         for tag in ["SFC_ProgramData", "SFC_ProgramDataBlock"] {
@@ -1110,6 +1154,11 @@ pub struct SfcVariable {
     pub data_type: String,
     pub description: String,
     pub system: bool,
+    #[cfg_attr(
+        feature = "wasm",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub declaration: Option<SfcDeclaration>,
 }
 impl XgwxDocument {
     /// Decode regular IEC declarations while retaining the two captured SFC system records.
@@ -1117,13 +1166,37 @@ impl XgwxDocument {
         &self,
         program_index: usize,
     ) -> Result<Vec<SfcVariable>, crate::XgwxError> {
+        let program = self
+            .root
+            .descendants_named("Program")
+            .nth(program_index)
+            .ok_or_else(|| crate::XgwxError::SfcEdit("program is absent".into()))?;
+        let table = program
+            .descendants_named("LocalVar")
+            .next()
+            .and_then(|n| n.descendants_named("Symbols").next())
+            .ok_or_else(|| crate::XgwxError::SfcEdit("symbols are absent".into()))?;
+        let bytes =
+            crate::decode_base64_payload(&table.text, table.attribute("Compressed") == Some("1"))?
+                .data;
+        let metadata = declarations::metadata(&bytes)?;
         Ok(self
             .sfc_symbols(program_index)?
             .into_iter()
             .map(|s| SfcVariable {
                 system: matches!(s.name.as_str(), "TRANS" | "GOTO_INIT"),
+                declaration: metadata
+                    .get(&s.name)
+                    .map(|(_, v)| v.clone())
+                    .filter(|v| *v != SfcDeclaration::default()),
+                data_type: metadata
+                    .get(&s.name)
+                    .map(|(ty, _)| ty.clone())
+                    .filter(|s| !s.is_empty())
+                    .or(s.type_reference)
+                    .or(s.data_type)
+                    .unwrap_or_default(),
                 name: s.name,
-                data_type: s.type_reference.or(s.data_type).unwrap_or_default(),
                 description: s.description.unwrap_or_default(),
             })
             .collect())
@@ -1187,13 +1260,18 @@ impl XgwxDocument {
             bytes[start..start + 4].copy_from_slice(&1_u32.to_le_bytes());
             bytes[start + 8..start + 12].fill(0);
         }
+        let offsets = declarations::normalize(&mut bytes)?;
         table.text = base64::engine::general_purpose::STANDARD.encode(bytes);
         for a in &mut table.attributes {
             if a.name == "Compressed" {
                 a.value = "0".into();
             }
         }
-        crate::IecLocalSymbol::from_symbols_element(&table)
+        let mut symbols = crate::IecLocalSymbol::from_symbols_element(&table)?;
+        for symbol in &mut symbols {
+            symbol.record_offset = *offsets.get(&symbol.name).ok_or_else(fail)?;
+        }
+        Ok(symbols)
     }
 }
 #[cfg(feature = "write")]
@@ -1207,14 +1285,21 @@ pub struct SfcVariablePatch {
     pub data_type: String,
     pub description: String,
     pub remove: bool,
+    #[cfg_attr(feature = "wasm", serde(default))]
+    pub declaration: Option<SfcDeclaration>,
+    #[cfg_attr(feature = "wasm", serde(default))]
+    pub update: bool,
 }
 #[cfg(feature = "write")]
 impl XgwxDocument {
-    /// Insert a primitive/standard FB instance, or remove an unreferenced declaration.
+    /// Insert, update, or remove captured program-local SFC declarations.
     pub fn edit_sfc_variable(&mut self, patch: &SfcVariablePatch) -> Result<(), crate::XgwxError> {
         let fail = |s: &str| crate::XgwxError::SfcEdit(s.into());
         if self.sfc_variables(patch.program_index)? != patch.expected_variables {
             return Err(fail("stale SFC variable table"));
+        }
+        if patch.update && patch.remove {
+            return Err(fail("choose update or remove"));
         }
         let name = &patch.name;
         if name.is_empty()
@@ -1253,37 +1338,8 @@ impl XgwxDocument {
                 .iter()
                 .position(|s| s.name == *name)
                 .ok_or_else(|| fail("variable is absent"))?;
-            let sfc = self
-                .sfc_programs()
-                .into_iter()
-                .find(|p| p.program_index == patch.program_index)
-                .unwrap();
-            for block in &sfc.blocks {
-                if block.entities.iter().any(|e| {
-                    e.properties
-                        .values()
-                        .any(|p| p.values().any(|v| v.eq_ignore_ascii_case(name)))
-                }) {
-                    return Err(fail("variable is used by the chart"));
-                }
-            }
-            let node = self
-                .root
-                .descendants_named("Program")
-                .nth(patch.program_index)
-                .unwrap();
-            for block in node
-                .descendants_named("SFC_ProgramProperty")
-                .filter(|b| b.attribute("MainBlock") == Some("0"))
-            {
-                let source = read_st_source(block)
-                    .ok_or_else(|| fail("cannot check references in this program language"))?;
-                if source
-                    .split(|c: char| !c.is_alphanumeric() && c != '_')
-                    .any(|t| t.eq_ignore_ascii_case(name))
-                {
-                    return Err(fail("variable is used by ST source"));
-                }
+            if self.sfc_variable_referenced(patch.program_index, name)? {
+                return Err(fail("variable is used by the chart or ST source"));
             }
             bytes.drain(
                 symbols[index].record_offset
@@ -1292,7 +1348,7 @@ impl XgwxDocument {
                         .map_or(bytes.len(), |s| s.record_offset),
             );
         } else {
-            if symbols.iter().any(|s| s.name.eq_ignore_ascii_case(name)) {
+            if !patch.update && symbols.iter().any(|s| s.name.eq_ignore_ascii_case(name)) {
                 return Err(fail("variable name is already declared"));
             }
             if patch.description.encode_utf16().count() > 255
@@ -1302,56 +1358,43 @@ impl XgwxDocument {
                     "variable description is too long or contains control characters",
                 ));
             }
-            let fb = matches!(
-                patch.data_type.as_str(),
-                "TON"
-                    | "TOF"
-                    | "TP"
-                    | "CTU_DINT"
-                    | "CTD_DINT"
-                    | "CTUD_DINT"
-                    | "R_TRIG"
-                    | "F_TRIG"
-                    | "RS"
-                    | "SR"
-            );
-            let code = if fb {
-                24
-            } else {
-                crate::iec_symbols::iec_primitive_type_code(&patch.data_type)
-                    .ok_or_else(|| fail("unsupported variable type"))?
-            };
-            fn field(b: &mut Vec<u8>, s: &str) {
-                b.extend([0xff, 0xfe, 0xff, s.encode_utf16().count() as u8]);
-                b.extend(s.encode_utf16().flat_map(u16::to_le_bytes));
-            }
-            let mut record = Vec::new();
-            field(&mut record, "PB50");
-            field(&mut record, name);
-            record.extend(1_u32.to_le_bytes());
-            record.extend(code.to_le_bytes());
-            if fb {
-                field(&mut record, &patch.data_type);
-                record.extend(0_u32.to_le_bytes());
-                field(&mut record, "");
-            } else {
-                record.extend(0_u32.to_le_bytes());
-                field(&mut record, "");
-            }
-            field(&mut record, "");
-            field(&mut record, &patch.description);
-            field(&mut record, "");
-            record.extend(u32::MAX.to_le_bytes());
-            record.extend(0_u32.to_le_bytes());
-            record.extend(u32::MAX.to_le_bytes());
-            record.extend([0; 24]);
-            field(&mut record, "");
-            field(&mut record, "");
+            let record = declarations::record(patch)?;
             let offset = symbols
                 .iter()
                 .find(|s| s.name.to_lowercase() > name.to_lowercase())
                 .map_or(bytes.len(), |s| s.record_offset);
-            bytes.splice(offset..offset, record);
+            if patch.update {
+                let index = symbols
+                    .iter()
+                    .position(|s| s.name == *name)
+                    .ok_or_else(|| fail("variable is absent"))?;
+                if symbols[index].address.is_some() || !symbols[index].storage_class.is_empty() {
+                    return Err(fail("mapped declarations are read only"));
+                }
+                let before = patch
+                    .expected_variables
+                    .iter()
+                    .find(|v| v.name == *name)
+                    .unwrap();
+                let old = before.declaration.clone().unwrap_or_default();
+                let new = patch.declaration.clone().unwrap_or_default();
+                if before.data_type != patch.data_type || old.dimensions != new.dimensions {
+                    // Type changes are bounded to unused declarations; initial values,
+                    // retention and descriptions may change without rewriting ST.
+                    if self.sfc_variable_referenced(patch.program_index, name)? {
+                        return Err(fail(
+                            "cannot change the type or bounds of a referenced declaration",
+                        ));
+                    }
+                }
+                let start = symbols[index].record_offset;
+                let end = symbols
+                    .get(index + 1)
+                    .map_or(bytes.len(), |s| s.record_offset);
+                bytes.splice(start..end, record);
+            } else {
+                bytes.splice(offset..offset, record);
+            }
         }
         let count = table.attributes().find(|a| a.name() == "Count").unwrap();
         let text = table
@@ -1371,7 +1414,7 @@ impl XgwxDocument {
                 (if patch.remove {
                     symbols.len() - 1
                 } else {
-                    symbols.len() + 1
+                    symbols.len() + usize::from(!patch.update)
                 })
                 .to_string(),
             ),
@@ -1381,5 +1424,41 @@ impl XgwxDocument {
         candidate.to_verified_bytes()?;
         *self = candidate;
         Ok(())
+    }
+    fn sfc_variable_referenced(&self, index: usize, name: &str) -> Result<bool, crate::XgwxError> {
+        let fail =
+            || crate::XgwxError::SfcEdit("cannot check references in this program language".into());
+        let sfc = self
+            .sfc_programs()
+            .into_iter()
+            .find(|p| p.program_index == index)
+            .ok_or_else(fail)?;
+        if sfc.blocks.iter().any(|b| {
+            b.entities.iter().any(|e| {
+                e.properties
+                    .values()
+                    .any(|p| p.values().any(|v| v.eq_ignore_ascii_case(name)))
+            })
+        }) {
+            return Ok(true);
+        }
+        let program = self
+            .root
+            .descendants_named("Program")
+            .nth(index)
+            .ok_or_else(fail)?;
+        for block in program
+            .descendants_named("SFC_ProgramProperty")
+            .filter(|b| b.attribute("MainBlock") == Some("0"))
+        {
+            let source = read_st_source(block).ok_or_else(fail)?;
+            if source
+                .split(|c: char| !c.is_alphanumeric() && c != '_')
+                .any(|v| v.eq_ignore_ascii_case(name))
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }

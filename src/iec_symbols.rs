@@ -23,6 +23,7 @@ pub const IEC_PRIMITIVE_TYPES: &[(&str, u32)] = &[
     ("DATE", 17),
     ("TIME_OF_DAY", 18),
     ("DATE_AND_TIME", 19),
+    ("STRING", 20),
 ];
 
 pub fn iec_primitive_type_name(code: u32) -> Option<&'static str> {

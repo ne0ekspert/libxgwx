@@ -21,6 +21,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             data_type: ty.into(),
             description: "".into(),
             remove: false,
+            declaration: None,
+            update: false,
         })?;
     }
     for ty in [
@@ -50,6 +52,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             data_type: ty.into(),
             description: "".into(),
             remove: false,
+            declaration: None,
+            update: false,
         })?;
     }
     let block = doc.sfc_programs().remove(0).blocks.remove(0);

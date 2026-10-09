@@ -469,3 +469,15 @@ required-features = ["write"]
 [[example]]
 name = "sfc_cpu_acceptance"
 required-features = ["write"]
+
+[[example]]
+name = "sfc_branch_acceptance"
+required-features = ["write"]
+
+[[example]]
+name = "sfc_multi_actions_acceptance"
+required-features = ["write"]
+
+[[example]]
+name = "sfc_declarations_acceptance"
+required-features = ["write"]
