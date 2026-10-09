@@ -186,3 +186,92 @@ fn xg5000_resaves_retain_branch_topology_st_sources_and_declarations() {
         assert_eq!(after.variables_error, None);
     }
 }
+
+#[cfg(feature = "write")]
+#[test]
+fn independent_parallel_paths_retain_native_padding_and_reject_invalid_sequences() {
+    let source =
+        XgwxDocument::from_path("fixtures/sfc/branch-independent-parallel-generated.xgwx").unwrap();
+    let saved =
+        XgwxDocument::from_path("fixtures/sfc/branch-independent-parallel-roundtrip.xgwx").unwrap();
+    let rows = source.sfc_programs()[0].blocks[0]
+        .editable_rows
+        .clone()
+        .unwrap();
+    assert_eq!(
+        saved.sfc_programs()[0].blocks[0].editable_rows.as_ref(),
+        Some(&rows)
+    );
+    assert_eq!(
+        source.sfc_programs()[0].variables,
+        saved.sfc_programs()[0].variables
+    );
+    assert_eq!(
+        rows.iter()
+            .filter(|r| r.position.as_ref().unwrap().column == 2
+                && matches!(r.kind.as_str(), "step" | "transition"))
+            .count(),
+        3
+    );
+    let before = source.to_bytes().unwrap();
+    let mut doc = source;
+    for initial in [false, true] {
+        let mut invalid = rows.clone();
+        let row = invalid.iter_mut().find(|r| r.title == "SideNext").unwrap();
+        if initial {
+            row.initial = true;
+        } else {
+            row.kind = "transition".into();
+            row.title = "%MX21".into();
+        }
+        assert!(apply(&mut doc, invalid).is_err());
+        assert_eq!(doc.to_bytes().unwrap(), before);
+    }
+}
+
+#[test]
+fn independent_alternative_paths_survive_native_save_as() {
+    let source =
+        XgwxDocument::from_path("fixtures/sfc/branch-independent-alternative-generated.xgwx")
+            .unwrap();
+    let saved =
+        XgwxDocument::from_path("fixtures/sfc/branch-independent-alternative-roundtrip.xgwx")
+            .unwrap();
+    let a = &source.sfc_programs()[0];
+    let b = &saved.sfc_programs()[0];
+    assert!(a.blocks[0].editable_rows.is_some());
+    assert_eq!(a.blocks[0].editable_rows, b.blocks[0].editable_rows);
+    assert_eq!(a.variables, b.variables);
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn native_ordinary_step_limit_is_rejected_atomically() {
+    let mut doc = XgwxDocument::from_path("fixtures/sfc/native-loop.xgwx").unwrap();
+    let before = doc.to_bytes().unwrap();
+    let step = doc.sfc_programs()[0].blocks[0]
+        .editable_rows
+        .clone()
+        .unwrap()
+        .into_iter()
+        .find(|r| r.kind == "step")
+        .unwrap();
+    let rows = (0..513)
+        .map(|i| {
+            let mut r = step.clone();
+            r.title = format!("LimitStep{i}");
+            r.initial = i == 0;
+            r.action = None;
+            r.action_code = None;
+            r.position = None;
+            r
+        })
+        .collect();
+    assert!(
+        apply(&mut doc, rows)
+            .unwrap_err()
+            .to_string()
+            .contains("512 ordinary steps")
+    );
+    assert_eq!(doc.to_bytes().unwrap(), before);
+}

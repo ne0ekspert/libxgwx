@@ -193,3 +193,41 @@ Native checks found zero errors and reported duplicate outputs from the preserve
 action operands. Save As retained exact editable rows, ST text and declarations.
 No PLC execution was tested. The extension clipboard test reproduces this edit
 and compares both fixture row sets.
+
+## Independent SFC path lengths
+
+`branch-independent-parallel-generated.xgwx` adds a transition/step pair to the
+second path of `multi-action-branch-native` while padding the first path with
+empty Type=7 rows. It retains the first path's stacked actions and ST declarations.
+Reproduce with `cargo run --features write --example sfc_path_acceptance`.
+`branch-independent-alternative-generated.xgwx` similarly adds a step/transition
+pair to the second path of `branch-alternative-native`, using the extension's
+`sfcExtendPaths(block, selectedEntity, true)` planner.
+
+Both passed native XG5000 4.82.1 XGI-CPUE all-program checks with logic/syntax,
+strict type and duplicate-coil checking enabled: **0 errors, 0 warnings, 23
+messages**. Save As files `PATHRES` and `ALTIND` are the corresponding `-roundtrip`
+fixtures. Parsed editable rows, actions, ST sources and declarations match their
+generated counterparts exactly. No connected PLC execution was tested.
+
+## Native SFC branch and step limits
+
+The [LS XG5000 manual, chapter 16](https://sol.ls-electric.com/uploads/document/16411767742780/XG5000_Manual_V2.5_202012_EN.pdf)
+specifies 512 ordinary steps (excluding variable-step forms), 65,535 rows and
+65,535 columns. Section 16.2.7 imposes no separate branch-count limit: branches
+are constrained by horizontal space. The supported two-column path layout can
+fit 32,767 paths by columns; simultaneous paths also consume the ordinary-step
+budget. Unsupported variable-step forms remain guarded. A separate editor
+resource guard caps dense grids at 1,048,576 cells.
+
+`branch-sixteen-generated.xgwx` contains 16 simultaneous paths (17 steps total).
+`branch-step-limit-generated.xgwx` contains 511 simultaneous paths plus its
+initial step, reaching 512 ordinary steps. Generate both using
+`cargo run --features write --example sfc_branch_limit_acceptance`.
+Both passed native XG5000 4.82.1 XGI-CPUE all-program checks with logic/syntax,
+strict type and duplicate-coil checking enabled: **0 errors, 0 warnings, 23
+messages**. Native Save As (`L16RES` and `L511RES`) produced the corresponding
+`-roundtrip` fixtures, preserving editable rows, actions, ST sources and local
+declarations exactly. Column-bound planner tests cover 32,767 alternative paths;
+that maximum-size alternative chart was not checked natively. No PLC execution
+was tested.

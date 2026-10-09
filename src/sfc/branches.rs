@@ -1,5 +1,9 @@
 use super::*;
 
+pub(super) const MAX_ROWS: u32 = 65_535;
+pub(super) const MAX_COLUMNS: u32 = 65_535;
+pub(super) const MAX_GRID_CELLS: u32 = 1_048_576;
+
 fn branch_kind(row: &SfcRow) -> Option<(u32, bool)> {
     Some(match row.kind.as_str() {
         "alternative_split" => (0, false),
@@ -10,7 +14,7 @@ fn branch_kind(row: &SfcRow) -> Option<(u32, bool)> {
     })
 }
 
-// Captured balanced, rectangular branches. Reject gaps, crossing/nested ranges,
+// Captured rectangular branches with independently padded paths. Reject gaps, crossing/nested ranges,
 // custom priorities and extra native records instead of guessing their topology.
 pub(super) fn validate_layout(rows: &[SfcRow]) -> Result<(), crate::XgwxError> {
     let fail = || {
@@ -34,7 +38,7 @@ pub(super) fn validate_layout(rows: &[SfcRow]) -> Result<(), crate::XgwxError> {
         }
     }
     if rows.iter().all(|r| r.position.is_none()) {
-        return if rows.len() > 512
+        return if rows.len() > MAX_ROWS as usize
             || rows
                 .iter()
                 .any(|r| r.branch_end.is_some() || branch_kind(r).is_some())
@@ -44,13 +48,35 @@ pub(super) fn validate_layout(rows: &[SfcRow]) -> Result<(), crate::XgwxError> {
             Ok(())
         };
     }
+    let height = rows
+        .iter()
+        .filter_map(|r| r.position.as_ref().and_then(|p| p.row.checked_add(1)))
+        .max()
+        .unwrap_or(0);
+    let width = rows
+        .iter()
+        .filter_map(|r| {
+            r.position
+                .as_ref()
+                .and_then(|p| r.branch_end.unwrap_or(p.column).checked_add(2))
+        })
+        .max()
+        .unwrap_or(0);
+    if height
+        .checked_mul(width)
+        .is_none_or(|cells| cells > MAX_GRID_CELLS)
+    {
+        return Err(crate::XgwxError::SfcEdit(
+            "chart exceeds the editor safety limit of 1048576 grid cells".into(),
+        ));
+    }
     let mut cells = BTreeMap::new();
     let mut regions = Vec::new();
     let mut open: Option<(&SfcRow, u32)> = None;
     for row in rows {
         let p = row.position.as_ref().ok_or_else(fail)?;
-        if p.row >= 512
-            || p.column > 14
+        if p.row >= MAX_ROWS
+            || p.column > MAX_COLUMNS - 2
             || p.column % 2 != 0
             || cells.insert((p.row, p.column), row).is_some()
         {
@@ -58,7 +84,7 @@ pub(super) fn validate_layout(rows: &[SfcRow]) -> Result<(), crate::XgwxError> {
         }
         if let Some((kind, join)) = branch_kind(row) {
             let end = row.branch_end.ok_or_else(fail)?;
-            if p.column != 0 || end < 2 || end > 14 || end % 2 != 0 {
+            if p.column != 0 || end < 2 || end > MAX_COLUMNS - 2 || end % 2 != 0 {
                 return Err(fail());
             }
             if join {
@@ -88,41 +114,32 @@ pub(super) fn validate_layout(rows: &[SfcRow]) -> Result<(), crate::XgwxError> {
         if let Some(&(start, finish, end, kind)) =
             regions.iter().find(|(s, e, _, _)| *s < r && r < *e)
         {
-            let meaningful = (start + 1..r)
-                .filter(|n| {
-                    cells
-                        .get(&(*n, 0))
-                        .is_some_and(|v| v.kind != "continuation")
-                })
-                .count();
-            let expected = if main.kind == "continuation" {
-                "continuation"
-            } else if meaningful % 2 == 0 {
-                if kind == 0 {
-                    "transition"
-                } else {
-                    "step"
-                }
-            } else if kind == 0 {
-                "step"
-            } else {
-                "transition"
-            };
             for c in (0..=end).step_by(2) {
                 let node = cells.get(&(r, c)).ok_or_else(fail)?;
-                if node.kind != expected || node.initial {
+                let meaningful = (start + 1..r)
+                    .filter(|n| {
+                        cells
+                            .get(&(*n, c))
+                            .is_some_and(|v| v.kind != "continuation")
+                    })
+                    .count();
+                let expected = match (kind, meaningful % 2) {
+                    (0, 0) | (2, 1) => "transition",
+                    _ => "step",
+                };
+                if node.initial || node.kind != "continuation" && node.kind != expected {
                     return Err(fail());
                 }
-            }
-            let count = (start + 1..finish)
-                .filter(|n| {
-                    cells
-                        .get(&(*n, 0))
-                        .is_some_and(|v| v.kind != "continuation")
-                })
-                .count();
-            if count % 2 == 0 {
-                return Err(fail());
+                let count = (start + 1..finish)
+                    .filter(|n| {
+                        cells
+                            .get(&(*n, c))
+                            .is_some_and(|v| v.kind != "continuation")
+                    })
+                    .count();
+                if count % 2 == 0 {
+                    return Err(fail());
+                }
             }
         } else if main.position.as_ref().unwrap().column != 0 {
             return Err(fail());
@@ -286,11 +303,7 @@ fn entities(rows: &[SfcRow]) -> Vec<SfcEntity> {
                 },
             );
             let kind = if matches!(value.kind.as_str(), "step" | "continuation") {
-                if value.action.is_some() {
-                    2
-                } else {
-                    10
-                }
+                if value.action.is_some() { 2 } else { 10 }
             } else {
                 9
             };
@@ -318,12 +331,24 @@ pub(super) fn decode_rows(
     bool_names: &[String],
 ) -> Option<Vec<SfcRow>> {
     if !block.main
-        || block.rows > 512
+        || block.rows > MAX_ROWS
         || block.columns < 4
-        || block.columns > 16
+        || block.columns > MAX_COLUMNS
+        || block
+            .rows
+            .checked_mul(block.columns)
+            .is_none_or(|cells| cells > MAX_GRID_CELLS)
         || block.columns % 2 != 0
         || block.entities.len() != (block.rows * block.columns) as usize
     {
+        return None;
+    }
+    let by_position: BTreeMap<_, _> = block
+        .entities
+        .iter()
+        .map(|e| Some(((e.row?, e.column?), e)))
+        .collect::<Option<_>>()?;
+    if by_position.len() != block.entities.len() {
         return None;
     }
     let mut ordinary: Vec<_> = block
@@ -341,11 +366,7 @@ pub(super) fn decode_rows(
         if node.column? % 2 != 0 {
             return None;
         }
-        let mut other = block
-            .entities
-            .iter()
-            .find(|e| e.row == node.row && e.column == Some(node.column.unwrap() + 1))?
-            .clone();
+        let mut other = (**by_position.get(&(node.row?, node.column?.checked_add(1)?))?).clone();
         let mut first = node.clone();
         first.row = Some(i as u32);
         first.column = Some(0);
@@ -353,7 +374,7 @@ pub(super) fn decode_rows(
         other.column = Some(1);
         projected.entities.extend([first, other]);
     }
-    let mut rows = projected.linear_rows(sources, bool_names)?;
+    let mut rows = projected.linear_rows(sources, bool_names, true)?;
     for (row, node) in rows.iter_mut().zip(&ordinary) {
         row.position = Some(SfcPosition {
             row: node.row?,
@@ -398,7 +419,7 @@ pub(super) fn decode_rows(
         let p = r.position.as_ref().unwrap();
         (p.row, p.column)
     });
-    validate_rows(&rows, bool_names).ok()?;
+    validate_rows(&rows, bool_names, false).ok()?;
     let expected = entities(&rows);
     let mut actual = block.entities.clone();
     actual.sort_by_key(|e| (e.column, e.row));
@@ -450,4 +471,45 @@ pub(super) fn grid_xml(rows: &[SfcRow]) -> Result<String, crate::XgwxError> {
     }
     xml.push_str("</EntityPropertyList></EntityGrid>");
     Ok(xml)
+}
+
+#[cfg(test)]
+mod native_limit_tests {
+    use super::*;
+    fn row(kind: &str, y: u32, x: u32, end: Option<u32>) -> SfcRow {
+        SfcRow {
+            kind: kind.into(),
+            title: String::new(),
+            comment: String::new(),
+            initial: false,
+            action: None,
+            action_code: None,
+            transition_code: None,
+            action_qualifier: None,
+            action_time: None,
+            position: Some(SfcPosition { row: y, column: x }),
+            branch_end: end,
+        }
+    }
+    #[test]
+    fn largest_two_column_path_layout_fits_native_columns_and_overflow_is_guarded() {
+        let end = 65_532;
+        let mut rows = vec![
+            row("step", 0, 0, None),
+            row("alternative_split", 1, 0, Some(end)),
+        ];
+        for column in (0..=end).step_by(2) {
+            rows.push(row("transition", 2, column, None));
+        }
+        rows.extend([
+            row("alternative_join", 3, 0, Some(end)),
+            row("step", 4, 0, None),
+            row("transition", 5, 0, None),
+        ]);
+        assert!(validate_layout(&rows).is_ok());
+        rows[1].branch_end = Some(65_534);
+        assert!(validate_layout(&rows).is_err());
+        rows[1].branch_end = Some(u32::MAX);
+        assert!(validate_layout(&rows).is_err());
+    }
 }

@@ -107,7 +107,7 @@ impl XgwxDocument {
                         };
                         if sources.is_some() && linear_container_supported(block) {
                             result.editable_rows =
-                                result.linear_rows(sources.as_ref().unwrap(), &bool_names).or_else(|| {
+                                result.linear_rows(sources.as_ref().unwrap(), &bool_names, false).or_else(|| {
                                     branches::decode_rows(&result, sources.as_ref().unwrap(), &bool_names)
                                 });
                         }
@@ -315,6 +315,7 @@ impl SfcBlock {
         &self,
         sources: &BTreeMap<String, (u32, String)>,
         bool_names: &[String],
+        projection: bool,
     ) -> Option<Vec<SfcRow>> {
         if !self.main || self.language_type != Some(3) || self.language != Some(2) {
             return None;
@@ -322,7 +323,7 @@ impl SfcBlock {
         if self.entities.is_empty() {
             return (self.rows == 0 && self.columns == 0).then(Vec::new);
         }
-        if self.rows > 512 || self.columns != 2 || self.entities.len() != self.rows as usize * 2 {
+        if self.rows > if projection { branches::MAX_GRID_CELLS / 2 } else { branches::MAX_ROWS } || self.columns != 2 || self.entities.len() != self.rows as usize * 2 {
             return None;
         }
         let mut rows = Vec::new();
@@ -469,7 +470,7 @@ impl SfcBlock {
                 },
             });
         }
-        validate_rows(&rows, bool_names).ok()?;
+        validate_rows(&rows, bool_names, projection).ok()?;
         Some(rows)
     }
 }
@@ -584,11 +585,12 @@ fn valid_action_time(time: &str) -> bool {
     parts > 0 && total <= u32::MAX as u64
 }
 
-fn validate_rows(rows: &[SfcRow], bool_names: &[String]) -> Result<(), crate::XgwxError> {
+fn validate_rows(rows: &[SfcRow], bool_names: &[String], projection: bool) -> Result<(), crate::XgwxError> {
     let fail = |s: &str| crate::XgwxError::SfcEdit(s.into());
-    branches::validate_layout(rows)?;
-    if rows.len() > 4096 {
-        return Err(fail("linear charts support at most 512 rows"));
+    if !projection { branches::validate_layout(rows)?; }
+    if rows.len() > branches::MAX_GRID_CELLS as usize { return Err(fail("chart exceeds the editor grid size safety limit")); }
+    if rows.iter().filter(|r| r.kind == "step").count() > 512 {
+        return Err(fail("XG5000 supports at most 512 ordinary steps per SFC program"));
     }
     let identifier = |s: &str| {
         !s.is_empty()
@@ -758,7 +760,7 @@ impl XgwxDocument {
             .filter(|v| !v.system && v.data_type == "BOOL" && v.declaration.as_ref().is_none_or(|d|d.dimensions.is_empty()))
             .map(|v| v.name.to_lowercase())
             .collect::<Vec<_>>();
-        validate_rows(&patch.rows, &bool_names)?;
+        validate_rows(&patch.rows, &bool_names, false)?;
         let xml = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
         let node = xml
             .descendants()

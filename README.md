@@ -755,12 +755,12 @@ completion before XG5000 program checks pass.
 Native XG5000 checks and Save As comparisons are documented in
 [`fixtures/sfc/README.md`](fixtures/sfc/README.md).
 
-Balanced SFC branches support alternative and simultaneous split/join pairs, up
-to eight equal-height paths, and positioned step/transition editing while
+Balanced SFC branches support alternative and simultaneous split/join pairs
+with aligned joins, and positioned step/transition editing while
 retaining ST sources, action qualifiers and local declarations. The extension
 provides branch creation, adding/removing paths, extending every path by a
 step/transition pair, and collapsing a branch back to its first path. Nested or
-crossing branches, unequal path heights, custom branch priorities, and unknown
+crossing branches, path gaps without connector rows, custom branch priorities, and unknown
 native records remain guarded. See [SFC fixtures](fixtures/sfc/README.md).
 
 SFC steps can contain multiple independent variable or ST actions. Additional
@@ -768,8 +768,11 @@ slots use captured native Type=7 continuation rows, with adjacent Type=2 actions
 Balanced branch paths receive empty continuation padding when another path needs
 an action slot. Qualifiers, timers, and ST sources remain attached to each action;
 shared ST names retain one shared source. Continuations cannot introduce step
-names, comments, initial status, or actions after a transition. The 512 physical
-row limit includes continuation padding. Mixed linear and simultaneous-branch
+names, comments, initial status, or actions after a transition. Native bounds are
+512 ordinary steps and 65,535 rows/columns per program; branches have no separate
+count cap (see the [LS manual, chapter 16](https://sol.ls-electric.com/uploads/document/16411767742780/XG5000_Manual_V2.5_202012_EN.pdf)).
+The editor also limits dense grids to 1,048,576 cells as a resource
+guard. Mixed linear and simultaneous-branch
 stacks have native strict Check Program and Save As retention coverage in
 `fixtures/sfc/multi-action-*`.
 
@@ -783,3 +786,10 @@ initial value and Retain; changing type or bounds is restricted to unreferenced
 declarations. System variables, mapped declarations, custom structures, arrays
 of STRING/FB instances, sparse initializers and uncaptured member overrides
 remain guarded. Stale declarations and failed validation leave the file intact.
+
+Independent SFC paths may contain different numbers of alternating steps and
+transitions. Empty Type=7 continuation rows align their join; action continuations
+retain their original step ownership. Each path still requires an odd nonzero
+count of alternating nodes and the captured split/join entry/exit types. The
+extension can extend one selected path, remove one pair from it, or extend all
+paths together.
