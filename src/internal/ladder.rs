@@ -69,7 +69,15 @@ pub(crate) fn extract_ladder_elements(data: &[u8], strings: &[LadderString]) -> 
 }
 
 pub(crate) fn extract_ladder_structure(data: &[u8], elements: &[LadderElement]) -> LadderStructure {
-    let vertical_lines = extract_ladder_vertical_lines(data);
+    // Both wire orientations come from the same native record parse. Retain
+    // the horizontal result instead of parsing and copying every record twice.
+    let (exact_horizontal, vertical_lines) = match crate::ladder_records::exact_geometry(data) {
+        Some((horizontal, mut vertical)) => {
+            merge_ladder_vertical_lines(&mut vertical);
+            (Some(horizontal), vertical)
+        }
+        None => (None, extract_legacy_ladder_vertical_lines(data)),
+    };
     let branch_groups = extract_ladder_branch_groups(&vertical_lines);
     let mut cells = elements
         .iter()
@@ -90,7 +98,8 @@ pub(crate) fn extract_ladder_structure(data: &[u8], elements: &[LadderElement]) 
 
     push_marker_only_ladder_cells(data, &mut cells);
     cells.sort_by_key(|cell| (cell.raw_y, cell.raw_x, cell.offset));
-    let horizontal_lines = extract_ladder_horizontal_lines(data, &cells);
+    let horizontal_lines =
+        exact_horizontal.unwrap_or_else(|| extract_legacy_ladder_horizontal_lines(data, &cells));
     let rung_comments = extract_ladder_rung_comments(data);
     let output_comments = extract_ladder_output_comments(data);
     let unknown_records = extract_ladder_unknown_records(data, &cells);
@@ -123,11 +132,7 @@ pub(crate) fn extract_ladder_structure(data: &[u8], elements: &[LadderElement]) 
     }
 }
 
-pub(crate) fn extract_ladder_vertical_lines(data: &[u8]) -> Vec<LadderVerticalLine> {
-    if let Some((_, mut lines)) = crate::ladder_records::exact_geometry(data) {
-        merge_ladder_vertical_lines(&mut lines);
-        return lines;
-    }
+pub(crate) fn extract_legacy_ladder_vertical_lines(data: &[u8]) -> Vec<LadderVerticalLine> {
     let mut lines = Vec::new();
     let mut offset = 0;
 
@@ -366,13 +371,10 @@ pub(crate) fn extract_ladder_branch_groups(lines: &[LadderVerticalLine]) -> Vec<
         .collect()
 }
 
-pub(crate) fn extract_ladder_horizontal_lines(
+pub(crate) fn extract_legacy_ladder_horizontal_lines(
     data: &[u8],
     cells: &[LadderCell],
 ) -> Vec<LadderHorizontalLine> {
-    if let Some((lines, _)) = crate::ladder_records::exact_geometry(data) {
-        return lines;
-    }
     let mut lines = Vec::new();
     let mut offset = 0;
 

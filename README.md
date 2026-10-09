@@ -659,7 +659,10 @@ cargo run --release --example bench -- --warmup 50 --iterations 500 fixtures
 
 The benchmark reads `.xgwx` fixture bytes once, then measures parser-only work
 and parser plus higher-level decoding paths such as variables, ladder programs,
-parameters, network summaries, and decoded payloads.
+parameters, network summaries, and decoded payloads. The `ladder avg` column
+isolates ladder decoding using an already parsed document. Native wire geometry
+is parsed once per decode and shared by both wire orientations; unknown layouts
+retain the legacy read-only decoding path.
 
 ## GUI Ladder PoC
 

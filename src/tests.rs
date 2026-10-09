@@ -1421,6 +1421,28 @@ fn variable_name_and_comment_resize_preserve_neighbors_and_numeric_fields() {
 }
 
 #[test]
+fn ladder_structure_preserves_exact_native_wire_geometry() {
+    for path in [
+        "fixtures/ladder-edit/linear.xgwx",
+        "fixtures/ladder-edit/empty.xgwx",
+    ] {
+        let doc = XgwxDocument::from_path(path).unwrap();
+        let program = doc.ladder_program(0).unwrap().unwrap();
+        let (horizontal, mut vertical) =
+            crate::ladder_records::exact_geometry(&program.data)
+                .expect("fixture has exact native records");
+        merge_ladder_vertical_lines(&mut vertical);
+        assert_eq!(program.structure.horizontal_lines, horizontal, "{path}");
+        assert_eq!(program.structure.vertical_lines, vertical, "{path}");
+        assert_eq!(
+            program.structure.branch_groups,
+            extract_ladder_branch_groups(&vertical),
+            "{path}"
+        );
+    }
+}
+
+#[test]
 fn decodes_synthetic_ladder_records() {
     let data = synthetic_ladder_data();
     let strings = extract_ladder_strings(&data);

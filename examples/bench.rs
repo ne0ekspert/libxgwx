@@ -26,8 +26,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         config.iterations
     );
     println!(
-        "{:<28} {:>9} {:>14} {:>14} {:>14} {:>14}",
-        "fixture", "bytes", "parse avg", "parse min", "decode avg", "decode min"
+        "{:<28} {:>9} {:>14} {:>14} {:>14} {:>14} {:>14}",
+        "fixture", "bytes", "parse avg", "parse min", "decode avg", "decode min", "ladder avg"
     );
 
     for fixture in fixtures {
@@ -45,14 +45,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             Ok(())
         })?;
 
+        let doc = XgwxDocument::parse(&fixture.bytes)?;
+        let ladder = run_iterations(config.iterations, || {
+            black_box(doc.ladder_programs());
+            Ok(())
+        })?;
+
         println!(
-            "{:<28} {:>9} {:>14} {:>14} {:>14} {:>14}",
+            "{:<28} {:>9} {:>14} {:>14} {:>14} {:>14} {:>14}",
             fixture.name,
             fixture.bytes.len(),
             format_duration(parse.average()),
             format_duration(parse.min),
             format_duration(decode.average()),
-            format_duration(decode.min)
+            format_duration(decode.min),
+            format_duration(ladder.average())
         );
     }
 
