@@ -1,3 +1,8 @@
+//! Explore a workspace interactively in a terminal.
+//!
+//! Run: `cargo run --example tui -- path/to/project.xgwx`.
+//! No optional features are required. Requires an interactive terminal and uses
+//! its alternate screen. The viewer reads the file without saving changes.
 use std::env;
 use std::error::Error;
 use std::io;

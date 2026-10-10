@@ -141,7 +141,10 @@ impl WasmLadderProgramSummary {
             + self.iec_no_contact_deletion_sites.len()
             + self.iec_no_contact_cell_deletion_sites.len()
             + self.iec_horizontal_wire_repair_sites.len()
-            + self.iec_geometry.as_ref().map_or(0, |g| g.horizontal.len() + g.vertical.len())
+            + self
+                .iec_geometry
+                .as_ref()
+                .map_or(0, |g| g.horizontal.len() + g.vertical.len())
             + program.structure.rungs.len()
             + self.cells.len()
             + self.vertical_lines.len()
@@ -437,7 +440,8 @@ impl WasmLadderProgramSummary {
                     .iter()
                     .filter(|spec| {
                         cpu_model.is_none_or(|model| {
-                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model) != Some(false)
+                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model)
+                                != Some(false)
                         })
                     })
                     .map(WasmLadderInstructionChoice::from)
@@ -450,10 +454,13 @@ impl WasmLadderProgramSummary {
                     .iter()
                     .filter(|spec| {
                         cpu_model.is_some_and(|model| {
-                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model) == Some(false)
-                        }) && program.structure.rungs.iter().any(|rung| {
-                            rung.cells.iter().any(|cell| cell.value == spec.mnemonic)
-                        })
+                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model)
+                                == Some(false)
+                        }) && program
+                            .structure
+                            .rungs
+                            .iter()
+                            .any(|rung| rung.cells.iter().any(|cell| cell.value == spec.mnemonic))
                     })
                     .map(WasmLadderInstructionChoice::from)
                     .collect()
@@ -465,7 +472,8 @@ impl WasmLadderProgramSummary {
                     .iter()
                     .filter(|spec| {
                         cpu_model.is_none_or(|model| {
-                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model) != Some(false)
+                            crate::ladder_instruction_cpu_allowed(spec.mnemonic, model)
+                                != Some(false)
                         })
                     })
                     .map(WasmLadderInstructionChoice::from)

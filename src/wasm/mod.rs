@@ -26,13 +26,16 @@ pub fn create_xgwx_project_wasm(cpu_model: &str, language: &str) -> Result<Vec<u
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_browser_hardware)]
 pub fn edit_xgwx_browser_hardware_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string()
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
         .ok_or_else(|| JsValue::from_str("hardware patch is not JSON-serializable"))?;
-    let patch: BrowserHardwarePatch = serde_json::from_str(&json)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let patch: BrowserHardwarePatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_browser_hardware(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.edit_browser_hardware(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 const MAX_WASM_VARIABLES: usize = 65536;
@@ -181,12 +184,21 @@ pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
 /// Apply one strictly bounded IEC demo edit with payload preservation checks.
 #[cfg(feature = "write")]
 #[wasm_bindgen]
-pub fn edit_xgwx_browser_iec(bytes: &[u8], index: usize, patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("invalid patch"))?;
-    let patch: BrowserIecPatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+pub fn edit_xgwx_browser_iec(
+    bytes: &[u8],
+    index: usize,
+    patch: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("invalid patch"))?;
+    let patch: BrowserIecPatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_browser_iec(index, &patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.edit_browser_iec(index, &patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Probe whether this container can be rewritten without returning probe bytes.
@@ -195,7 +207,8 @@ pub fn edit_xgwx_browser_iec(bytes: &[u8], index: usize, patch: JsValue) -> Resu
 pub fn check_xgwx_edit_support(bytes: &[u8]) -> Result<bool, JsValue> {
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.xml.push('\n');
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
     Ok(true)
 }
 
@@ -204,7 +217,9 @@ pub fn check_xgwx_edit_support(bytes: &[u8]) -> Result<bool, JsValue> {
 #[wasm_bindgen]
 pub fn verify_xgwx_bytes(bytes: &[u8]) -> Result<bool, JsValue> {
     let doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let roundtrip = doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let roundtrip = doc
+        .to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
     Ok(roundtrip == bytes)
 }
 
@@ -571,30 +586,49 @@ pub fn set_xgwx_module_input_filter_wasm(
 /// Move the identified program to its final index and return verified workspace bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = move_xgwx_program)]
-pub fn move_xgwx_program_wasm(bytes: &[u8], from: usize, to: usize, expected_object_id: &str, expected_target_id: &str) -> Result<Vec<u8>, JsValue> {
+pub fn move_xgwx_program_wasm(
+    bytes: &[u8],
+    from: usize,
+    to: usize,
+    expected_object_id: &str,
+    expected_target_id: &str,
+) -> Result<Vec<u8>, JsValue> {
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.move_program(from, to, expected_object_id, expected_target_id).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.move_program(from, to, expected_object_id, expected_target_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Delete the identified top-level program and return verified workspace bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = delete_xgwx_program)]
-pub fn delete_xgwx_program_wasm(bytes: &[u8], program_index: usize, expected_object_id: &str) -> Result<Vec<u8>, JsValue> {
-    let mut doc=XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.delete_program(program_index,expected_object_id).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+pub fn delete_xgwx_program_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    expected_object_id: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.delete_program(program_index, expected_object_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Append a captured blank program and return verified workspace bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = create_xgwx_program)]
 pub fn create_xgwx_program_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("program request is not JSON-serializable"))?;
-    let patch = serde_json::from_str::<NewProgram>(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("program request is not JSON-serializable"))?;
+    let patch =
+        serde_json::from_str::<NewProgram>(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.create_program(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.create_program(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply supported program metadata changes and return rewritten `.xgwx` bytes.
@@ -771,37 +805,48 @@ pub fn update_xgwx_iec_local_symbol_type_wasm(
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_browser_network)]
 pub fn edit_xgwx_browser_network_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json=js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("invalid network patch"))?;
-    let patch=serde_json::from_str::<BrowserNetworkPatch>(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc=XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_browser_network(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("invalid network patch"))?;
+    let patch = serde_json::from_str::<BrowserNetworkPatch>(&json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_browser_network(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply a batch of native Cnet serial-port changes atomically.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_cnet_settings)]
 pub fn edit_xgwx_cnet_settings_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string()
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
         .ok_or_else(|| JsValue::from_str("invalid Cnet patch"))?;
     let patch = serde_json::from_str::<CnetSettingsPatch>(&json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_cnet_settings(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.edit_cnet_settings(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply supported changes to one network and return rewritten bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_fenet_field)]
 pub fn edit_xgwx_fenet_field_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string()
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
         .ok_or_else(|| JsValue::from_str("invalid FEnet patch"))?;
     let patch = serde_json::from_str::<FenetFieldPatch>(&json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_fenet_field(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.edit_fenet_field(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply supported changes to one network and return rewritten bytes.
@@ -2252,24 +2297,39 @@ pub fn insert_xgwx_iec_ld_function_cell_wasm(
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = delete_xgwx_iec_ld_function_output_operand)]
 pub fn delete_xgwx_iec_ld_function_output_operand_wasm(
-    bytes: &[u8], program_index: usize, offset: usize, expected: &str,
+    bytes: &[u8],
+    program_index: usize,
+    offset: usize,
+    expected: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.delete_iec_ld_function_output_operand(program_index, offset, expected)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = assign_xgwx_iec_ld_function_output_operand)]
 pub fn assign_xgwx_iec_ld_function_output_operand_wasm(
-    bytes: &[u8], program_index: usize, block_offset: usize, expected_name: &str,
-    ordinal: u8, value: &str,
+    bytes: &[u8],
+    program_index: usize,
+    block_offset: usize,
+    expected_name: &str,
+    ordinal: u8,
+    value: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.assign_iec_ld_function_output_operand(program_index, block_offset, expected_name, ordinal, value)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.assign_iec_ld_function_output_operand(
+        program_index,
+        block_offset,
+        expected_name,
+        ordinal,
+        value,
+    )
+    .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Replace a captured IEC LD function input/output expression.
@@ -2369,7 +2429,7 @@ struct WasmDocumentSummary {
     sfc: Vec<SfcProgram>,
     text_programs: Vec<TextProgram>,
     program_languages: Vec<&'static str>,
-    #[cfg(all(feature="write",feature="il"))]
+    #[cfg(all(feature = "write", feature = "il"))]
     vendor_il_programs: Vec<crate::VendorIlProgram>,
     networks: Vec<WasmNetworkSummary>,
     xgpd: Vec<WasmXgpdSummary>,
@@ -2434,7 +2494,9 @@ impl WasmDocumentSummary {
             .enumerate()
             .map(|(program_index, result)| {
                 if sfc_indices.contains(&program_index) {
-                    if let Err(error) = doc.sfc_variables(program_index) { warnings.push(format!("program {program_index}: {error}")); }
+                    if let Err(error) = doc.sfc_variables(program_index) {
+                        warnings.push(format!("program {program_index}: {error}"));
+                    }
                     return Vec::new();
                 }
                 match result {
@@ -2499,7 +2561,7 @@ impl WasmDocumentSummary {
             sfc: sfc_programs,
             text_programs,
             program_languages: doc.program_languages(),
-            #[cfg(all(feature="write",feature="il"))]
+            #[cfg(all(feature = "write", feature = "il"))]
             vendor_il_programs: doc.vendor_il_programs(),
             header: WasmHeaderSummary::from_header(&doc.header, doc.trailer.len()),
             project: WasmProjectSummary {
@@ -2623,7 +2685,12 @@ fn decode_browser_ladder(
         .take(MAX_WASM_LADDER_PROGRAMS)
         .enumerate()
     {
-        if element.descendants_named("SFC_ProgramList").next().is_some() || matches!(element.attribute("Kind"), Some("4" | "9")) {
+        if element
+            .descendants_named("SFC_ProgramList")
+            .next()
+            .is_some()
+            || matches!(element.attribute("Kind"), Some("4" | "9"))
+        {
             continue;
         }
         let cached = previous.get(program_index).filter(|cached| {
@@ -2649,7 +2716,8 @@ fn decode_browser_ladder(
                 ));
                 break;
             }
-            let summary = WasmLadderProgramSummary::from_program(program_index, &program, cpu_model);
+            let summary =
+                WasmLadderProgramSummary::from_program(program_index, &program, cpu_model);
             let items = summary.source_item_count(&program);
             (summary, items)
         };
@@ -2669,7 +2737,10 @@ fn decode_browser_ladder(
         decoded_bytes += summary.decoded_len;
         item_count += program_items;
         next_cache.push(CachedBrowserLadder {
-            element: element.clone(), cpu_model, items: program_items, summary: summary.clone(),
+            element: element.clone(),
+            cpu_model,
+            items: program_items,
+            summary: summary.clone(),
         });
         ladder.push(summary);
     }
@@ -2690,27 +2761,40 @@ mod tests {
 
     #[test]
     fn ladder_summary_cache_matches_fresh_decode_after_edit_and_undo() {
-        let original = XgwxDocument::parse(include_bytes!("../../fixtures/canvas-rows/iec-row300-native.xgwx")).unwrap();
+        let original = XgwxDocument::parse(include_bytes!(
+            "../../fixtures/canvas-rows/iec-row300-native.xgwx"
+        ))
+        .unwrap();
         let fresh = |doc: &XgwxDocument| {
             BROWSER_LADDER_CACHE.with(|cache| cache.borrow_mut().clear());
             serde_json::to_value(WasmDocumentSummary::from_document(doc)).unwrap()
         };
         let before = fresh(&original);
-        assert_eq!(before, serde_json::to_value(WasmDocumentSummary::from_document(&original)).unwrap());
+        assert_eq!(
+            before,
+            serde_json::to_value(WasmDocumentSummary::from_document(&original)).unwrap()
+        );
         let program = original.ladder_program(0).unwrap().unwrap();
         let summary = WasmLadderProgramSummary::from_program(0, &program, None);
-        assert_eq!(summary.source_item_count(&program), WasmLadderProgramSummary::original_source_item_count(&program));
+        assert_eq!(
+            summary.source_item_count(&program),
+            WasmLadderProgramSummary::original_source_item_count(&program)
+        );
         #[cfg(feature = "write")]
         {
             let mut edited = original.clone();
-            edited.insert_iec_ld_single_element(0, 400, 1, "contact", "NO", "%MX1").unwrap();
+            edited
+                .insert_iec_ld_single_element(0, 400, 1, "contact", "NO", "%MX1")
+                .unwrap();
             let cached = serde_json::to_value(WasmDocumentSummary::from_document(&edited)).unwrap();
             assert_ne!(cached["ladder"], before["ladder"]);
             assert_eq!(cached, fresh(&edited));
-            assert_eq!(before, serde_json::to_value(WasmDocumentSummary::from_document(&original)).unwrap());
+            assert_eq!(
+                before,
+                serde_json::to_value(WasmDocumentSummary::from_document(&original)).unwrap()
+            );
         }
     }
-
 
     #[test]
     fn browser_summary_preserves_parameter_details() {
@@ -2801,58 +2885,90 @@ pub fn edit_xgwx_sfc_entity_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>
     let json = js_sys::JSON::stringify(&patch)?
         .as_string()
         .ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
-    let patch: SfcEntityPatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let patch: SfcEntityPatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_sfc_entity(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.edit_sfc_entity(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = replace_xgwx_sfc_sequence)]
 pub fn replace_xgwx_sfc_sequence_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
-    let patch: crate::SfcSequencePatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
+    let patch: crate::SfcSequencePatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.replace_sfc_sequence(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.replace_sfc_sequence(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_sfc_variable)]
 pub fn edit_xgwx_sfc_variable_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
-    let patch: crate::SfcVariablePatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
+    let patch: crate::SfcVariablePatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_sfc_variable(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.edit_sfc_variable(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_text_program)]
 pub fn edit_xgwx_text_program_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("text patch is not JSON-serializable"))?;
-    let patch: TextProgramPatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("text patch is not JSON-serializable"))?;
+    let patch: TextProgramPatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_text_program(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.edit_text_program(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_text_variable)]
-pub fn edit_xgwx_text_variable_wasm(bytes: &[u8], expected_object_id: &str, patch: JsValue) -> Result<Vec<u8>, JsValue> {
-    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("variable patch is not JSON-serializable"))?;
-    let patch: SfcVariablePatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+pub fn edit_xgwx_text_variable_wasm(
+    bytes: &[u8],
+    expected_object_id: &str,
+    patch: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("variable patch is not JSON-serializable"))?;
+    let patch: SfcVariablePatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_text_variable(expected_object_id, &patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+    doc.edit_text_variable(expected_object_id, &patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-#[cfg(all(feature="write",feature="il"))]
+#[cfg(all(feature = "write", feature = "il"))]
 #[wasm_bindgen(js_name=edit_xgwx_vendor_il)]
-pub fn edit_xgwx_vendor_il_wasm(bytes:&[u8],patch:JsValue)->Result<Vec<u8>,JsValue>{
- let json=js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(||JsValue::from_str("IL patch must be JSON"))?;
- let patch:crate::VendorIlPatch=serde_json::from_str(&json).map_err(|e|JsValue::from_str(&e.to_string()))?;
- let mut doc=XgwxDocument::parse(bytes).map_err(|e|JsValue::from_str(&e.to_string()))?;
- doc.edit_vendor_il(&patch).map_err(|e|JsValue::from_str(&e.to_string()))?;
- doc.to_verified_bytes().map_err(|e|JsValue::from_str(&e.to_string()))
+pub fn edit_xgwx_vendor_il_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("IL patch must be JSON"))?;
+    let patch: crate::VendorIlPatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_vendor_il(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
 }

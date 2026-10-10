@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "cpu_type": 100,
+      "file": "xgi-cpuu.xml",
+      "source": "fixtures/sfc/cpu-cpuu-native.xgwx",
+      "source_sha256": "f8a0b7bbe7de7609e6c84a44d8648ad34ca5539bf8c02a3690a6123e60a8ba21",
+      "profile_sha256": "801e41bf541470b0e18f459b1698036e0cbaa8d39a6f584d5e5499e7aff1a113"
+    },
+    {
+      "cpu_type": 102,
+      "file": "xgi-cpuh.xml",
+      "source": "fixtures/sfc/cpu-cpuh-native.xgwx",
+      "source_sha256": "640400ed90b9bd56e41631b7efb4344d7968ff9d82cbadfedddff285cbdbf508",
+      "profile_sha256": "ec0d2811bec5b6c1cf46da4896852d242dd957cf6e3e1bc4454a7f45b2ab0e58"
+    },
+    {
+      "cpu_type": 104,
+      "file": "xgi-cpus.xml",
+      "source": "fixtures/sfc/cpu-cpus-native.xgwx",
+      "source_sha256": "6128c31ae57405913fa5a6d6a0897b4fdeecca3c2043ee7f1d83cfab80d428c7",
+      "profile_sha256": "bb556d017e02e0e4d1852b316270a9b17b01871a569ae1b39bfdfda59452000d"
+    },
+    {
+      "cpu_type": 106,
+      "file": "xgi-cpue.xml",
+      "source": "fixtures/sfc/new-xgi-sfc.xgwx",
+      "source_sha256": "891c988a575473386fb623c7eb65d10600bda6ac1ed28b4d1db0690ca4c023e7",
+      "profile_sha256": "8fff090a845345d8c699c85870cac4262e4f7dc9afadb8248bfa7a4b63dc7a46"
+    },
+    {
+      "cpu_type": 107,
+      "file": "xgi-cpuud.xml",
+      "source": "fixtures/sfc/cpu-cpuud-native.xgwx",
+      "source_sha256": "acd84ff5b16b4acf9f718f99db546997d2c92dd6bca180b66a5fa218d54d25d5",
+      "profile_sha256": "d79db1360cd338d31aeb86d461cdae9a9d42a0e634b2caf4ffc1afecd1e551d0"
+    },
+    {
+      "cpu_type": 111,
+      "file": "xgi-cpuun.xml",
+      "source": "fixtures/sfc/cpu-cpuun-native.xgwx",
+      "source_sha256": "7215be419f7e071408ac55747776111c9b2f96eefa3c71eab94af01daff17382",
+      "profile_sha256": "d2b065551b4021413fbc56fbffe75b3d451692d63e448ec3a1335bd023b5a85a"
+    }
+  ]
+}

@@ -160,10 +160,14 @@ impl XgwxDocument {
             .and_then(crate::cpu::cpu_for_type)
             .ok_or_else(|| fail("unknown CPU type"))?;
         if !self.program_languages().contains(&patch.language.as_str()) {
-            return Err(fail("this program language is unvalidated for the selected CPU or project mode"));
+            return Err(fail(
+                "this program language is unvalidated for the selected CPU or project mode",
+            ));
         }
         let template = match (cpu.family, patch.language.as_str()) {
-            ("XGK", "LD") if self.xgk_auto_allocation() => include_str!("program_templates/xgk-auto-ld.xml"),
+            ("XGK", "LD") if self.xgk_auto_allocation() => {
+                include_str!("program_templates/xgk-auto-ld.xml")
+            }
             ("XGK", "LD" | "IL") => include_str!("program_templates/xgk-ld.xml"),
             ("XGI" | "XGK" | "XGB" | "XGR", "ST") => include_str!("program_templates/xgi-st.xml"),
             ("XGI" | "XGB" | "XGR", "IL") => include_str!("program_templates/xgi-il.xml"),

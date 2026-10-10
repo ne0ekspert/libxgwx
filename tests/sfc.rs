@@ -631,8 +631,8 @@ fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion
         data_type: "WORD".into(),
         description: "".into(),
         remove: true,
-            declaration: None,
-            update: false,
+        declaration: None,
+        update: false,
     })
     .unwrap();
     assert!(

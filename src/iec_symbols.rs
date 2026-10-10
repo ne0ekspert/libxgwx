@@ -32,7 +32,6 @@ pub fn iec_primitive_type_name(code: u32) -> Option<&'static str> {
         .find_map(|&(name, id)| (id == code).then_some(name))
 }
 
-#[cfg(feature = "write")]
 pub(crate) fn iec_primitive_type_code(name: &str) -> Option<u32> {
     IEC_PRIMITIVE_TYPES
         .iter()

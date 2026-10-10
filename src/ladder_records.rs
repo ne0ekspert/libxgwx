@@ -141,7 +141,9 @@ pub(crate) fn xy(x: u8, y: u32) -> [u8; 4] {
 }
 pub(crate) fn row_count(header: &[u8]) -> Result<usize, XgwxError> {
     let short = u16_at(header, 4)?;
-    if short != 65535 { return Ok(short); }
+    if short != 65535 {
+        return Ok(short);
+    }
     let bytes = header.get(6..10).ok_or_else(unsupported)?;
     Ok(u32::from_le_bytes(bytes.try_into().unwrap()) as usize)
 }
@@ -156,7 +158,9 @@ pub(crate) fn set_row_count(header: &mut Vec<u8>, count: usize) {
     if count >= 65535 {
         header.extend_from_slice(&65535u16.to_le_bytes());
         header.extend_from_slice(&(count as u32).to_le_bytes());
-    } else { header.extend_from_slice(&(count as u16).to_le_bytes()); }
+    } else {
+        header.extend_from_slice(&(count as u16).to_le_bytes());
+    }
     header.extend_from_slice(&groups.to_le_bytes());
 }
 
@@ -388,7 +392,7 @@ fn parse_record(bytes: &[u8], pos: usize, y: u32) -> Result<(Record, usize), Xgw
         let b = bytes.get(pos..pos + 9).ok_or_else(unsupported)?;
         x = b[5];
         if b[..5] != [1, 0, 0, 0, 0]
-                        || x == 0
+            || x == 0
             || x > 93
             || !x.is_multiple_of(3)
             || !y_at(b, 6).is_multiple_of(4)

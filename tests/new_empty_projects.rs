@@ -119,11 +119,13 @@ fn sparse_iec_canvas_contacts_and_coils_preserve_existing_rows() {
         &program.data[preserved_row.start..preserved_row.end]
     );
     let saved = doc.to_verified_bytes().unwrap();
-    assert!(doc
-        .insert_iec_ld_single_element(0, 100, 1, "contact", "NO", "%MX2")
-        .is_err());
-    assert!(doc
-        .insert_iec_ld_single_element(0, 16383, 1, "contact", "NO", "%MX2")
-        .is_err());
+    assert!(
+        doc.insert_iec_ld_single_element(0, 100, 1, "contact", "NO", "%MX2")
+            .is_err()
+    );
+    assert!(
+        doc.insert_iec_ld_single_element(0, 16383, 1, "contact", "NO", "%MX2")
+            .is_err()
+    );
     assert_eq!(doc.to_verified_bytes().unwrap(), saved);
 }

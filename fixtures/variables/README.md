@@ -15,10 +15,10 @@ and opaque trailing fields are included in the comparison.
 Reproduction:
 
 ```sh
-cargo run --features write --example variable_text_acceptance -- fixtures/elements.xgwx VARGEN.xgwx
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin variable_text_acceptance -- fixtures/elements.xgwx VARGEN.xgwx
 # Open, Check Program, and Save As in XG5000.
-cargo run --features write --example variable_text_acceptance -- --compare VARGEN.xgwx VARTEXTROUND.xgwx
-cargo run --features write --example variable_text_acceptance -- --symbols VARTEXTROUND.xgwx global_text.bin
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin variable_text_acceptance -- --compare VARGEN.xgwx VARTEXTROUND.xgwx
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin variable_text_acceptance -- --symbols VARTEXTROUND.xgwx global_text.bin
 ```
 
 SHA-256: `e557fc9f0f6093d5e02a886c338c868b9c2be2283b7b5e2687509137a2468897`.

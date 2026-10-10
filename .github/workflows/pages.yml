@@ -26,6 +26,26 @@ jobs:
       - run: cargo test --features il
       - run: cargo test --features write
       - run: cargo check --no-default-features
+      - run: cargo check --manifest-path dev-tools/Cargo.toml --bins
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify crates.io package contents and default build
+        run: |
+          cargo package --list > /tmp/libxgwx-package-files.txt
+          if grep -E '(^|/)(fixtures|tests|examples|dev-tools|scripts|samples|web)/|\.xgwx$' /tmp/libxgwx-package-files.txt; then
+            echo "Crate must exclude workspace fixtures and repository-only files"
+            exit 1
+          fi
+          cargo package --locked
+      - name: Build optional APIs from the extracted crate
+        run: |
+          for manifest in target/package/libxgwx-*/Cargo.toml; do
+            cargo check --manifest-path "$manifest" --lib --features write,il,wasm
+          done
 
   api-docs:
     runs-on: ubuntu-latest

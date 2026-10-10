@@ -21,7 +21,7 @@ The blank template reopens normally; strict all-program checking reports
 are expected until the user adds chart structure in XG5000.
 The generated edit and XG5000 Save As result have identical SFC entity trees
 and local variable tables. The UI harness produced exactly the same project
-bytes as `cargo run --features write --example sfc_acceptance`.
+bytes as `cargo run --features write --manifest-path dev-tools/Cargo.toml --bin sfc_acceptance`.
 
 SFC uses `SFC_ProgramList` XML, not binary ladder `ProgramData`. Transition
 properties are mirrored in the adjacent type-9 annotation entity; both copies
@@ -156,8 +156,7 @@ XG5000 4.82.1 strict all-program Check Program with 0 errors and 0 warnings.
 `multi-action-{linear,branch}-roundtrip.xgwx` are the native Save As results;
 editable rows, individual action qualifiers/timers/sources, and declarations
 match the generated input. These validate file compatibility without a PLC.
-Reproduce generation with `cargo run --features write --example
-sfc_multi_actions_acceptance`.
+Reproduce generation with `cargo run --features write --manifest-path dev-tools/Cargo.toml --bin sfc_multi_actions_acceptance`.
 
 ## Advanced declarations
 
@@ -175,7 +174,7 @@ These declaration captures were made in offline XG5000 on 2026-10-09:
 - `declarations-roundtrip.xgwx`: native strict all-program Check Program / Save As
   result; declarations and editable rows match the generated file.
 
-Generate with `cargo run --features write --example sfc_declarations_acceptance`.
+Generate with `cargo run --features write --manifest-path dev-tools/Cargo.toml --bin sfc_declarations_acceptance`.
 The array record contains six counted member maps; the third carries initial
 values. Captured overrides in other maps stay guarded. Array bounds are zero
 based; nonzero lower bounds were rejected by native XG5000 during file loading.
@@ -199,7 +198,7 @@ and compares both fixture row sets.
 `branch-independent-parallel-generated.xgwx` adds a transition/step pair to the
 second path of `multi-action-branch-native` while padding the first path with
 empty Type=7 rows. It retains the first path's stacked actions and ST declarations.
-Reproduce with `cargo run --features write --example sfc_path_acceptance`.
+Reproduce with `cargo run --features write --manifest-path dev-tools/Cargo.toml --bin sfc_path_acceptance`.
 `branch-independent-alternative-generated.xgwx` similarly adds a step/transition
 pair to the second path of `branch-alternative-native`, using the extension's
 `sfcExtendPaths(block, selectedEntity, true)` planner.
@@ -223,7 +222,7 @@ resource guard caps dense grids at 1,048,576 cells.
 `branch-sixteen-generated.xgwx` contains 16 simultaneous paths (17 steps total).
 `branch-step-limit-generated.xgwx` contains 511 simultaneous paths plus its
 initial step, reaching 512 ordinary steps. Generate both using
-`cargo run --features write --example sfc_branch_limit_acceptance`.
+`cargo run --features write --manifest-path dev-tools/Cargo.toml --bin sfc_branch_limit_acceptance`.
 Both passed native XG5000 4.82.1 XGI-CPUE all-program checks with logic/syntax,
 strict type and duplicate-coil checking enabled: **0 errors, 0 warnings, 23
 messages**. Native Save As (`L16RES` and `L511RES`) produced the corresponding

@@ -1,3 +1,8 @@
+//! Inspect project metadata, programs, variables and hardware parameters.
+//!
+//! Run: `cargo run --example inspect -- path/to/project.xgwx`.
+//! No optional features are required. Reads the workspace and prints a summary;
+//! it does not change the input file. Unsupported payloads may decode partially.
 use std::env;
 use std::error::Error;
 use std::io;

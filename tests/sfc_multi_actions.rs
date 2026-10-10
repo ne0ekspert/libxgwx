@@ -21,9 +21,10 @@ fn native_three_actions_and_branch_continuations_preserve_independent_sources() 
         let doc = XgwxDocument::from_path(format!("fixtures/sfc/{file}.xgwx")).unwrap();
         let program = &doc.sfc_programs()[0];
         let rows = program.blocks[0].editable_rows.as_ref().unwrap();
-        assert!(rows
-            .iter()
-            .any(|r| r.kind == "continuation" && r.action.is_some()));
+        assert!(
+            rows.iter()
+                .any(|r| r.kind == "continuation" && r.action.is_some())
+        );
         assert!(rows.iter().any(|r| r.action_code.is_some()));
         assert_eq!(program.variables_error, None);
         if file.contains("three") {
@@ -48,15 +49,16 @@ fn additional_actions_cannot_cross_a_transition_or_become_initial_steps() {
             1 => rows.swap(2, 3),
             _ => rows[2].action_time = Some("T#bad".into()),
         }
-        assert!(doc
-            .replace_sfc_sequence(&xgwx::SfcSequencePatch {
+        assert!(
+            doc.replace_sfc_sequence(&xgwx::SfcSequencePatch {
                 program_index: 0,
                 block_index: 0,
                 expected_entities: block.entities.clone(),
                 expected_rows: block.editable_rows.clone(),
                 rows
             })
-            .is_err());
+            .is_err()
+        );
         assert_eq!(doc.xml, source.xml);
     }
 }

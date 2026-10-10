@@ -612,7 +612,9 @@ impl XgwxDocument {
     pub fn edit_browser_hardware(&mut self, patch: &BrowserHardwarePatch) -> Result<(), XgwxError> {
         let fail = |message: &str| XgwxError::BrowserHardwareEdit(message.to_owned());
         let is_base = patch.operation == "slotCount";
-        if !is_base && patch.slot.is_none() { return Err(fail("missing module slot")); }
+        if !is_base && patch.slot.is_none() {
+            return Err(fail("missing module slot"));
+        }
         let attribute_name = match patch.operation.as_str() {
             "slotCount" => "SlotCount",
             "comment" => "Comment",
@@ -620,52 +622,105 @@ impl XgwxDocument {
             _ => return Err(fail("unsupported browser hardware field")),
         };
         let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
-        let nodes = document.descendants().filter(|node| {
-            node.has_tag_name(if is_base { "Base" } else { "Module" })
-                && node.attribute("Base").and_then(|v| v.parse::<u32>().ok()) == Some(patch.base)
-                && (is_base && node.parent().is_some_and(|p| p.has_tag_name("BaseInfo"))
-                    || !is_base && node.attribute("Slot").and_then(|v| v.parse::<u32>().ok()) == patch.slot)
-        }).collect::<Vec<_>>();
+        let nodes = document
+            .descendants()
+            .filter(|node| {
+                node.has_tag_name(if is_base { "Base" } else { "Module" })
+                    && node.attribute("Base").and_then(|v| v.parse::<u32>().ok())
+                        == Some(patch.base)
+                    && (is_base && node.parent().is_some_and(|p| p.has_tag_name("BaseInfo"))
+                        || !is_base
+                            && node.attribute("Slot").and_then(|v| v.parse::<u32>().ok())
+                                == patch.slot)
+            })
+            .collect::<Vec<_>>();
         let target = match nodes.as_slice() {
             [node] => *node,
             _ => return Err(fail("hardware target is absent or ambiguous")),
         };
-        let attribute = target.attributes().find(|a| a.name() == attribute_name)
+        let attribute = target
+            .attributes()
+            .find(|a| a.name() == attribute_name)
             .ok_or_else(|| fail("hardware field is absent"))?;
         let observed = if is_base {
-            attribute.value().parse::<u32>().map_err(|_| fail("invalid slot count"))?.to_string()
-        } else { attribute.value().to_owned() };
-        if observed != patch.expected_value { return Err(fail("stale hardware field")); }
+            attribute
+                .value()
+                .parse::<u32>()
+                .map_err(|_| fail("invalid slot count"))?
+                .to_string()
+        } else {
+            attribute.value().to_owned()
+        };
+        if observed != patch.expected_value {
+            return Err(fail("stale hardware field"));
+        }
         let range = attribute.range_value();
         let mut candidate = self.clone();
         let slot = patch.slot.unwrap_or(0);
         match patch.operation.as_str() {
-            "slotCount" => candidate.set_base_slot_count(patch.base,
-                patch.replacement.parse().map_err(|_| fail("invalid slot count"))?)?,
-            "comment" => candidate.update_module(patch.base, slot, &ModulePatch {
-                comment: Some(patch.replacement.clone()), ..ModulePatch::default()
-            })?,
+            "slotCount" => candidate.set_base_slot_count(
+                patch.base,
+                patch
+                    .replacement
+                    .parse()
+                    .map_err(|_| fail("invalid slot count"))?,
+            )?,
+            "comment" => candidate.update_module(
+                patch.base,
+                slot,
+                &ModulePatch {
+                    comment: Some(patch.replacement.clone()),
+                    ..ModulePatch::default()
+                },
+            )?,
             "inputFilter" => {
-                let value = patch.replacement.parse::<u8>().map_err(|_| fail("invalid input filter"))?;
-                if ![0,1,3,5,10,20,70,100].contains(&value) { return Err(fail("unverified input filter value")); }
-                candidate.set_module_input_filter(patch.base, slot, ModuleInputFilter::from_raw(value))?;
-            },
-            "option" => candidate.set_module_option(patch.base, slot,
-                patch.key.as_deref().ok_or_else(|| fail("missing option key"))?,
+                let value = patch
+                    .replacement
+                    .parse::<u8>()
+                    .map_err(|_| fail("invalid input filter"))?;
+                if ![0, 1, 3, 5, 10, 20, 70, 100].contains(&value) {
+                    return Err(fail("unverified input filter value"));
+                }
+                candidate.set_module_input_filter(
+                    patch.base,
+                    slot,
+                    ModuleInputFilter::from_raw(value),
+                )?;
+            }
+            "option" => candidate.set_module_option(
+                patch.base,
+                slot,
+                patch
+                    .key
+                    .as_deref()
+                    .ok_or_else(|| fail("missing option key"))?,
                 patch.index.ok_or_else(|| fail("missing option index"))?,
-                patch.replacement.parse().map_err(|_| fail("invalid option value"))?)?,
+                patch
+                    .replacement
+                    .parse()
+                    .map_err(|_| fail("invalid option value"))?,
+            )?,
             _ => unreachable!(),
         }
         let parsed = roxmltree::Document::parse(&candidate.xml).map_err(XgwxError::Xml)?;
-        let updated = parsed.descendants().find(|node| {
-            node.has_tag_name(if is_base { "Base" } else { "Module" })
-                && node.attribute("Base").and_then(|v| v.parse::<u32>().ok()) == Some(patch.base)
-                && (is_base && node.parent().is_some_and(|p| p.has_tag_name("BaseInfo"))
-                    || !is_base && node.attribute("Slot").and_then(|v| v.parse::<u32>().ok()) == patch.slot)
-        }).and_then(|node| node.attribute(attribute_name)).ok_or_else(|| fail("edited field disappeared"))?;
+        let updated = parsed
+            .descendants()
+            .find(|node| {
+                node.has_tag_name(if is_base { "Base" } else { "Module" })
+                    && node.attribute("Base").and_then(|v| v.parse::<u32>().ok())
+                        == Some(patch.base)
+                    && (is_base && node.parent().is_some_and(|p| p.has_tag_name("BaseInfo"))
+                        || !is_base
+                            && node.attribute("Slot").and_then(|v| v.parse::<u32>().ok())
+                                == patch.slot)
+            })
+            .and_then(|node| node.attribute(attribute_name))
+            .ok_or_else(|| fail("edited field disappeared"))?;
         let mut expected = self.xml.clone();
         expected.replace_range(range, &escape_xml_attribute(updated));
-        if candidate.xml != expected { return Err(fail("non-target hardware XML changed")); }
+        if candidate.xml != expected {
+            return Err(fail("non-target hardware XML changed"));
+        }
         candidate.to_verified_bytes()?;
         *self = candidate;
         Ok(())
@@ -675,34 +730,79 @@ impl XgwxDocument {
     pub fn edit_browser_network(&mut self, patch: &BrowserNetworkPatch) -> Result<(), XgwxError> {
         let fail = |s: &str| XgwxError::BrowserNetworkEdit(s.to_owned());
         let attr = match (patch.module, patch.field.as_str()) {
-            (false, "name") => "Name", (true, "configName") => "ConfigName",
-            (true, "alias") => "Alias", (true, "description") => "Description",
-            _ => return Err(fail("unsupported network field; protocol and address writes are not validated")),
+            (false, "name") => "Name",
+            (true, "configName") => "ConfigName",
+            (true, "alias") => "Alias",
+            (true, "description") => "Description",
+            _ => {
+                return Err(fail(
+                    "unsupported network field; protocol and address writes are not validated",
+                ));
+            }
         };
         let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
-        let network = document.descendants().filter(|n| n.has_tag_name("Network"))
-            .nth(patch.network_index).ok_or_else(|| fail("network is absent"))?;
+        let network = document
+            .descendants()
+            .filter(|n| n.has_tag_name("Network"))
+            .nth(patch.network_index)
+            .ok_or_else(|| fail("network is absent"))?;
         let target = if patch.module {
-            if patch.base.is_none() || patch.slot.is_none() { return Err(fail("module position is absent")); }
-            let all = document.descendants().filter(|n| n.has_tag_name("NetworkModule")
-                && n.attribute("Base").and_then(|s| s.parse().ok()) == patch.base
-                && n.attribute("Slot").and_then(|s| s.parse().ok()) == patch.slot).collect::<Vec<_>>();
-            match all.as_slice() { [n] if n.ancestors().any(|p| p == network) => *n,
-                _ => return Err(fail("network module is absent, ambiguous or belongs to another network")) }
-        } else { network };
-        let field = target.attributes().find(|a| a.name() == attr).ok_or_else(|| fail("existing network attribute is absent"))?;
-        if field.value() != patch.expected_value { return Err(fail("stale network value")); }
+            if patch.base.is_none() || patch.slot.is_none() {
+                return Err(fail("module position is absent"));
+            }
+            let all = document
+                .descendants()
+                .filter(|n| {
+                    n.has_tag_name("NetworkModule")
+                        && n.attribute("Base").and_then(|s| s.parse().ok()) == patch.base
+                        && n.attribute("Slot").and_then(|s| s.parse().ok()) == patch.slot
+                })
+                .collect::<Vec<_>>();
+            match all.as_slice() {
+                [n] if n.ancestors().any(|p| p == network) => *n,
+                _ => {
+                    return Err(fail(
+                        "network module is absent, ambiguous or belongs to another network",
+                    ));
+                }
+            }
+        } else {
+            network
+        };
+        let field = target
+            .attributes()
+            .find(|a| a.name() == attr)
+            .ok_or_else(|| fail("existing network attribute is absent"))?;
+        if field.value() != patch.expected_value {
+            return Err(fail("stale network value"));
+        }
         let range = field.range_value();
         let mut candidate = self.clone();
         if patch.module {
             let mut p = NetworkModulePatch::default();
-            match patch.field.as_str() { "configName" => p.config_name=Some(patch.replacement.clone()),
-                "alias" => p.alias=Some(patch.replacement.clone()), _ => p.description=Some(patch.replacement.clone()) }
+            match patch.field.as_str() {
+                "configName" => p.config_name = Some(patch.replacement.clone()),
+                "alias" => p.alias = Some(patch.replacement.clone()),
+                _ => p.description = Some(patch.replacement.clone()),
+            }
             candidate.update_network_module(patch.base.unwrap(), patch.slot.unwrap(), &p)?;
-        } else { candidate.update_network(patch.network_index, &NetworkPatch { name:Some(patch.replacement.clone()), ..NetworkPatch::default() })?; }
-        let mut expected = self.xml.clone();expected.replace_range(range, &escape_xml_attribute(&patch.replacement));
-        if candidate.xml != expected { return Err(fail("non-target network XML changed")); }
-        candidate.to_verified_bytes()?; *self=candidate; Ok(())
+        } else {
+            candidate.update_network(
+                patch.network_index,
+                &NetworkPatch {
+                    name: Some(patch.replacement.clone()),
+                    ..NetworkPatch::default()
+                },
+            )?;
+        }
+        let mut expected = self.xml.clone();
+        expected.replace_range(range, &escape_xml_attribute(&patch.replacement));
+        if candidate.xml != expected {
+            return Err(fail("non-target network XML changed"));
+        }
+        candidate.to_verified_bytes()?;
+        *self = candidate;
+        Ok(())
     }
 
     /// Change a captured FEnet setting without altering module identity or payloads.
@@ -815,12 +915,14 @@ impl XgwxDocument {
                 return Err(fail("DHCP must be 0 (disabled) or 1 (enabled)"));
             }
             (
-                vec![if patch.field == "dhcp" {
-                    "Dhcp"
-                } else {
-                    "Dhcp2"
-                }
-                .to_owned()],
+                vec![
+                    if patch.field == "dhcp" {
+                        "Dhcp"
+                    } else {
+                        "Dhcp2"
+                    }
+                    .to_owned(),
+                ],
                 vec![patch.replacement.clone()],
             )
         };
@@ -925,13 +1027,14 @@ impl XgwxDocument {
         target: &CpuCatalogEntry,
     ) -> Result<(), XgwxError> {
         let unsupported = |reason| XgwxError::UnsupportedXgiCpuChange { reason };
-        let defaults: &[(u32, &[u8])] = &[
-            (100, include_bytes!("../fixtures/sfc/cpu-cpuu-native.xgwx")),
-            (102, include_bytes!("../fixtures/sfc/cpu-cpuh-native.xgwx")),
-            (104, include_bytes!("../fixtures/sfc/cpu-cpus-native.xgwx")),
-            (106, include_bytes!("../fixtures/sfc/new-xgi-sfc.xgwx")),
-            (107, include_bytes!("../fixtures/sfc/cpu-cpuud-native.xgwx")),
-            (111, include_bytes!("../fixtures/sfc/cpu-cpuun-native.xgwx")),
+        // Parameter-only library defaults; no workspace fixtures are embedded.
+        let defaults: &[(u32, &str)] = &[
+            (100, include_str!("cpu_defaults/xgi-cpuu.xml")),
+            (102, include_str!("cpu_defaults/xgi-cpuh.xml")),
+            (104, include_str!("cpu_defaults/xgi-cpus.xml")),
+            (106, include_str!("cpu_defaults/xgi-cpue.xml")),
+            (107, include_str!("cpu_defaults/xgi-cpuud.xml")),
+            (111, include_str!("cpu_defaults/xgi-cpuun.xml")),
         ];
         if !defaults.iter().any(|(code, _)| *code == current.type_code)
             || !defaults.iter().any(|(code, _)| *code == target.type_code)
@@ -948,7 +1051,9 @@ impl XgwxDocument {
                 p.variables_error.is_some()
                     || !p.blocks.iter().any(|b| b.main && b.editable_rows.is_some())
             })
-            || sources.iter().any(|p| !p.editable || p.variables_error.is_some())
+            || sources
+                .iter()
+                .any(|p| !p.editable || p.variables_error.is_some())
         {
             return Err(unsupported(
                 "the workspace must contain only supported SFC, ST or IEC IL programs in one configuration",
@@ -961,7 +1066,7 @@ impl XgwxDocument {
         }
         let profiles = defaults
             .iter()
-            .map(|(code, bytes)| Ok((*code, XgwxDocument::parse(bytes)?)))
+            .map(|(code, xml)| Ok((*code, parse_xml(xml)?)))
             .collect::<Result<Vec<_>, XgwxError>>()?;
         let source = &profiles
             .iter()
@@ -973,8 +1078,13 @@ impl XgwxDocument {
             .find(|(code, _)| *code == target.type_code)
             .unwrap()
             .1;
-        let reserved = |doc: &XgwxDocument| {
-            doc.root.descendants_named("XGIBasicParam").next().map(|p| {
+        let destination_xml = defaults
+            .iter()
+            .find(|(code, _)| *code == target.type_code)
+            .unwrap()
+            .1;
+        let reserved = |root: &XmlElement| {
+            root.descendants_named("XGIBasicParam").next().map(|p| {
                 (0..5)
                     .map(|i| {
                         p.attribute(&format!("OUTPUT_PARAMETER_RESERVED_{i}"))
@@ -983,7 +1093,7 @@ impl XgwxDocument {
                     .collect::<Vec<_>>()
             })
         };
-        let blank = XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgi.xgwx"))?;
+        let blank = parse_xml(include_str!("project_defaults/xgi.xml"))?;
         let loop_reserved = Some(
             ["2578", "45", "0", "0", "0"]
                 .map(|v| Some(v.to_owned()))
@@ -991,9 +1101,9 @@ impl XgwxDocument {
         );
         if !profiles
             .iter()
-            .any(|(_, doc)| reserved(self) == reserved(doc))
-            && reserved(self) != loop_reserved
-            && reserved(self) != reserved(&blank)
+            .any(|(_, root)| reserved(&self.root) == reserved(root))
+            && reserved(&self.root) != loop_reserved
+            && reserved(&self.root) != reserved(&blank)
         {
             return Err(unsupported("unknown reserved basic-parameter values"));
         }
@@ -1011,14 +1121,13 @@ impl XgwxDocument {
             element.children = element.children.into_iter().map(normalized).collect();
             element
         }
-        let parameters = |doc: &XgwxDocument| {
-            doc.root
-                .descendants_named("Parameters")
+        let parameters = |root: &XmlElement| {
+            root.descendants_named("Parameters")
                 .cloned()
                 .map(normalized)
                 .collect::<Vec<_>>()
         };
-        if parameters(self) != parameters(source) {
+        if parameters(&self.root) != parameters(source) {
             return Err(unsupported(
                 "custom or unknown parameters cannot be reset by CPU selection",
             ));
@@ -1033,7 +1142,6 @@ impl XgwxDocument {
             .find(|n| n.has_tag_name("XGIBasicParam"))
             .ok_or_else(|| unsupported("missing XGI basic parameters"))?;
         let target_basic = destination
-            .root
             .descendants_named("XGIBasicParam")
             .next()
             .unwrap();
@@ -1055,7 +1163,7 @@ impl XgwxDocument {
         // Native CPU changes clear 0x80000; Check Program/Save As sets it
         // again for every model. Only 0x8000 tracks the CPUUN local Ethernet
         // capability. Preserve all other flags and invalidate the native state.
-        let target_flags: u32 = destination.configurations()[0].attribute.unwrap();
+        let target_flags = attr_u32(destination, "Attribute").unwrap();
         let flags = (flags & !0x88000) | (target_flags & 0x8000);
         replacements.push((attr(configuration, "Attribute").unwrap(), flags.to_string()));
         for name in [
@@ -1120,7 +1228,7 @@ impl XgwxDocument {
             };
             replacements.push((start..motion.range().end, String::new()));
         } else if current.type_code != 111 && target.type_code == 111 {
-            let native = roxmltree::Document::parse(&destination.xml).map_err(XgwxError::Xml)?;
+            let native = roxmltree::Document::parse(destination_xml).map_err(XgwxError::Xml)?;
             let basic = native
                 .descendants()
                 .find(|n| n.has_tag_name("XGIBasicParam"))
@@ -1136,7 +1244,7 @@ impl XgwxDocument {
             let insert = basic_parameter.range().end;
             replacements.push((
                 insert..insert,
-                destination.xml[basic.range().end..fenet.range().end].into(),
+                destination_xml[basic.range().end..fenet.range().end].into(),
             ));
             let motion = native
                 .descendants()
@@ -1155,7 +1263,7 @@ impl XgwxDocument {
             let insert = base_info.range().end;
             replacements.push((
                 insert..insert,
-                destination.xml[native_base.range().end..motion.range().end].into(),
+                destination_xml[native_base.range().end..motion.range().end].into(),
             ));
         }
         let mut candidate = self.clone();
@@ -1808,72 +1916,176 @@ impl XgwxDocument {
     /// Bounded browser edit: one existing IEC kind byte or one operand string.
     /// All XML outside the selected ProgramData and all other payload bytes
     /// are verified unchanged before the candidate is committed.
-    pub fn edit_browser_iec(&mut self, index: usize, patch: &BrowserIecPatch) -> Result<(), XgwxError> {
-        let before = self.ladder_program(index)
+    pub fn edit_browser_iec(
+        &mut self,
+        index: usize,
+        patch: &BrowserIecPatch,
+    ) -> Result<(), XgwxError> {
+        let before = self
+            .ladder_program(index)
             .ok_or(XgwxError::ProgramNotFound { index })??;
         if before.project_type != Some(2) || before.version.as_deref() != Some("LD VER 1.1") {
             return Err(XgwxError::UnsupportedLadderLayout);
         }
-        let symbols = if patch.operation == "kind" { Vec::new() } else {
-            self.iec_local_symbols().into_iter().nth(index)
+        let symbols = if patch.operation == "kind" {
+            Vec::new()
+        } else {
+            self.iec_local_symbols()
+                .into_iter()
+                .nth(index)
                 .ok_or(XgwxError::ProgramNotFound { index })??
         };
         let mut candidate = self.clone();
         let expected_payload = if patch.operation == "functionOperand" {
-            let link = before.iec_function_operand_links().and_then(|links| links.into_iter()
-                .find(|l| l.record_offset.checked_add(15) == Some(patch.offset)))
+            let link = before
+                .iec_function_operand_links()
+                .and_then(|links| {
+                    links
+                        .into_iter()
+                        .find(|l| l.record_offset.checked_add(15) == Some(patch.offset))
+                })
                 .ok_or(XgwxError::UnsupportedLadderLayout)?;
-            let block = before.iec_function_blocks().and_then(|blocks| blocks.into_iter()
-                .find(|b| b.record_offset == link.target_record_offset))
+            let block = before
+                .iec_function_blocks()
+                .and_then(|blocks| {
+                    blocks
+                        .into_iter()
+                        .find(|b| b.record_offset == link.target_record_offset)
+                })
                 .ok_or(XgwxError::UnsupportedLadderLayout)?;
             if block.name.value != patch.expected_kind || link.is_array {
-                return Err(XgwxError::LadderCellChanged { program_index: index, offset: patch.offset });
+                return Err(XgwxError::LadderCellChanged {
+                    program_index: index,
+                    offset: patch.offset,
+                });
             }
-            let symbol = symbols.iter().find(|v| v.name == patch.replacement && !v.is_instance)
-                .ok_or(XgwxError::InvalidLadderEdit { reason: "browser operands must be declared primitive local symbols" })?;
-            let mask = symbol.data_type_code.checked_sub(1).and_then(|n| 1u32.checked_shl(n)).unwrap_or(0);
+            let symbol = symbols
+                .iter()
+                .find(|v| v.name == patch.replacement && !v.is_instance)
+                .ok_or(XgwxError::InvalidLadderEdit {
+                    reason: "browser operands must be declared primitive local symbols",
+                })?;
+            let mask = symbol
+                .data_type_code
+                .checked_sub(1)
+                .and_then(|n| 1u32.checked_shl(n))
+                .unwrap_or(0);
             if mask & link.data_type_mask == 0 || (link.is_output && symbol.storage_class == "I") {
-                return Err(XgwxError::InvalidLadderEdit { reason: "operand type or output permissions do not match the decoded pin" });
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "operand type or output permissions do not match the decoded pin",
+                });
             }
-            candidate.update_iec_ld_function_operand(index, patch.offset, &patch.expected_value, &patch.replacement)?;
-            replace_iec_ld_text_bytes(&before.data, index, patch.offset, &patch.expected_value, &patch.replacement)?
+            candidate.update_iec_ld_function_operand(
+                index,
+                patch.offset,
+                &patch.expected_value,
+                &patch.replacement,
+            )?;
+            replace_iec_ld_text_bytes(
+                &before.data,
+                index,
+                patch.offset,
+                &patch.expected_value,
+                &patch.replacement,
+            )?
         } else {
-            let element = crate::iec_ld::element_operands(&before).into_iter()
+            let element = crate::iec_ld::element_operands(&before)
+                .into_iter()
                 .find(|e| e.string.offset == patch.offset)
-                .ok_or(XgwxError::LadderCellNotFound { program_index: index, offset: patch.offset })?;
+                .ok_or(XgwxError::LadderCellNotFound {
+                    program_index: index,
+                    offset: patch.offset,
+                })?;
             let coil = element.record_code >= 0x0e;
-            let code = if coil { iec_rung_coil_code(&patch.expected_kind)? } else { iec_rung_contact_code(&patch.expected_kind)? };
+            let code = if coil {
+                iec_rung_coil_code(&patch.expected_kind)?
+            } else {
+                iec_rung_contact_code(&patch.expected_kind)?
+            };
             if element.record_code != code || element.string.value != patch.expected_value {
-                return Err(XgwxError::LadderCellChanged { program_index: index, offset: patch.offset });
+                return Err(XgwxError::LadderCellChanged {
+                    program_index: index,
+                    offset: patch.offset,
+                });
             }
             match patch.operation.as_str() {
                 "kind" => {
-                    let replacement = if coil { iec_rung_coil_code(&patch.replacement)? } else { iec_rung_contact_code(&patch.replacement)? };
-                    if coil { candidate.update_iec_ld_coil_kind(index, patch.offset, &patch.expected_kind, &patch.replacement)?; }
-                    else { candidate.update_iec_ld_contact_kind(index, patch.offset, &patch.expected_kind, &patch.replacement)?; }
+                    let replacement = if coil {
+                        iec_rung_coil_code(&patch.replacement)?
+                    } else {
+                        iec_rung_contact_code(&patch.replacement)?
+                    };
+                    if coil {
+                        candidate.update_iec_ld_coil_kind(
+                            index,
+                            patch.offset,
+                            &patch.expected_kind,
+                            &patch.replacement,
+                        )?;
+                    } else {
+                        candidate.update_iec_ld_contact_kind(
+                            index,
+                            patch.offset,
+                            &patch.expected_kind,
+                            &patch.replacement,
+                        )?;
+                    }
                     let mut payload = before.data.clone();
-                    let position = patch.offset.checked_sub(14).ok_or(XgwxError::UnsupportedLadderLayout)?;
-                    *payload.get_mut(position).ok_or(XgwxError::UnsupportedLadderLayout)? = replacement;
+                    let position = patch
+                        .offset
+                        .checked_sub(14)
+                        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+                    *payload
+                        .get_mut(position)
+                        .ok_or(XgwxError::UnsupportedLadderLayout)? = replacement;
                     payload
                 }
                 "elementOperand" => {
-                    if !symbols.iter().any(|v| v.name == patch.replacement && !v.is_instance && v.data_type_code == 1 && (!coil || v.storage_class != "I")) {
-                        return Err(XgwxError::InvalidLadderEdit { reason: "contact/coil browser operands must be declared BOOL symbols; coil destinations must be writable" });
+                    if !symbols.iter().any(|v| {
+                        v.name == patch.replacement
+                            && !v.is_instance
+                            && v.data_type_code == 1
+                            && (!coil || v.storage_class != "I")
+                    }) {
+                        return Err(XgwxError::InvalidLadderEdit {
+                            reason: "contact/coil browser operands must be declared BOOL symbols; coil destinations must be writable",
+                        });
                     }
-                    candidate.update_iec_ld_element_operand(index, patch.offset, &patch.expected_value, &patch.replacement)?;
-                    replace_iec_ld_text_bytes(&before.data, index, patch.offset, &patch.expected_value, &patch.replacement)?
+                    candidate.update_iec_ld_element_operand(
+                        index,
+                        patch.offset,
+                        &patch.expected_value,
+                        &patch.replacement,
+                    )?;
+                    replace_iec_ld_text_bytes(
+                        &before.data,
+                        index,
+                        patch.offset,
+                        &patch.expected_value,
+                        &patch.replacement,
+                    )?
                 }
-                _ => return Err(XgwxError::InvalidLadderEdit { reason: "unsupported browser ladder operation" }),
+                _ => {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "unsupported browser ladder operation",
+                    });
+                }
             }
         };
-        let after = candidate.ladder_program(index)
+        let after = candidate
+            .ladder_program(index)
             .ok_or(XgwxError::ProgramNotFound { index })??;
-        if after.data != expected_payload || candidate.header != self.header || candidate.trailer != self.trailer {
+        if after.data != expected_payload
+            || candidate.header != self.header
+            || candidate.trailer != self.trailer
+        {
             return Err(XgwxError::RewriteVerificationFailed);
         }
         let a = browser_program_text_range(&self.xml, index)?;
         let b = browser_program_text_range(&candidate.xml, index)?;
-        if self.xml[..a.start] != candidate.xml[..b.start] || self.xml[a.end..] != candidate.xml[b.end..] {
+        if self.xml[..a.start] != candidate.xml[..b.start]
+            || self.xml[a.end..] != candidate.xml[b.end..]
+        {
             return Err(XgwxError::RewriteVerificationFailed);
         }
         candidate.to_verified_bytes()?;
@@ -2334,7 +2546,9 @@ impl XgwxDocument {
         let automatic = symbol.storage_class == "A"
             && expected_address.is_empty()
             && matches!(symbol.data_type_code, 1 | 7 | 12 | 16)
-            && symbol.allocation_number.is_some_and(|number| number != u32::MAX)
+            && symbol
+                .allocation_number
+                .is_some_and(|number| number != u32::MAX)
             && symbol.allocation_width == Some(width);
         let parse_bit = |value: &str| -> Option<u32> {
             if !value.starts_with(area) {
@@ -6637,38 +6851,88 @@ impl XgwxDocument {
         offset: usize,
         expected: &str,
     ) -> Result<(), XgwxError> {
-        let program = self.ladder_program(program_index)
-            .ok_or(XgwxError::ProgramNotFound { index: program_index })??;
-        let operand = crate::internal::extract_utf16_marker_strings(&program.data, false, true).into_iter()
+        let program = self
+            .ladder_program(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })??;
+        let operand = crate::internal::extract_utf16_marker_strings(&program.data, false, true)
+            .into_iter()
             .find(|item| item.offset == offset)
-            .ok_or(XgwxError::LadderCellNotFound { program_index, offset })?;
+            .ok_or(XgwxError::LadderCellNotFound {
+                program_index,
+                offset,
+            })?;
         if operand.value != expected {
-            return Err(XgwxError::LadderCellChanged { program_index, offset });
+            return Err(XgwxError::LadderCellChanged {
+                program_index,
+                offset,
+            });
         }
-        let records = program.iec_record_frames().ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let record = records.iter().find(|r| r.kind == IecRecordKind::FunctionOperand
-            && r.offset + 15 == offset).ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let link = program.iec_function_operand_links().and_then(|links| links.into_iter()
-            .find(|l| l.record_offset == record.offset && l.is_output))
-            .ok_or(XgwxError::InvalidLadderEdit { reason: "only output assignments can be removed" })?;
-        let block = program.iec_function_blocks().and_then(|blocks| blocks.into_iter()
-            .find(|b| b.record_offset == link.target_record_offset))
+        let records = program
+            .iec_record_frames()
             .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        if !block.pins.iter().chain([&block.control_output]).any(|p|
-            p.reference_ordinal == Some(link.ordinal) && p.name.value == "OUT"
-            && p.direction == IecFunctionPinDirection::Output) {
+        let record = records
+            .iter()
+            .find(|r| r.kind == IecRecordKind::FunctionOperand && r.offset + 15 == offset)
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
+        let link = program
+            .iec_function_operand_links()
+            .and_then(|links| {
+                links
+                    .into_iter()
+                    .find(|l| l.record_offset == record.offset && l.is_output)
+            })
+            .ok_or(XgwxError::InvalidLadderEdit {
+                reason: "only output assignments can be removed",
+            })?;
+        let block = program
+            .iec_function_blocks()
+            .and_then(|blocks| {
+                blocks
+                    .into_iter()
+                    .find(|b| b.record_offset == link.target_record_offset)
+            })
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
+        if !block.pins.iter().chain([&block.control_output]).any(|p| {
+            p.reference_ordinal == Some(link.ordinal)
+                && p.name.value == "OUT"
+                && p.direction == IecFunctionPinDirection::Output
+        }) {
             return Err(XgwxError::UnsupportedLadderLayout);
         }
-        let row = program.iec_row_frames().and_then(|rows| rows.into_iter()
-            .find(|r| r.group_index == record.group_index && r.row_index == record.row_index))
+        let row = program
+            .iec_row_frames()
+            .and_then(|rows| {
+                rows.into_iter().find(|r| {
+                    r.group_index == record.group_index && r.row_index == record.row_index
+                })
+            })
             .ok_or(XgwxError::UnsupportedLadderLayout)?;
         let mut updated = program.data.clone();
-        updated[row.start + 29] = records.iter().filter(|r| r.group_index == row.group_index
-            && r.row_index == row.row_index && r.offset != record.offset)
-            .map(|r| program.data[r.offset + if r.kind == IecRecordKind::BranchStart { 7 } else { 5 }])
-            .max().ok_or(XgwxError::UnsupportedLadderLayout)?;
+        updated[row.start + 29] = records
+            .iter()
+            .filter(|r| {
+                r.group_index == row.group_index
+                    && r.row_index == row.row_index
+                    && r.offset != record.offset
+            })
+            .map(|r| {
+                program.data[r.offset
+                    + if r.kind == IecRecordKind::BranchStart {
+                        7
+                    } else {
+                        5
+                    }]
+            })
+            .max()
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
         updated[row.start + 33..row.start + 35].copy_from_slice(
-            &row.record_count.checked_sub(1).ok_or(XgwxError::UnsupportedLadderLayout)?.to_le_bytes());
+            &row.record_count
+                .checked_sub(1)
+                .ok_or(XgwxError::UnsupportedLadderLayout)?
+                .to_le_bytes(),
+        );
         updated.drain(record.offset..record.end);
         let mut verified = program.clone();
         verified.decoded_len = updated.len();
@@ -6677,7 +6941,12 @@ impl XgwxDocument {
             return Err(XgwxError::UnsupportedLadderLayout);
         }
         self.edit_program_payload_with_validation(program_index, "2", false, false, |payload| {
-            if payload != program.data { return Err(XgwxError::LadderCellChanged { program_index, offset }); }
+            if payload != program.data {
+                return Err(XgwxError::LadderCellChanged {
+                    program_index,
+                    offset,
+                });
+            }
             Ok(updated)
         })
     }
@@ -6692,65 +6961,141 @@ impl XgwxDocument {
         ordinal: u8,
         value: &str,
     ) -> Result<(), XgwxError> {
-        let program = self.ladder_program(program_index)
-            .ok_or(XgwxError::ProgramNotFound { index: program_index })??;
-        let block = program.iec_function_blocks().and_then(|blocks| blocks.into_iter()
-            .find(|b| b.record_offset == block_offset && b.name.value == expected_name))
+        let program = self
+            .ladder_program(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })??;
+        let block = program
+            .iec_function_blocks()
+            .and_then(|blocks| {
+                blocks
+                    .into_iter()
+                    .find(|b| b.record_offset == block_offset && b.name.value == expected_name)
+            })
             .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let pin = block.pins.iter().find(|p| p.reference_ordinal == Some(ordinal)
-            && p.name.value == "OUT" && p.direction == IecFunctionPinDirection::Output)
+        let pin = block
+            .pins
+            .iter()
+            .find(|p| {
+                p.reference_ordinal == Some(ordinal)
+                    && p.name.value == "OUT"
+                    && p.direction == IecFunctionPinDirection::Output
+            })
             .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        if value.is_empty() || value.encode_utf16().count() > 255 || value.chars().any(char::is_control) {
-            return Err(XgwxError::InvalidLadderEdit { reason: "output assignment requires a variable" });
+        if value.is_empty()
+            || value.encode_utf16().count() > 255
+            || value.chars().any(char::is_control)
+        {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "output assignment requires a variable",
+            });
         }
-        let symbols = self.iec_local_symbols().into_iter().nth(program_index)
-            .ok_or(XgwxError::ProgramNotFound { index: program_index })??;
+        let symbols = self
+            .iec_local_symbols()
+            .into_iter()
+            .nth(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })??;
         if !classify_iec_function_expression(value, expected_name, &symbols, &program)
-            .is_some_and(|e| e.writable && e.data_type_mask & pin.data_type_mask != 0) {
-            return Err(XgwxError::InvalidLadderEdit { reason: "output assignment requires a known writable variable of the pin type" });
+            .is_some_and(|e| e.writable && e.data_type_mask & pin.data_type_mask != 0)
+        {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "output assignment requires a known writable variable of the pin type",
+            });
         }
-        if !program.iec_function_references().is_some_and(|refs| refs.iter().any(|r|
-            r.target_record_offset == block_offset && r.ordinal == ordinal && r.is_output)) {
+        if !program.iec_function_references().is_some_and(|refs| {
+            refs.iter().any(|r| {
+                r.target_record_offset == block_offset && r.ordinal == ordinal && r.is_output
+            })
+        }) {
             return Err(XgwxError::UnsupportedLadderLayout);
         }
         // Native files can retain an FF46 record containing an empty string.
         // Replace that placeholder atomically rather than treating it as a wire.
-        if let Some(link) = program.iec_function_operand_links().and_then(|links| links.into_iter()
-            .find(|l| l.target_record_offset == block_offset && l.ordinal == ordinal && l.is_output)) {
+        if let Some(link) = program.iec_function_operand_links().and_then(|links| {
+            links.into_iter().find(|l| {
+                l.target_record_offset == block_offset && l.ordinal == ordinal && l.is_output
+            })
+        }) {
             let at = link.record_offset + 15;
-            let empty = crate::internal::extract_utf16_marker_strings(&program.data, false, true).into_iter()
+            let empty = crate::internal::extract_utf16_marker_strings(&program.data, false, true)
+                .into_iter()
                 .any(|s| s.offset == at && s.value.is_empty());
             if empty {
                 let mut candidate = self.clone();
                 candidate.delete_iec_ld_function_output_operand(program_index, at, "")?;
-                candidate.assign_iec_ld_function_output_operand(program_index, block_offset, expected_name, ordinal, value)?;
+                candidate.assign_iec_ld_function_output_operand(
+                    program_index,
+                    block_offset,
+                    expected_name,
+                    ordinal,
+                    value,
+                )?;
                 *self = candidate;
                 return Ok(());
             }
         }
-        let graph = program.iec_circuit_layout().ok_or(XgwxError::UnsupportedLadderLayout)?;
-        if graph.occupied_areas.iter().any(|a| a.start_row_index <= pin.row_index
-            && a.end_row_index >= pin.row_index && a.start_x <= pin.raw_x && a.end_x >= pin.raw_x) {
-            return Err(XgwxError::InvalidLadderEdit { reason: "output pin already has an assignment or wire" });
-        }
-        let row = program.iec_row_frames().and_then(|rows| rows.into_iter()
-            .find(|r| r.group_index == block.group_index && r.row_index == pin.row_index))
+        let graph = program
+            .iec_circuit_layout()
             .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let records = program.iec_record_frames().ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let insertion = records.iter().find(|r| r.group_index == row.group_index
-            && r.row_index == row.row_index && program.data[r.offset + 5] > pin.raw_x)
+        if graph.occupied_areas.iter().any(|a| {
+            a.start_row_index <= pin.row_index
+                && a.end_row_index >= pin.row_index
+                && a.start_x <= pin.raw_x
+                && a.end_x >= pin.raw_x
+        }) {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "output pin already has an assignment or wire",
+            });
+        }
+        let row = program
+            .iec_row_frames()
+            .and_then(|rows| {
+                rows.into_iter()
+                    .find(|r| r.group_index == block.group_index && r.row_index == pin.row_index)
+            })
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
+        let records = program
+            .iec_record_frames()
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
+        let insertion = records
+            .iter()
+            .find(|r| {
+                r.group_index == row.group_index
+                    && r.row_index == row.row_index
+                    && program.data[r.offset + 5] > pin.raw_x
+            })
             .map_or(row.end, |r| r.offset);
         let mut expression = crate::iec_function_write::expression(pin.row_index, pin.raw_x, value);
         expression[11] = program.data[block_offset + 11] & 4;
         let mut updated = program.data.clone();
-        updated[row.start + 29] = records.iter().filter(|r| r.group_index == row.group_index && r.row_index == row.row_index)
-            .map(|r| program.data[r.offset + if r.kind == IecRecordKind::BranchStart { 7 } else { 5 }])
-            .chain([pin.raw_x]).max().ok_or(XgwxError::UnsupportedLadderLayout)?;
+        updated[row.start + 29] = records
+            .iter()
+            .filter(|r| r.group_index == row.group_index && r.row_index == row.row_index)
+            .map(|r| {
+                program.data[r.offset
+                    + if r.kind == IecRecordKind::BranchStart {
+                        7
+                    } else {
+                        5
+                    }]
+            })
+            .chain([pin.raw_x])
+            .max()
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
         updated[row.start + 33..row.start + 35].copy_from_slice(
-            &row.record_count.checked_add(1).ok_or(XgwxError::UnsupportedLadderLayout)?.to_le_bytes());
+            &row.record_count
+                .checked_add(1)
+                .ok_or(XgwxError::UnsupportedLadderLayout)?
+                .to_le_bytes(),
+        );
         updated.splice(insertion..insertion, expression);
         let mut candidate = self.clone();
-        candidate.edit_program_payload_with_validation(program_index, "2", false, false, |_| Ok(updated))?;
+        candidate.edit_program_payload_with_validation(program_index, "2", false, false, |_| {
+            Ok(updated)
+        })?;
         candidate.update_iec_ld_function_operand(program_index, insertion + 15, value, value)?;
         *self = candidate;
         Ok(())
@@ -9111,11 +9456,11 @@ impl XgwxDocument {
                     reason: "terminal TON placement requires its verified position, instance and TIME preset",
                 });
             }
-            let program = self
-                .ladder_program(program_index)
-                .ok_or(XgwxError::ProgramNotFound {
-                    index: program_index,
-                })??;
+            let program =
+                self.ladder_program(program_index)
+                    .ok_or(XgwxError::ProgramNotFound {
+                        index: program_index,
+                    })??;
             let site = program
                 .iec_terminal_timer_insertion_sites()
                 .ok_or(XgwxError::UnsupportedLadderLayout)?
@@ -9142,11 +9487,11 @@ impl XgwxDocument {
             crate::iec_function_write::spec(function_name).ok_or(XgwxError::InvalidLadderEdit {
                 reason: "unknown IEC function",
             })?;
-        let mut program = self
-            .ladder_program(program_index)
-            .ok_or(XgwxError::ProgramNotFound {
-                index: program_index,
-            })??;
+        let mut program =
+            self.ladder_program(program_index)
+                .ok_or(XgwxError::ProgramNotFound {
+                    index: program_index,
+                })??;
         let original_data = program.data.clone();
         if family == 0x28
             && crate::iec_chain_comparison_write::needs_room(&program, row_index, raw_x)
@@ -12016,7 +12361,10 @@ impl XgwxDocument {
 
     /// Delete a catalog application from an unbranched output row, including its feed wire.
     pub fn delete_ladder_instruction(
-        &mut self, program_index: usize, offset: usize, expected: &str,
+        &mut self,
+        program_index: usize,
+        offset: usize,
+        expected: &str,
     ) -> Result<(), XgwxError> {
         self.edit_ladder_payload(program_index, |payload| {
             crate::ladder_write::delete_ladder_instruction(payload, offset, expected)
@@ -12108,11 +12456,11 @@ impl XgwxDocument {
         update: impl FnOnce(&[u8]) -> Result<Vec<u8>, XgwxError>,
     ) -> Result<(), XgwxError> {
         let original_iec = if project_type == "2" {
-            let program = self
-                .ladder_program(program_index)
-                .ok_or(XgwxError::ProgramNotFound {
-                    index: program_index,
-                })??;
+            let program =
+                self.ladder_program(program_index)
+                    .ok_or(XgwxError::ProgramNotFound {
+                        index: program_index,
+                    })??;
             if require_valid_source {
                 program
                     .iec_circuit_graph()
@@ -12217,8 +12565,10 @@ impl XgwxDocument {
                 header[HEADER_CHECKSUM_OFFSET..HEADER_CHECKSUM_INPUT_START].fill(0);
                 header[COMPRESSED_SIZE_OFFSET..SUPPORTED_HEADER_LEN].fill(0);
             }
-            if before != after || self.supported_trailer_after_main_padding()?
-                != reparsed.supported_trailer_after_main_padding()? {
+            if before != after
+                || self.supported_trailer_after_main_padding()?
+                    != reparsed.supported_trailer_after_main_padding()?
+            {
                 return Err(XgwxError::RewriteVerificationFailed);
             }
         }
@@ -13115,8 +13465,14 @@ fn push_network_configuration_additions(
         let group_indentation = line_indentation(xml, group_offset);
         let config = format!(
             "<XGPD_CONFIG_INFO_{tag} StationNo=\"0\" Type=\"{}\" Base=\"{base}\" Slot=\"{slot}\" SubType=\"{}\"{}>{}</XGPD_CONFIG_INFO_{tag}>{newline}{group_indentation}",
-            entry.id, entry.sub_type, profile.attributes,
-            if tag == "CNET" { crate::cnet_write::default_cnet_ports(entry.sub_type) } else { String::new() },
+            entry.id,
+            entry.sub_type,
+            profile.attributes,
+            if tag == "CNET" {
+                crate::cnet_write::default_cnet_ports(entry.sub_type)
+            } else {
+                String::new()
+            },
         );
         replacements.push((group_offset..group_offset, config));
     }
@@ -13153,9 +13509,11 @@ fn network_profile(model: &str) -> Option<NetworkProfile> {
             xgpd_tag: Some("FENET"),
             attributes: " Media=\"0\" MediaB=\"0\" Media1=\"0\" Media1_2=\"0\" IpAddr_0=\"192\" IpAddr_1=\"168\" IpAddr_2=\"0\" IpAddr_3=\"100\" Subnet_0=\"255\" Subnet_1=\"255\" Subnet_2=\"255\" Subnet_3=\"0\" Gateway_0=\"192\" Gateway_1=\"168\" Gateway_2=\"0\" Gateway_3=\"1\" Dns_0=\"0\" Dns_1=\"0\" Dns_2=\"0\" Dns_3=\"0\" Dhcp=\"0\" Relay=\"0\" RapienetProtocol=\"0\" DriverType=\"2\" RcvWaitTime=\"100\" ClientWaitTime=\"60\" GlofaSocketCnt=\"3\" HsNo2=\"0\" Media2=\"0\" Media2_2=\"0\" IpAddr2_0=\"0\" IpAddr2_1=\"0\" IpAddr2_2=\"0\" IpAddr2_3=\"0\" Subnet2_0=\"0\" Subnet2_1=\"0\" Subnet2_2=\"0\" Subnet2_3=\"0\" Gateway2_0=\"0\" Gateway2_1=\"0\" Gateway2_2=\"0\" Gateway2_3=\"0\" Dns2_0=\"0\" Dns2_1=\"0\" Dns2_2=\"0\" Dns2_3=\"0\" Dhcp2=\"0\" OneIPSolution=\"0\" DI_DeviceType=\"80\" DI_DataType=\"88\" DI_Size=\"0\" DI_Addr=\"0\" DO_DeviceType=\"80\" DO_DataType=\"88\" DO_Size=\"0\" DO_Addr=\"200\" AI_DeviceType=\"68\" AI_DataType=\"87\" AI_Size=\"0\" AI_Addr=\"0\" AO_DeviceType=\"68\" AO_DataType=\"87\" AO_Size=\"0\" AO_Addr=\"100\" EnableHostTable=\"0\" arHostIp_Count=\"0\" ExtendEnableHostTable=\"0\" SecurityConfigItemCount=\"0\" ServerPortEnable=\"0\" ServerPortIndividualType_0=\"0\" ServerPortIndividualStartPortNo_0=\"0\" ServerPortIndividualPortCount_0=\"0\" ServerPortIndividualType_1=\"0\" ServerPortIndividualStartPortNo_1=\"0\" ServerPortIndividualPortCount_1=\"0\" ServerPortIndividualType_2=\"0\" ServerPortIndividualStartPortNo_2=\"0\" ServerPortIndividualPortCount_2=\"0\" ServerPortIndividualType_3=\"0\" ServerPortIndividualStartPortNo_3=\"0\" ServerPortIndividualPortCount_3=\"0\" ServerPortIndividualType_4=\"0\" ServerPortIndividualStartPortNo_4=\"0\" ServerPortIndividualPortCount_4=\"0\" ServerPortIndividualType_5=\"0\" ServerPortIndividualStartPortNo_5=\"0\" ServerPortIndividualPortCount_5=\"0\" ServerPortIndividualType_6=\"0\" ServerPortIndividualStartPortNo_6=\"0\" ServerPortIndividualPortCount_6=\"0\" ServerPortIndividualType_7=\"0\" ServerPortIndividualStartPortNo_7=\"0\" ServerPortIndividualPortCount_7=\"0\" Used_OPCUA=\"0\" AutoNegotiationSpeedLimit=\"0\"",
         }),
-        "XGL-C22A/B" | "XGL-C42A/B" | "XGL-CH2A/B" => Some(NetworkProfile { xgpd_tag: Some("CNET"), attributes: "" }),
-        "XGL-BIPT" | "XGL-EIPT" | "XGL-EFMF(B)"
-        | "XGL-EFMHB" => Some(NetworkProfile {
+        "XGL-C22A/B" | "XGL-C42A/B" | "XGL-CH2A/B" => Some(NetworkProfile {
+            xgpd_tag: Some("CNET"),
+            attributes: "",
+        }),
+        "XGL-BIPT" | "XGL-EIPT" | "XGL-EFMF(B)" | "XGL-EFMHB" => Some(NetworkProfile {
             xgpd_tag: None,
             attributes: "",
         }),
@@ -13181,7 +13539,10 @@ fn line_indentation(xml: &str, offset: usize) -> &str {
     let prefix = &xml[start..offset];
     // Native blank projects put opening and closing tags on the same line.
     // Only copy whitespace, never the XML preceding an inline closing tag.
-    if prefix.bytes().all(|byte| matches!(byte, b' ' | b'\t' | b'\r')) {
+    if prefix
+        .bytes()
+        .all(|byte| matches!(byte, b' ' | b'\t' | b'\r'))
+    {
         prefix
     } else {
         ""
@@ -17936,8 +18297,11 @@ pub struct BrowserIecPatch {
 
 fn browser_program_text_range(xml: &str, index: usize) -> Result<Range<usize>, XgwxError> {
     let tree = roxmltree::Document::parse(xml).map_err(XgwxError::Xml)?;
-    tree.descendants().filter(|n| n.has_tag_name("Program")).nth(index)
+    tree.descendants()
+        .filter(|n| n.has_tag_name("Program"))
+        .nth(index)
         .and_then(|p| p.descendants().find(|n| n.has_tag_name("ProgramData")))
-        .and_then(|n| n.children().find(|n| n.is_text())).map(|n| n.range())
+        .and_then(|n| n.children().find(|n| n.is_text()))
+        .map(|n| n.range())
         .ok_or(XgwxError::MissingProgramData)
 }

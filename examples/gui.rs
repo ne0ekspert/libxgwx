@@ -1,3 +1,8 @@
+//! Display decoded ladder programs in a graphical viewer.
+//!
+//! Run: `cargo run --features gui --example gui -- path/to/project.xgwx`.
+//! Requires a graphical desktop. This read-only demonstration offers program
+//! selection, scrolling and zooming; unknown records may render only partially.
 use std::env;
 use std::error::Error;
 

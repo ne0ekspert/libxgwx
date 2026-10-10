@@ -726,7 +726,7 @@ remained byte-for-byte equal. The capture is under
 `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-middle-shortwire-branch/`.
 
 The branch removal preflight now accepts 75 of the project's 192 vertical
-segments. The reproducible audit is `cargo run --features write --example iec_branch_removal_audit -- /home/ne0ekspert/Downloads/smarthome_project_0225.xgwx`.
+segments. The reproducible audit is `cargo run --features write --manifest-path dev-tools/Cargo.toml --bin iec_branch_removal_audit -- /home/ne0ekspert/Downloads/smarthome_project_0225.xgwx`.
 Of the 117 remaining segments, 84 need row-group rebuilds, 32 have
 unverified record layouts, and 1 has a connected `FF` and lower output row.
 That last row has a separate native-validated Delete Line action below.
@@ -742,7 +742,7 @@ checked, and resaved the writer output, preserving all seven decoded
 ProgramData payloads byte-for-byte; Program Check reported 0 errors and
 1 warning. The capture and acceptance example
 are under `smarthome-iec-three-row-x3-terminal` and
-`examples/iec_x3_terminal_contact_branch_acceptance.rs`.
+`dev-tools/iec_x3_terminal_contact_branch_acceptance.rs`.
 
 The same group also supports Delete Line on its middle single-contact row
 at L56. XG5000 reconnects the original L57 contact to the L55 x3 branch.
@@ -1221,7 +1221,7 @@ The browser-emitted result matches the generated payloads exactly; its source
 row-height caches differ from the native-normalized result at only three bytes.
 Evidence and the reproducible acceptance tool are under
 `/home/ne0ekspert/VMs/xg5000-win10/captures/iec-terminal-feed-20261002/` and
-`examples/iec_terminal_feed_acceptance.rs`.
+`dev-tools/iec_terminal_feed_acceptance.rs`.
 
 This does not enable general group splitting, forked/open branches, or deletion
 of terminal feeds whose preceding row carries operand or non-final function references.
@@ -1254,7 +1254,7 @@ function-reference row shapes remain guarded.
 
 ### Current branch-removal coverage audit
 
-`cargo run --features write --example iec_branch_edit_coverage -- SOURCE`
+`cargo run --features write --manifest-path dev-tools/Cargo.toml --bin iec_branch_edit_coverage -- SOURCE`
 preflights every decoded vertical segment on a separate document clone without
 writing the source. On the supplied smart-home workspace, 86 of 192 segments
 pass writer preflight. The remaining 106 rejections comprise 73 middle-row group

@@ -164,7 +164,10 @@ fn compile(doc: &XgwxDocument, source: &str, build: bool) -> Result<Vec<u8>, Xgw
         };
         if let Some(kind) = contact.or(output) {
             if !active || parts.len() != 1 || contact.is_some() && column >= 9 {
-                return Err(fail(format!("line {}: expected a LOAD expression, one operand and at most nine series contacts",index+1)));
+                return Err(fail(format!(
+                    "line {}: expected a LOAD expression, one operand and at most nine series contacts",
+                    index + 1
+                )));
             }
             let encoded = crate::ladder_write::edit_ladder_cell(
                 if build { &bytes } else { &[0; 8] },

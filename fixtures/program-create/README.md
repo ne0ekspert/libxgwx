@@ -1,8 +1,7 @@
 # Creating scan programs
 
 Generated fixtures append `AddedProgram` to native blank XGK LD or native XGI
-SFC projects. Reproduce using `cargo run --features write --example
-program_create_acceptance`. Program and local-symbol GUIDs are fresh; the native
+SFC projects. Reproduce using `cargo run --features write --manifest-path dev-tools/Cargo.toml --bin program_create_acceptance`. Program and local-symbol GUIDs are fresh; the native
 scan task is retained. Templates in `src/program_templates` come from the saved
 blank projects in `fixtures/empty-projects` and `fixtures/sfc/new-xgi-sfc.xgwx`.
 
@@ -34,7 +33,7 @@ supports LD and the captured SFC models.
 
 The `*-delete-generated` fixtures delete `AddedProgram` from the corresponding
 native creation roundtrips. Generate them with `cargo run --features write
---example program_delete_acceptance`. XG5000 4.82.1 resaved these as `DGKRES`,
+--manifest-path dev-tools/Cargo.toml --bin program_delete_acceptance`. XG5000 4.82.1 resaved these as `DGKRES`,
 `DGIRES` and `DSFCRES`, preserving the remaining program identities, code, SFC
 rows and declarations. All-program logic/syntax checks (strict types for XGI)
 reported 0 errors, 0 warnings and 19 messages for both XGI cases. XGK retained

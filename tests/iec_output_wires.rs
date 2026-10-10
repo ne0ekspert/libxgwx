@@ -161,8 +161,12 @@ fn comparison_without_assignment_retains_out_reference_and_wires_like_native() {
             wire(&mut d, row, pin, x);
         }
     }
-    assert_eq!(d.ladder_programs().remove(0).unwrap().data,
-        payload(include_bytes!("../fixtures/function-output-wires/full-native.xgwx")));
+    assert_eq!(
+        d.ladder_programs().remove(0).unwrap().data,
+        payload(include_bytes!(
+            "../fixtures/function-output-wires/full-native.xgwx"
+        ))
+    );
     if let Ok(path) = std::env::var("IEC_OUTPUT_WIRE_CAPTURE") {
         d.write_to(path).unwrap();
     }

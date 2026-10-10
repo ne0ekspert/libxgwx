@@ -15,6 +15,7 @@ fn native_st_and_il_share_source_container_but_have_distinct_languages() {
             .collect::<Vec<_>>(),
         vec![(2, "ST", Some(""), true), (3, "IL", Some(""), true)]
     );
+    #[cfg(feature = "write")]
     assert_eq!(doc.to_bytes().unwrap(), BLANK);
 }
 #[cfg(feature = "write")]

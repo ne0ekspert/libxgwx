@@ -9,7 +9,7 @@ values, check the program, and preserve the edit through Save As.
 Run from the repository root with a new output directory:
 
 ```sh
-cargo run --features write --example xg5000-acceptance -- generate /tmp/xgwx-run
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin xg5000-acceptance -- generate /tmp/xgwx-run
 sha256sum fixtures/elements*.xgwx /tmp/xgwx-run/*.xgwx > /tmp/xgwx-run/SHA256SUMS
 ```
 
@@ -31,7 +31,7 @@ Generated local passes leave every external stage `PENDING`.
 6. Transfer the result to the host and run:
 
 ```sh
-cargo run --features write --example xg5000-acceptance -- \
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin xg5000-acceptance -- \
   verify filter /tmp/xgwx-run/filter.xgwx /tmp/xgwx-run/resaved/R01.XGWX
 ```
 

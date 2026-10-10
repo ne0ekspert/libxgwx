@@ -45,14 +45,15 @@ mod cpu;
 mod document;
 mod sfc;
 mod text_program;
-pub use text_program::TextProgram;
-#[cfg(feature = "write")]
-pub use text_program::TextProgramPatch;
 pub use sfc::{
-    SfcArrayBound, SfcBlock, SfcDeclaration, SfcEntity, SfcPosition, SfcProgram, SfcRow, SfcVariable,
+    SfcArrayBound, SfcBlock, SfcDeclaration, SfcEntity, SfcPosition, SfcProgram, SfcRow,
+    SfcVariable,
 };
 #[cfg(feature = "write")]
 pub use sfc::{SfcEntityPatch, SfcSequencePatch, SfcVariablePatch};
+pub use text_program::TextProgram;
+#[cfg(feature = "write")]
+pub use text_program::TextProgramPatch;
 mod error;
 #[cfg(feature = "write")]
 mod iec_chain_comparison_write;
@@ -70,10 +71,10 @@ mod iec_contact_write;
 mod iec_conversion_pair_write;
 #[cfg(feature = "write")]
 mod iec_function_write;
-#[cfg(feature = "write")]
-mod iec_output_wire_write;
 mod iec_graph;
 mod iec_ld;
+#[cfg(feature = "write")]
+mod iec_output_wire_write;
 #[cfg(feature = "write")]
 mod io_variables;
 #[cfg(feature = "write")]
@@ -102,20 +103,20 @@ mod ladder_write;
 mod mnemonic;
 mod model;
 #[cfg(feature = "write")]
-mod writer;
-#[cfg(feature = "write")]
 mod program_create;
 #[cfg(feature = "write")]
 mod project_create;
 #[cfg(feature = "write")]
+mod writer;
+#[cfg(feature = "write")]
 pub use project_create::create_project;
 mod program_support;
-#[cfg(all(feature="write",feature="il"))]
+#[cfg(all(feature = "write", feature = "il"))]
 mod vendor_il;
-#[cfg(all(feature="write",feature="il"))]
-pub use vendor_il::{VendorIlProgram, VendorIlPatch};
 #[cfg(feature = "write")]
 pub use program_create::NewProgram;
+#[cfg(all(feature = "write", feature = "il"))]
+pub use vendor_il::{VendorIlPatch, VendorIlProgram};
 
 #[cfg(feature = "wasm")]
 mod wasm;
@@ -123,7 +124,6 @@ mod wasm;
 #[cfg(feature = "write")]
 pub use catalog::*;
 pub use comparison_catalog::ladder_comparison_catalog;
-pub use instruction_cpu::{LadderInstructionCpuRestriction, ladder_instruction_cpu_allowed, ladder_instruction_cpu_restriction};
 pub use cpu::*;
 pub use document::XgwxDocument;
 pub use error::XgwxError;
@@ -146,6 +146,10 @@ pub use iec_symbols::{IEC_SYSTEM_BOOL_VARIABLES, IecLocalSymbol};
 #[cfg(feature = "il")]
 pub use il::*;
 pub use instruction_catalog::{LadderInstructionSpec, ladder_instruction_catalog};
+pub use instruction_cpu::{
+    LadderInstructionCpuRestriction, ladder_instruction_cpu_allowed,
+    ladder_instruction_cpu_restriction,
+};
 pub use instruction_operands::{
     LadderOperandSpec, ladder_instruction_operand_rules, ladder_operand_type_matches,
 };

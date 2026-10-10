@@ -1,4 +1,5 @@
 /target
+/dev-tools/target
 /web/dist
 /pkg
 *.xgwx

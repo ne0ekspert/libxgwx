@@ -63,11 +63,12 @@ fn generate_preview_duplicate_overwrite_and_undo_bytes() {
     doc.generate_io_variables().unwrap();
     assert_eq!(doc.variables().unwrap().len(), 40);
     let generated = doc.to_bytes().unwrap();
-    assert!(doc
-        .preview_io_variables()
-        .unwrap()
-        .iter()
-        .all(|r| r.action == "unchanged"));
+    assert!(
+        doc.preview_io_variables()
+            .unwrap()
+            .iter()
+            .all(|r| r.action == "unchanged")
+    );
     doc.generate_io_variables().unwrap();
     assert_eq!(doc.to_bytes().unwrap(), generated);
     doc.update_variable(

@@ -77,9 +77,14 @@ fn trailing_wire_start(record: &Record) -> u8 {
 
 fn valid_instruction_operand_text(text: &str) -> bool {
     if let Some(body) = text.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')) {
-        return body.chars().all(|c| c.is_ascii() && !c.is_ascii_control() && c != '\'');
+        return body
+            .chars()
+            .all(|c| c.is_ascii() && !c.is_ascii_control() && c != '\'');
     }
-    !text.is_empty() && text.chars().all(|c| c.is_ascii_graphic() && !matches!(c, ',' | '\'' | '"'))
+    !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_graphic() && !matches!(c, ',' | '\'' | '"'))
 }
 
 fn insert_ladder_function(
@@ -101,9 +106,9 @@ fn insert_ladder_function(
             reason: "unknown application instruction",
         })?;
     if operands.len() != spec.operand_count
-        || operands.iter().any(|operand| {
-            !valid_instruction_operand_text(operand)
-        })
+        || operands
+            .iter()
+            .any(|operand| !valid_instruction_operand_text(operand))
     {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "instruction operand count or text is invalid",
@@ -123,9 +128,7 @@ fn insert_ladder_function(
         });
     }
     let mut program = EditableProgram::parse(bytes)?;
-    if !raw_y.is_multiple_of(4)
-        || raw_y >= XGK_MAX_ROWS as u32 * 4
-    {
+    if !raw_y.is_multiple_of(4) || raw_y >= XGK_MAX_ROWS as u32 * 4 {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "instruction row is outside the editable range",
         });
@@ -160,22 +163,36 @@ fn insert_ladder_function(
             records.push(record.clone());
         }
     }
-    let wire_start = records
-        .iter()
-        .map(trailing_wire_start)
-        .max()
-        .unwrap_or(1);
+    let wire_start = records.iter().map(trailing_wire_start).max().unwrap_or(1);
     if contact_column.is_none() && wire_start < x {
         records.push(wire(wire_start, x - 3, raw_y));
     }
-    let mut record = vec![0, 34, 0, 0, 0, x, raw_y.to_le_bytes()[0], raw_y.to_le_bytes()[1], raw_y.to_le_bytes()[2], 1, 0, flags, 0, 0, 0];
+    let mut record = vec![
+        0,
+        34,
+        0,
+        0,
+        0,
+        x,
+        raw_y.to_le_bytes()[0],
+        raw_y.to_le_bytes()[1],
+        raw_y.to_le_bytes()[2],
+        1,
+        0,
+        flags,
+        0,
+        0,
+        0,
+    ];
     record.extend_from_slice(&spec.opcode.to_le_bytes());
     append_string(&mut record, &text);
     record.extend_from_slice(&(parts.len() as u16).to_le_bytes());
     for (index, part) in parts.iter().enumerate() {
         record.extend_from_slice(&[
             x + index as u8 * 3,
-            raw_y.to_le_bytes()[0], raw_y.to_le_bytes()[1], raw_y.to_le_bytes()[2],
+            raw_y.to_le_bytes()[0],
+            raw_y.to_le_bytes()[1],
+            raw_y.to_le_bytes()[2],
             u8::from(index == 0),
             0,
             flags,
@@ -200,7 +217,9 @@ fn insert_ladder_function(
                 0,
                 0,
                 x,
-                raw_y.to_le_bytes()[0], raw_y.to_le_bytes()[1], raw_y.to_le_bytes()[2],
+                raw_y.to_le_bytes()[0],
+                raw_y.to_le_bytes()[1],
+                raw_y.to_le_bytes()[2],
             ],
             x,
             wire_end: None,
@@ -419,16 +438,23 @@ pub(crate) fn update_instruction_text(
     let record = program.rows[row].records[record_index].clone();
     let (original, end) = string_at(&record.bytes, 19)?;
     let count = u16_at(&record.bytes, end)?;
-    let original_parts = crate::internal::ladder_instruction_parts(&original, false)
-        .ok_or(XgwxError::InvalidLadderEdit { reason: "unclosed instruction string literal" })?;
+    let original_parts = crate::internal::ladder_instruction_parts(&original, false).ok_or(
+        XgwxError::InvalidLadderEdit {
+            reason: "unclosed instruction string literal",
+        },
+    )?;
     if original != expected || original_parts.len() != count {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "instruction text does not match its stored operands",
         });
     }
     let parts = crate::internal::ladder_instruction_parts(replacement, false)
-        .ok_or(XgwxError::InvalidLadderEdit { reason: "unclosed instruction string literal" })?
-        .into_iter().map(str::trim).collect::<Vec<_>>();
+        .ok_or(XgwxError::InvalidLadderEdit {
+            reason: "unclosed instruction string literal",
+        })?
+        .into_iter()
+        .map(str::trim)
+        .collect::<Vec<_>>();
     crate::instruction_operands::validate_raw_operands(parts[0], &parts[1..])?;
     let type_changed = parts.first() != original_parts.first();
     let known_operandless_application = count == 1
@@ -535,7 +561,9 @@ pub(crate) fn update_instruction_text(
         let header = if type_changed {
             vec![
                 new_x + index as u8 * 3,
-                program.rows[row].y.to_le_bytes()[0], program.rows[row].y.to_le_bytes()[1], program.rows[row].y.to_le_bytes()[2],
+                program.rows[row].y.to_le_bytes()[0],
+                program.rows[row].y.to_le_bytes()[1],
+                program.rows[row].y.to_le_bytes()[2],
                 u8::from(index == 0),
                 0,
                 record.bytes[11],
@@ -613,7 +641,9 @@ pub(crate) fn update_instruction_text(
                     0,
                     0,
                     new_x,
-                    row.y.to_le_bytes()[0], row.y.to_le_bytes()[1], row.y.to_le_bytes()[2],
+                    row.y.to_le_bytes()[0],
+                    row.y.to_le_bytes()[1],
+                    row.y.to_le_bytes()[2],
                 ],
                 x: new_x,
                 wire_end: None,
@@ -630,7 +660,11 @@ pub(crate) fn update_instruction_text(
             row.prefix[21] = new_x;
         }
     }
-    if parts.iter().skip(1).any(|operand| operand.starts_with('\'')) {
+    if parts
+        .iter()
+        .skip(1)
+        .any(|operand| operand.starts_with('\''))
+    {
         program.rows[row].prefix[17] = 40;
     }
     let output = program.encode();
@@ -646,8 +680,29 @@ fn append_string(bytes: &mut Vec<u8>, value: &str) {
 }
 
 fn wire(x: u8, end: u8, y: u32) -> Record {
-    let mut bytes = vec![255, 2, 0, 0, 0, x, y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2], 0, 0, 0, 0, 0, 0];
-    bytes.extend([end, y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2]]);
+    let mut bytes = vec![
+        255,
+        2,
+        0,
+        0,
+        0,
+        x,
+        y.to_le_bytes()[0],
+        y.to_le_bytes()[1],
+        y.to_le_bytes()[2],
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ];
+    bytes.extend([
+        end,
+        y.to_le_bytes()[0],
+        y.to_le_bytes()[1],
+        y.to_le_bytes()[2],
+    ]);
     Record {
         bytes,
         x,
@@ -663,7 +718,9 @@ fn element_record(x: u8, y: u32, element: &LadderEditElement) -> Record {
         0,
         0,
         x,
-        y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2],
+        y.to_le_bytes()[0],
+        y.to_le_bytes()[1],
+        y.to_le_bytes()[2],
         1,
         0,
         if element.kind.is_coil() { 32 } else { 0 },
@@ -702,7 +759,9 @@ fn comment_record(kind: LadderCommentKind, y: u32, text: &str) -> Record {
         0,
         0,
         x,
-        y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2],
+        y.to_le_bytes()[0],
+        y.to_le_bytes()[1],
+        y.to_le_bytes()[2],
         0,
         0,
         if rung { 32 } else { 0 },
@@ -1106,11 +1165,7 @@ pub(crate) fn edit_ladder_cell(bytes: &[u8], edit: &LadderCellEdit) -> Result<Ve
         // Native coil insertion fills only the trailing wire after the last
         // existing contact or wire; it does not bridge earlier deleted cells.
         if element.kind.is_coil() && edit.expected.is_none() {
-            let start = records
-                .iter()
-                .map(trailing_wire_start)
-                .max()
-                .unwrap_or(1);
+            let start = records.iter().map(trailing_wire_start).max().unwrap_or(1);
             if start <= 91 {
                 records.push(wire(start, 91, row.y));
             }
@@ -1236,7 +1291,9 @@ fn branch_start(x: u8, y: u32, target_y: u32) -> Record {
         2,
         0,
         x,
-        y.to_le_bytes()[0], y.to_le_bytes()[1], y.to_le_bytes()[2],
+        y.to_le_bytes()[0],
+        y.to_le_bytes()[1],
+        y.to_le_bytes()[2],
         0,
         0,
         0,
@@ -1244,7 +1301,9 @@ fn branch_start(x: u8, y: u32, target_y: u32) -> Record {
         0,
         0,
         x - 1,
-        target_y.to_le_bytes()[0], target_y.to_le_bytes()[1], target_y.to_le_bytes()[2],
+        target_y.to_le_bytes()[0],
+        target_y.to_le_bytes()[1],
+        target_y.to_le_bytes()[2],
         0,
         0,
         0,
@@ -1261,7 +1320,17 @@ fn branch_start(x: u8, y: u32, target_y: u32) -> Record {
 }
 fn branch_end(x: u8, source_y: u32) -> Record {
     Record {
-        bytes: vec![1, 0, 0, 0, 0, x, source_y.to_le_bytes()[0], source_y.to_le_bytes()[1], source_y.to_le_bytes()[2]],
+        bytes: vec![
+            1,
+            0,
+            0,
+            0,
+            0,
+            x,
+            source_y.to_le_bytes()[0],
+            source_y.to_le_bytes()[1],
+            source_y.to_le_bytes()[2],
+        ],
         x,
         wire_end: None,
         element: None,
@@ -1282,7 +1351,10 @@ impl EditableProgram {
         for (i, row) in self.rows.iter().enumerate() {
             for record in &row.records {
                 if record.bytes.starts_with(&[0, 0])
-                    && let Some(last) = self.rows.iter().position(|r| r.y == y_at(&record.bytes, 18))
+                    && let Some(last) = self
+                        .rows
+                        .iter()
+                        .position(|r| r.y == y_at(&record.bytes, 18))
                 {
                     for edge in &mut connected[i..last] {
                         *edge = true;
@@ -1421,7 +1493,10 @@ pub(crate) fn edit_ladder_branch(
             .filter(|r| r.y == y || r.y == target_y)
         {
             row.records.retain(|r| {
-                !(row.y == y && r.bytes.starts_with(&[0, 0]) && r.x == x && y_at(&r.bytes, 18) == target_y)
+                !(row.y == y
+                    && r.bytes.starts_with(&[0, 0])
+                    && r.x == x
+                    && y_at(&r.bytes, 18) == target_y)
                     && !(row.y == target_y
                         && r.bytes.starts_with(&[1, 0])
                         && r.x == x
@@ -1831,20 +1906,48 @@ mod tests {
     #[test]
     fn all_comparison_families_reproduce_complete_native_saved_programs() {
         for (batch, expected) in [
-            include_bytes!("../fixtures/ladder-edit/instructions/comparisons_first_half.bin").as_slice(),
+            include_bytes!("../fixtures/ladder-edit/instructions/comparisons_first_half.bin")
+                .as_slice(),
             include_bytes!("../fixtures/ladder-edit/instructions/comparison_output.bin").as_slice(),
-        ].into_iter().enumerate() {
-            let mut bytes = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
-            for (index, spec) in crate::ladder_comparison_catalog().chunks(39).nth(batch).unwrap().iter().enumerate() {
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut bytes =
+                include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
+            for (index, spec) in crate::ladder_comparison_catalog()
+                .chunks(39)
+                .nth(batch)
+                .unwrap()
+                .iter()
+                .enumerate()
+            {
                 let y = 8 + index as u32 * 4;
                 bytes = insert_ladder_row(&bytes, y).unwrap();
                 let bit = spec.mnemonic.starts_with('4') || spec.mnemonic.starts_with('8');
-                let mut operands = if bit { vec!["D100.0".into(), "D102.0".into()] } else { vec!["D100".into(), "D104".into()] };
+                let mut operands = if bit {
+                    vec!["D100.0".into(), "D102.0".into()]
+                } else {
+                    vec!["D100".into(), "D104".into()]
+                };
                 if spec.operand_count == 3 {
-                    operands.push(if spec.mnemonic.starts_with('G') || spec.mnemonic.starts_with("DG") { "1" } else { "D108" }.into());
+                    operands.push(
+                        if spec.mnemonic.starts_with('G') || spec.mnemonic.starts_with("DG") {
+                            "1"
+                        } else {
+                            "D108"
+                        }
+                        .into(),
+                    );
                 }
                 bytes = insert_ladder_comparison(&bytes, y, 0, spec.mnemonic, &operands).unwrap();
-                bytes = insert_ladder_instruction(&bytes, y, "MOV", &["1".into(), format!("D{}", 200 + index)]).unwrap();
+                bytes = insert_ladder_instruction(
+                    &bytes,
+                    y,
+                    "MOV",
+                    &["1".into(), format!("D{}", 200 + index)],
+                )
+                .unwrap();
             }
             assert_eq!(bytes, expected);
         }
@@ -1881,53 +1984,122 @@ mod tests {
 
     #[test]
     fn string_literal_applications_reproduce_complete_native_saved_program() {
-        let mut bytes = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
-        for (old, new) in [("STOP", "$MOVP,'Room B, off',D000200"), ("WDT", "$MOV,'Room A, on',D000100")] {
-            let encoded = old.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<_>>();
-            let offset = bytes.windows(encoded.len()).position(|b| b == encoded).unwrap() - 4;
-            bytes = update_instruction_text(&bytes, offset, old, new).unwrap().unwrap();
+        let mut bytes =
+            include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
+        for (old, new) in [
+            ("STOP", "$MOVP,'Room B, off',D000200"),
+            ("WDT", "$MOV,'Room A, on',D000100"),
+        ] {
+            let encoded = old
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect::<Vec<_>>();
+            let offset = bytes
+                .windows(encoded.len())
+                .position(|b| b == encoded)
+                .unwrap()
+                - 4;
+            bytes = update_instruction_text(&bytes, offset, old, new)
+                .unwrap()
+                .unwrap();
         }
-        assert_eq!(bytes, include_bytes!("../fixtures/ladder-edit/instructions/string_literals.bin").as_slice());
+        assert_eq!(
+            bytes,
+            include_bytes!("../fixtures/ladder-edit/instructions/string_literals.bin").as_slice()
+        );
     }
 
     #[test]
     fn quoted_string_operands_remain_single_native_tokens() {
         let empty = include_bytes!("../fixtures/ladder-edit/R10.bin");
-        let bytes = insert_ladder_instruction(empty, 0, "$MOV", &["'Room A, on'".into(), "D100".into()]).unwrap();
+        let bytes =
+            insert_ladder_instruction(empty, 0, "$MOV", &["'Room A, on'".into(), "D100".into()])
+                .unwrap();
         let text = "$MOV,'Room A, on',D100";
-        let encoded = text.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<_>>();
-        let offset = bytes.windows(encoded.len()).position(|b| b == encoded).unwrap() - 4;
-        let edited = update_instruction_text(&bytes, offset, text, "$MOV,'Room B, off',D104").unwrap().unwrap();
-        let restored = update_instruction_text(&edited, offset, "$MOV,'Room B, off',D104", text).unwrap().unwrap();
+        let encoded = text
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>();
+        let offset = bytes
+            .windows(encoded.len())
+            .position(|b| b == encoded)
+            .unwrap()
+            - 4;
+        let edited = update_instruction_text(&bytes, offset, text, "$MOV,'Room B, off',D104")
+            .unwrap()
+            .unwrap();
+        let restored = update_instruction_text(&edited, offset, "$MOV,'Room B, off',D104", text)
+            .unwrap()
+            .unwrap();
         assert_eq!(restored, bytes);
-        assert_eq!(crate::internal::parse_ladder_operation_call(text).unwrap().1, ["'Room A, on'", "D100"]);
-        assert_eq!(crate::internal::parse_ladder_operation_call("$MOV 'Room A, on' D100").unwrap().1, ["'Room A, on'", "D100"]);
+        assert_eq!(
+            crate::internal::parse_ladder_operation_call(text)
+                .unwrap()
+                .1,
+            ["'Room A, on'", "D100"]
+        );
+        assert_eq!(
+            crate::internal::parse_ladder_operation_call("$MOV 'Room A, on' D100")
+                .unwrap()
+                .1,
+            ["'Room A, on'", "D100"]
+        );
         assert!(crate::internal::parse_ladder_operation_call("$MOV,'unclosed,D100").is_none());
         assert!(insert_ladder_instruction(empty, 0, "$MOV", &["1".into(), "D100".into()]).is_err());
-        assert!(insert_ladder_instruction(empty, 0, "MOV", &["'room'".into(), "D100".into()]).is_err());
-        assert!(insert_ladder_instruction(empty, 0, "$MOV", &["D100".into(), "'destination'".into()]).is_err());
-        assert!(insert_ladder_instruction(empty, 0, "$MOV", &[format!("'{}'", "a".repeat(32)), "D100".into()]).is_err());
-        assert!(insert_ladder_instruction(empty, 0, "$MOV", &["'room\n'".into(), "D100".into()]).is_err());
+        assert!(
+            insert_ladder_instruction(empty, 0, "MOV", &["'room'".into(), "D100".into()]).is_err()
+        );
+        assert!(
+            insert_ladder_instruction(empty, 0, "$MOV", &["D100".into(), "'destination'".into()])
+                .is_err()
+        );
+        assert!(
+            insert_ladder_instruction(
+                empty,
+                0,
+                "$MOV",
+                &[format!("'{}'", "a".repeat(32)), "D100".into()]
+            )
+            .is_err()
+        );
+        assert!(
+            insert_ladder_instruction(empty, 0, "$MOV", &["'room\n'".into(), "D100".into()])
+                .is_err()
+        );
     }
 
     #[test]
     fn indexed_bits_and_ff_reproduce_complete_native_saved_program() {
-        let mut bytes = include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
+        let mut bytes =
+            include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").to_vec();
         let offset = bytes.windows(8).position(|w| w == b"S\0T\0O\0P\0").unwrap() - 4;
         bytes = update_instruction_text(&bytes, offset, "STOP", "FF,M00030")
-            .unwrap().unwrap();
+            .unwrap()
+            .unwrap();
         for (y, operand, mnemonic, operands) in [
             (0, "M00000", "B", ["D000100", "4"]),
             (4, "M00001", "BN", ["D000104", "D000108"]),
         ] {
-            bytes = edit_ladder_cell(&bytes, &crate::LadderCellEdit {
-                raw_y: y, column: 0,
-                expected: Some(LadderEditElement { kind: LadderEditKind::NormallyOpen, operand: operand.into() }),
-                replacement: None,
-            }).unwrap();
-            bytes = insert_ladder_comparison(&bytes, y, 0, mnemonic, &operands.map(String::from)).unwrap();
+            bytes = edit_ladder_cell(
+                &bytes,
+                &crate::LadderCellEdit {
+                    raw_y: y,
+                    column: 0,
+                    expected: Some(LadderEditElement {
+                        kind: LadderEditKind::NormallyOpen,
+                        operand: operand.into(),
+                    }),
+                    replacement: None,
+                },
+            )
+            .unwrap();
+            bytes = insert_ladder_comparison(&bytes, y, 0, mnemonic, &operands.map(String::from))
+                .unwrap();
         }
-        assert_eq!(bytes, include_bytes!("../fixtures/ladder-edit/instructions/indexed_bits_ff.bin").as_slice());
+        assert_eq!(
+            bytes,
+            include_bytes!("../fixtures/ladder-edit/instructions/indexed_bits_ff.bin").as_slice()
+        );
     }
 
     #[test]
@@ -2815,13 +2987,21 @@ mod tests {
 
     #[test]
     fn outputs_on_lower_branch_rows_match_native_saved_program() {
-        let document = crate::XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx")).unwrap();
+        let document =
+            crate::XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx")).unwrap();
         let source = document.ladder_programs().remove(0).unwrap().data;
-        let coil = edit_ladder_cell(&source, &LadderCellEdit {
-            raw_y: 12, column: 9, expected: None,
-            replacement: element(LadderEditKind::Output, "M00030"),
-        }).unwrap();
-        let actual = insert_ladder_instruction(&coil, 16, "MOV", &["1".into(), "D100".into()]).unwrap();
+        let coil = edit_ladder_cell(
+            &source,
+            &LadderCellEdit {
+                raw_y: 12,
+                column: 9,
+                expected: None,
+                replacement: element(LadderEditKind::Output, "M00030"),
+            },
+        )
+        .unwrap();
+        let actual =
+            insert_ladder_instruction(&coil, 16, "MOV", &["1".into(), "D100".into()]).unwrap();
         let native = include_bytes!("../fixtures/ladder-edit/branches/branch_outputs.bin");
         assert_eq!(actual, native.as_slice());
         assert!(editable_ladder_supported(&actual));

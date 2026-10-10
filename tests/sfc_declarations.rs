@@ -197,12 +197,15 @@ fn native_strict_check_and_save_as_retain_advanced_declarations_and_st_sources()
         after.blocks[0].editable_rows,
         before.blocks[0].editable_rows
     );
-    assert!(after
-        .variables
-        .iter()
-        .any(|v| v.name == "Matrix" && v.declaration.as_ref().unwrap().dimensions.len() == 2));
-    assert!(after
-        .variables
-        .iter()
-        .any(|v| v.name == "Cube" && v.declaration.as_ref().unwrap().initial_value == "8(FALSE)"));
+    assert!(
+        after
+            .variables
+            .iter()
+            .any(|v| v.name == "Matrix" && v.declaration.as_ref().unwrap().dimensions.len() == 2)
+    );
+    assert!(
+        after.variables.iter().any(
+            |v| v.name == "Cube" && v.declaration.as_ref().unwrap().initial_value == "8(FALSE)"
+        )
+    );
 }

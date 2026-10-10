@@ -442,7 +442,10 @@ impl fmt::Display for XgwxError {
             Self::TextProgramEdit(reason) => write!(f, "text program edit rejected: {reason}"),
             Self::SfcEdit(reason) => write!(f, "SFC edit rejected: {reason}"),
             Self::BrowserNetworkEdit(reason) => write!(f, "network edit rejected: {reason}"),
-            Self::RewriteVerificationFailed => write!(f, "rewritten workspace failed XML or container preservation verification"),
+            Self::RewriteVerificationFailed => write!(
+                f,
+                "rewritten workspace failed XML or container preservation verification"
+            ),
             Self::AuthenticatedRewriteUnsupported => write!(
                 f,
                 "cannot rewrite workspace: the container does not match the validated XG5000 header, alignment, or Security layout"

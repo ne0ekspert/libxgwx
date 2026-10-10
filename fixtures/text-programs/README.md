@@ -25,7 +25,7 @@ fixtures; no PLC or online transfer was used.
 Generate a fresh candidate with:
 
 ```sh
-cargo run --features write --example text-program-acceptance
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin text-program-acceptance
 ```
 
 The template XML under `src/program_templates/xgi-{st,il}.xml` is extracted
@@ -44,7 +44,7 @@ families require a separate migration and are rejected atomically.
 Generate conversion candidates with:
 
 ```sh
-cargo run --features write,il --example text-cpu-acceptance
+cargo run --features write,il --manifest-path dev-tools/Cargo.toml --bin text-cpu-acceptance
 ```
 
 `cpu/{cpue,cpus,cpuh,cpuu,cpuud,cpuun}-{generated,native}.xgwx`

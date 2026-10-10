@@ -115,7 +115,7 @@ Reset coils were subsequently checked in the branch acceptance cases below.
 Reproduce generated inputs with:
 
 ```sh
-cargo run --features write --example ladder-acceptance -- /tmp/new-ld-cases
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin ladder-acceptance -- /tmp/new-ld-cases
 cargo test --features il,wasm,write
 cargo clippy --all-targets --features il,wasm,write -- -D warnings
 ```
@@ -202,7 +202,7 @@ remain outside this validation.
 Reproduce branch inputs with:
 
 ```sh
-cargo run --features write --example branch-acceptance -- /tmp/new-branch-cases
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin branch-acceptance -- /tmp/new-branch-cases
 ```
 
 
@@ -236,7 +236,7 @@ unknown mnemonics, incorrect operand counts, malformed
 records, and direct edits to internal operand copies are rejected without mutation.
 
 ```sh
-cargo run --features write --example instruction-acceptance -- /tmp/new-instruction-cases
+cargo run --features write --manifest-path dev-tools/Cargo.toml --bin instruction-acceptance -- /tmp/new-instruction-cases
 ```
 
 
@@ -322,8 +322,8 @@ The test suite writes five comparison results to one BOOL address; native
 double-coil checking therefore reports warnings. This is format and compiler
 acceptance, not PLC execution validation.
 
-`examples/function_placement.rs` generates placements from a caller-supplied
-source; `examples/native_function_compare.rs` compares native Save As payloads.
+`dev-tools/function_placement.rs` generates placements from a caller-supplied
+source; `dev-tools/native_function_compare.rs` compares native Save As payloads.
 Full local capture evidence is kept outside Git under
 `VMs/xg5000-win10/captures/function-placement-20260930`.
 

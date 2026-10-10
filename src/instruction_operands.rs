@@ -108,13 +108,20 @@ pub(crate) fn validate_raw_operands(
         .zip(operands)
     {
         if operand.starts_with('\'') || operand.ends_with('\'') {
-            let body = operand.strip_prefix('\'').and_then(|v| v.strip_suffix('\''));
+            let body = operand
+                .strip_prefix('\'')
+                .and_then(|v| v.strip_suffix('\''));
             if !rule.data_types.contains(&"STRING") || rule.allows_constant != Some(true) {
                 return Err(crate::XgwxError::InvalidLadderEdit {
                     reason: "instruction operand does not permit a string constant",
                 });
             }
-            if body.is_none_or(|v| v.len() > 31 || !v.chars().all(|c| c.is_ascii() && !c.is_ascii_control() && c != '\'')) {
+            if body.is_none_or(|v| {
+                v.len() > 31
+                    || !v
+                        .chars()
+                        .all(|c| c.is_ascii() && !c.is_ascii_control() && c != '\'')
+            }) {
                 return Err(crate::XgwxError::InvalidLadderEdit {
                     reason: "string constants require single quotes and at most 31 printable ASCII characters",
                 });

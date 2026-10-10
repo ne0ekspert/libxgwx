@@ -134,9 +134,10 @@ fn invalid_stale_and_ambiguous_cnet_edits_are_atomic() {
         &format!("{extra}</XGPD_CONFIG_INFO_GROUP>"),
     );
     let original = doc.xml.clone();
-    assert!(doc
-        .edit_cnet_settings(&patch(vec![change(0, "stationNo", "0", "1")]))
-        .is_err());
+    assert!(
+        doc.edit_cnet_settings(&patch(vec![change(0, "stationNo", "0", "1")]))
+            .is_err()
+    );
     assert_eq!(doc.xml, original);
 }
 #[test]
@@ -159,9 +160,10 @@ fn repeater_requires_equal_baud_rates_and_driver_changes_validate_final_station(
     ]))
     .unwrap();
     let original = doc.xml.clone();
-    assert!(doc
-        .edit_cnet_settings(&patch(vec![change(1, "bps", "8", "14")]))
-        .is_err());
+    assert!(
+        doc.edit_cnet_settings(&patch(vec![change(1, "bps", "8", "14")]))
+            .is_err()
+    );
     assert_eq!(doc.xml, original);
     doc.edit_cnet_settings(&patch(vec![
         change(0, "bps", "8", "14"),
@@ -198,8 +200,8 @@ fn new_cnet_modules_have_native_defaults_and_other_modules_are_preserved() {
         assert_eq!(doc.fenet_config_infos(), fenet);
         if model == "XGL-C22A/B" {
             let original = doc.xml.clone();
-            assert!(doc
-                .edit_cnet_settings(&CnetSettingsPatch {
+            assert!(
+                doc.edit_cnet_settings(&CnetSettingsPatch {
                     base: 0,
                     slot: 3,
                     changes: vec![
@@ -207,7 +209,8 @@ fn new_cnet_modules_have_native_defaults_and_other_modules_are_preserved() {
                         change(1, "repeater", "0", "1")
                     ]
                 })
-                .is_err());
+                .is_err()
+            );
             assert_eq!(doc.xml, original);
         }
         doc.delete_module(0, 3).unwrap();

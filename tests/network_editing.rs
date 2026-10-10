@@ -247,8 +247,9 @@ fn rapienet_station_range_uses_the_existing_protocol() {
     doc.edit_fenet_field(&patch("stationNo", "63", "220"))
         .unwrap();
     let original = doc.xml.clone();
-    assert!(doc
-        .edit_fenet_field(&patch("stationNo", "220", "221"))
-        .is_err());
+    assert!(
+        doc.edit_fenet_field(&patch("stationNo", "220", "221"))
+            .is_err()
+    );
     assert_eq!(doc.xml, original);
 }

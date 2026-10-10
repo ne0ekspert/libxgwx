@@ -830,7 +830,9 @@ pub(crate) fn ladder_element_coordinate(data: &[u8], element: &LadderElement) ->
 pub(crate) fn read_ladder_coordinate(data: &[u8], offset: usize) -> Option<(u8, u32)> {
     let bytes = data.get(offset..offset + 2)?;
     let raw_x = bytes[0];
-    if raw_x == 0 || raw_x > 0x80 { return None; }
+    if raw_x == 0 || raw_x > 0x80 {
+        return None;
+    }
     if let Some(bytes) = data.get(offset..offset + 4) {
         let raw_y = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], 0]);
         if raw_y < 65535 * 4 && raw_y.is_multiple_of(4) {

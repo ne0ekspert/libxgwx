@@ -1,3 +1,9 @@
+//! Change a supported digital input module's filter and save a workspace.
+//!
+//! Run: `cargo run --features write --example write-module -- input.xgwx
+//! output.xgwx 0 2 5` (base 0, slot 2, raw filter value 5).
+//! Requires a uniquely identified, supported module. The output path is written
+//! or overwritten; use a different path to preserve the original workspace.
 use std::env;
 use std::error::Error;
 use std::io;

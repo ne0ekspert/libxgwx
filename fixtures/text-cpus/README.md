@@ -2,7 +2,7 @@
 
 Captured in offline XG5000 4.82.1. Native blank projects preserve each CPU's hardware/network/default parameter profile. `xgk-auto` is XGK-CPUA in Auto-allocation mode. Compact profiles: XEC-E/H/S/U, XEM-H2/HP, GIPAM and KL; redundant profile: XGR-CPUH (type 101).
 
-Generate candidates with `cargo run --features write,il --example text-cpu-expansion-acceptance`. Each source candidate declares local `Count : INT`, edits the original ST program, creates an additional ST program and (for IEC CPUs) an IL program. ST increments Count; IL loads, adds and stores Count. Native Check Program enables syntax checking, strict ST types and all programs. Native Save As pairs are compared by source, identity, language and declaration semantics, not compressed bytes or compiled caches.
+Generate candidates with `cargo run --features write,il --manifest-path dev-tools/Cargo.toml --bin text-cpu-expansion-acceptance`. Each source candidate declares local `Count : INT`, edits the original ST program, creates an additional ST program and (for IEC CPUs) an IL program. ST increments Count; IL loads, adds and stores Count. Native Check Program enables syntax checking, strict ST types and all programs. Native Save As pairs are compared by source, identity, language and declaration semantics, not compressed bytes or compiled caches.
 
 XGK Auto ST passes 0 errors / 0 warnings / 17 messages. IEC CPU candidates pass 0 errors / 0 warnings / 21 messages. XGK vendor IL passes 0 errors / 0 warnings / 10 messages with series/negated/edge contacts, OUT/OUTP/SET/RST and MOV. Screenshots are in `evidence/`. Rendered editor screenshots use a local mock VS Code host; they do not represent PLC execution.
 

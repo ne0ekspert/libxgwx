@@ -1703,7 +1703,9 @@ impl CnetPortConfigSummary {
 }
 
 /// Baud rates in XG5000 selector order (native Bps values 0 through 14).
-pub const CNET_BAUD_RATES: [u32; 15] = [300, 600, 1200, 1800, 2400, 3600, 4800, 7200, 9600, 19200, 38400, 57600, 64000, 76800, 115200];
+pub const CNET_BAUD_RATES: [u32; 15] = [
+    300, 600, 1200, 1800, 2400, 3600, 4800, 7200, 9600, 19200, 38400, 57600, 64000, 76800, 115200,
+];
 
 fn cnet_baud_rate(selector: u32) -> Option<u32> {
     CNET_BAUD_RATES.get(selector as usize).copied()
