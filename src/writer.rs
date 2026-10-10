@@ -1881,6 +1881,34 @@ impl XgwxDocument {
         Ok(())
     }
 
+    /// Rename the root project, preserving all other XML and checking its current name.
+    pub fn rename_project(&mut self, expected_name: &str, name: &str) -> Result<(), XgwxError> {
+        let fail = |reason: &str| XgwxError::ProjectRename(reason.into());
+        if name.trim().is_empty() || name.chars().any(char::is_control) {
+            return Err(fail(
+                "project name must be nonblank and contain no control characters",
+            ));
+        }
+        let parsed = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
+        let root = parsed.root_element();
+        if !root.has_tag_name("Project") {
+            return Err(fail("missing root Project element"));
+        }
+        let names: Vec<_> = root
+            .children()
+            .filter(|n| n.is_text() && !n.text().unwrap_or("").trim().is_empty())
+            .collect();
+        if names.len() != 1 || names[0].text().unwrap_or("").trim() != expected_name {
+            return Err(fail(
+                "project name is missing, ambiguous, or changed; inspect again",
+            ));
+        }
+        if expected_name == name {
+            return Ok(());
+        }
+        self.apply_xml_replacements(vec![(names[0].range(), escape_xml_text(name))])
+    }
+
     /// Update editable XML metadata for one program selected by document order.
     pub fn update_program(
         &mut self,
