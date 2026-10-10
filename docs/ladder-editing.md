@@ -1,5 +1,8 @@
 # Structural LD editing
 
+Capture directory names below identify local validation archives; they are not
+paths bundled with this repository.
+
 The opt-in `write` feature adds `XgwxDocument::edit_ladder_cell` and the WASM
 `edit_xgwx_ladder_cell` export. These insert, replace or remove actual element
 records. The `update_ladder_cell_text` API also supports variable-length operands in
@@ -440,7 +443,7 @@ The operand boundary suite adds `MOV 65535`, `MOV -32768`, signed-decimal ADD,
 hexadecimal ADD and `RADD 3.4E38`. XG5000 4.82.1 checked the generated XGK project
 with zero errors and zero warnings. Native Save As preserved its decoded program
 payload byte for byte. Evidence is in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/iec-editor-cells-20261002/`.
+`iec-editor-cells-20261002/`.
 
 ### Maintained acceptance tools
 

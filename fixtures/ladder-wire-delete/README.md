@@ -1,5 +1,8 @@
 # Native wire-deletion captures
 
+Capture directory names below identify local validation archives; they are not
+paths bundled with this repository.
+
 Synthetic XGK-CPUSN and XGI-CPUE projects, checked in the offline XG5000 VM
 on 2026-10-07. They contain only direct-memory contacts and coils.
 
@@ -16,4 +19,4 @@ preserved elements/rows, unaffected branches and atomic stale-selection rejectio
 Isolated IEC contact/coil deletion is covered by local structural tests.
 
 Native projects, generated inputs, payloads and screenshots are retained under
-`~/VMs/xg5000-win10/captures/ladder-delete-20261007/`.
+`ladder-delete-20261007/`.

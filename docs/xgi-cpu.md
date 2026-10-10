@@ -1,5 +1,8 @@
 # XGI CPU identification
 
+Capture directory names below identify local validation archives; they are not
+paths bundled with this repository.
+
 The installed XG5000 4.82.1 CPU name table is ordered by numeric
 `<Configuration Type>`. Anchoring its entries to the existing XGK/XGB mappings
 gives the XGI model mapping below. The base limits for the six standard models
@@ -217,7 +220,7 @@ seven records, and advanced the row header's rightmost contact coordinate from
 on that row, and Check Program reported 0 errors, 1 warning category, and 42 messages
 in the result header. After Save As, all seven decoded ProgramData payloads
 were byte-identical to the generated file. The generated and native captures
-are under `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-linear-contact/`.
+are under `smarthome-iec-linear-contact/`.
 The other five-record wire position and longer linear rows use the same
 guarded record shape but do not yet have separate native mutation captures.
 
@@ -242,7 +245,7 @@ Check Program reported 3 errors, 0 warnings, and 36 messages for both the
 native and generated deletions. This particular edit leaves a disconnected
 circuit; the writer exposes it as an intermediate edit that needs a subsequent
 wiring repair. Captures are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-delete-original/`.
+`smarthome-iec-delete-original/`.
 
 XG5000's F5 horizontal-wire command repairs that gap by inserting a 15-byte
 `FF 01` short-wire record at x=13, raising the row count from four to five,
@@ -253,7 +256,7 @@ payloads are byte-identical to the native F5 Save As. The repaired project
 renders as one continuous wire and Check Program returns the baseline 0 errors,
 1 warning category, and 42 messages. The native edit, generated edit, native resave,
 and screenshots are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-wire-repair/`.
+`smarthome-iec-wire-repair/`.
 
 The inverse `delete_iec_ld_horizontal_wire` operation removes a 15-byte
 `FF 01` segment between two matching long wires and records a one-cell gap.
@@ -266,7 +269,7 @@ generated L52 deletion, visibly rendered the gap, reported 3 errors and 36
 messages for the temporarily disconnected circuit, and completed Save As.
 All seven ProgramData and PB50 payloads in that native resave were byte-
 identical to the generated file. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-wire-delete/`.
+`smarthome-iec-wire-delete/`.
 
 For deletion inside longer linear rows, XG5000's Cell Delete command is the
 safe native operation. It removes the selected contact, shifts later contacts
@@ -277,7 +280,7 @@ the same four display-only geometry bytes changed by native Save As. XG5000
 Check Program reports zero errors after both Cell Delete edits. Zero-length wire
 fragments are excluded from the F5 repair-site detector because native F5 did
 not make that longer-row shape valid. Native files and screenshots are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-cell-delete/`.
+`smarthome-iec-cell-delete/`.
 
 The deletion-site decoder and linear-wire insertion writer now include all six
 addressed contact record codes: normally open (`FF 06`), normally closed
@@ -290,14 +293,14 @@ XG5000 4.82.1 rendered and checked generated falling-edge and negated
 falling-edge insertions in an existing multi-contact row with the project
 baseline diagnostics, then Save As preserved every decoded ProgramData payload
 byte-for-byte. Those captures are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-six-contact-insertions/`.
+`smarthome-iec-six-contact-insertions/`.
 XG5000 4.82.1 rendered and checked a generated rising-edge Cell Delete with 0
 errors, the baseline 1 warning category and 42 messages, then preserved every decoded
 ProgramData payload during Save As. Native in-editor Delete and Cell Delete
 captures currently cover NO and NC; direct falling and negated-falling deletion
 captures remain to be collected. The generated source, native resave,
 and screenshots are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-rising-cell-delete/`.
+`smarthome-iec-rising-cell-delete/`.
 
 The contact-kind writer accepts all six addressed contact records, including
 the four kinds present in the original smart home project, and the coil-kind
@@ -308,10 +311,10 @@ normally-closed/inverse, rising/rising, falling/Set, negated-rising/falling,
 and negated-falling/Reset. XG5000 4.82.1 rendered, checked, and Save-As
 preserved those constructed payloads, so the byte-identical kind-change output
 has the same native-accepted encoding. The all-code evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-rung-kinds/`.
+`smarthome-iec-rung-kinds/`.
 The earlier direct rising-edge to negated-rising-edge mutation capture remains
 under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-contact-kind/`.
+`smarthome-iec-contact-kind/`.
 
 `edit_iec_ld_branch_segment` adds or removes one paired `BranchStart`/`BranchEnd`
 segment between adjacent rows in an existing native row group. It rejects
@@ -322,7 +325,7 @@ branch count from 86 to 85; adding it back reproduced the original ProgramData
 byte for byte. XG5000 4.82.1 rendered the generated removal and reported one
 expected disconnected-logic error, zero warnings, and 36 messages. Native Save
 As preserved all seven generated ProgramData payloads byte-identically. Evidence
-is under `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-branch-segment/`.
+is under `smarthome-iec-branch-segment/`.
 
 Removing the final x=6 segment between program 0 rows L3 and L4 in XG5000
 deleted the lower contact-only branch row, replaced the upper branch boundary
@@ -335,7 +338,7 @@ byte-identical. XG5000 then opened the
 writer-generated file, rendered the changed program, and reported the baseline
 0 errors, 1 warning category, and 42 messages. Native Save As preserved all seven
 generated ProgramData payloads byte for byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-final-branch-row/`.
+`smarthome-iec-final-branch-row/`.
 
 The decoder identifies 29 opcode/name-verified EQ, GT, GE, LT, and LE blocks
 in this project. `update_iec_ld_comparison_function` changes the paired opcode
@@ -347,7 +350,7 @@ All seven decoded ProgramData payloads and all seven PB50 tables in the native
 Save As are byte-identical to the generated file. The bundled WASM reproduces
 the generated file. Direct native in-editor mutations for each operator remain
 to be captured. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-comparison-cycle/`.
+`smarthome-iec-comparison-cycle/`.
 
 ## IEC local symbols
 
@@ -382,7 +385,7 @@ seen in the earlier native description Save As. The other six ProgramData
 and PB50 payloads were byte-identical. This is native acceptance of the
 address edit, with a visible normalization boundary in the saved file.
 Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-address-length/`.
+`smarthome-iec-address-length/`.
 
 XG5000's Delete command on the mapped address of program 0 `ON` cleared its
 address and storage class, set the binary allocation number to `FFFFFFFF`,
@@ -395,7 +398,7 @@ opened the generated unmap, displayed the blank address, checked all programs
 with 0 errors, 1 warning category, and 42 messages, and completed Save As.
 The direct native unmap left all seven ProgramData payloads unchanged; its
 program 0 PB50 save also cleared an 11-unit field in all 15 records. Evidence
-is under `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-address-unmap/`.
+is under `smarthome-iec-address-unmap/`.
 The generated file's native Save As preserved all seven ProgramData payloads
 byte-for-byte and all parsed local symbol fields; it made the same 330-byte
 program 0 PB50 normalization while leaving the other six PB50 payloads intact.
@@ -412,7 +415,7 @@ local symbol field and all ProgramData bytes except the four previously seen
 program 0 display-cache bytes. It normalized program 0 PB50 by clearing the
 same 11-unit field in all 15 records; program 1 and the other five PB50
 payloads stayed byte-identical. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-address-io-unmap/`.
+`smarthome-iec-address-io-unmap/`.
 
 `rename_iec_local_symbol` updates the local
 PB50 name and every classified contact, coil, and function operand reference
@@ -451,7 +454,7 @@ native-created table, and all seven decoded ProgramData payloads were
 byte-identical to the generated file. Other primitive type choices share the
 captured type-code layout but have not each received a native insertion check.
 The generated, native-created, and native-resaved captures are kept under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-local-symbol/`.
+`smarthome-iec-local-symbol/`.
 
 `delete_iec_local_symbol` removes one PB50 record and decrements `Count` when
 the owning ProgramData has no marker string matching the symbol name. It
@@ -509,7 +512,7 @@ category, and 42 messages for each. The detail pane listed 27 warning instances.
 Native Save As preserved every decoded ProgramData
 payload byte-identically after both insertion and deletion. The direct native
 edits, generated files, native resaves, manifest, and screenshots are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-blank-row/`.
+`smarthome-iec-blank-row/`.
 
 Program 1 contains TON and MOVE function blocks. Its row shifts now walk the
 validated function record structure to locate each pin coordinate. Inserting a
@@ -520,7 +523,7 @@ MOVE, checked all programs with 0 errors, 1 warning category, and 42 messages,
 and preserved every decoded ProgramData and PB50 local-symbol payload during
 Save As. A separate program 0 L5 comment passed the same checks. Generated
 files, native resaves, and screenshots are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-group-copy/`.
+`smarthome-iec-group-copy/`.
 
 ## IEC simple rung creation
 
@@ -554,7 +557,7 @@ reported the project baseline: 0 errors, 1 warning category, 27 warning
 instances, and 42 messages. Native Save As preserved every ProgramData payload
 byte-for-byte. The direct edit, generated file, native resave, manifest, and
 screenshots are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-linear-rung/`.
+`smarthome-iec-linear-rung/`.
 
 Five additional generated projects pair normally-closed with inverse output,
 rising-edge with rising-edge output, falling-edge with Set, negated-rising with
@@ -562,7 +565,7 @@ falling-edge output, and negated-falling with Reset. Together they cover all 12
 supported record codes. XG5000 rendered every symbol, each all-program check
 returned the same baseline diagnostics, and every native Save As preserved all
 seven ProgramData payloads byte-for-byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-rung-kinds/`.
+`smarthome-iec-rung-kinds/`.
 
 ## IEC standalone contact or coil in an empty cell
 
@@ -588,14 +591,14 @@ project adds one standalone element after each of the seven programs. XG5000
 SINGLEROUND. All seven ProgramData payloads and parsed IEC local symbols were
 preserved byte-for-byte. This establishes open/render/save acceptance, not a
 successful program check for the intentionally incomplete circuits. Evidence:
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-single-element/`.
+`smarthome-iec-single-element/`.
 
 Consecutive insertion on an existing row was validated with 31 contacts and one
 coil entered from right to left at every grid position. XG5000 4.82.1 opened the
 generated project and checked all programs with strict type checking: zero
 errors and the original 27 warnings. Native Save As preserved all seven decoded
 ProgramData payloads byte for byte. Generated and saved files are in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/iec-editor-cells-20261002/`.
+`iec-editor-cells-20261002/`.
 
 ## IEC parallel contact on a simple rung
 
@@ -613,7 +616,7 @@ the direct XG5000 edit. The only four byte differences are display-cache bytes
 on unrelated rows that XG5000 normalizes during native Save As. The other six
 program payloads match the native capture byte-for-byte. The extension exposes
 the action on eligible simple rungs. Captures and the generated project are in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-group-copy/`.
+`smarthome-iec-group-copy/`.
 XG5000 reopened the generated file, rendered both contacts, and Check Program
 reported 0 errors, 1 warning category, and 42 messages. Its Save As preserved
 all seven generated ProgramData payloads byte-for-byte. The captured screenshot
@@ -633,7 +636,7 @@ rendered the writer-generated L42 rung, checked all programs with 0 errors,
 1 warning category, and 42 messages, and preserved all seven generated
 ProgramData payloads byte-for-byte on Save As. The branch removal preflight
 accepts this shape in two places. Captures are in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-branch-wire-delete/`.
+`smarthome-iec-branch-wire-delete/`.
 
 Program 3 L17–L18 has a related final branch with no intermediate wire: the
 upper row has `NO` and `NC` contacts at x1 and x4, then a long wire and coil.
@@ -645,7 +648,7 @@ bytes. XG5000 4.82.1 rendered the generated L17 rung, checked all programs
 with 0 errors, 1 warning category, and 42 messages, and preserved all seven
 generated ProgramData payloads byte-for-byte on Save As. The branch removal
 preflight accepts this shape. Evidence is in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-direct-contact-branch-delete/`.
+`smarthome-iec-direct-contact-branch-delete/`.
 
 Programs 4 (`가스제어`) and 5 (`보일러`) each have a final x6 branch after two
 leading contacts. The upper row retains five serial contacts, a long wire,
@@ -657,7 +660,7 @@ combined generated file opened and rendered in XG5000 4.82.1 and passed
 all-program Check Program with 0 errors, 1 warning category, and 42 messages.
 Save As preserved all seven generated ProgramData payloads byte-for-byte.
 Its generated and native files are in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-x6-branch-delete/`.
+`smarthome-iec-x6-branch-delete/`.
 
 Programs 1 (`커튼`) and 2 (`공동현관`) have x6 branches whose lower rows hold
 a contact, a short wire, and a branch end. The writer now accepts their two
@@ -668,7 +671,7 @@ Save As also changed program 0, so it is only evidence for the program 1
 edit. XG5000 rendered the combined generated project, checked all programs
 with 0 errors, 1 warning category, and 42 messages, and preserved all seven
 generated ProgramData payloads byte-for-byte on Save As. Captures are in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-short-wire-branch-delete/`.
+`smarthome-iec-short-wire-branch-delete/`.
 
 Program 3 (`엘리베이터`) has two final x24 branches with a lower output coil and
 long wire at L51–L52 and L53–L54. Native Delete Line on L52 removed its lower
@@ -677,7 +680,7 @@ group byte-for-byte and accepts both captured record layouts. XG5000 4.82.1
 rendered and checked the generated project with both branches removed (0
 errors, 1 warning category, 42 messages). Save As preserved all seven decoded
 ProgramData and local-symbol payloads byte-for-byte. Captures are in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-output-branch-delete/`.
+`smarthome-iec-output-branch-delete/`.
 
 Program 3 (`엘리베이터`) also has repeated three- and four-row x6 contact
 branches. Native Delete Line on group 11 L26 removes the terminal contact,
@@ -688,7 +691,7 @@ XG5000 4.82.1 rendered and checked a generated project with all five terminal
 rows removed (0 errors, 1 warning category, 42 messages). Save As preserved
 all seven decoded ProgramData and local-symbol payloads byte-for-byte.
 Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-three-row-contact-branch/`.
+`smarthome-iec-three-row-contact-branch/`.
 
 Groups 16 and 17 end with two addressed contacts and a branch end at x6.
 Native Delete Line on group 16 L45 removes that lower row and the preceding
@@ -697,7 +700,7 @@ The same guarded shape accepts group 17. XG5000 4.82.1 rendered and checked
 the generated project with both terminal rows removed (0 errors, 1 warning
 category, 42 messages). Save As preserved all seven decoded ProgramData and
 local-symbol payloads byte-for-byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-two-contact-terminal-branch/`.
+`smarthome-iec-two-contact-terminal-branch/`.
 
 Group 16 also has a two-contact middle row at L44. Native Delete Line removes
 the row and reconnects the branch from L43 to the surviving L45 row, which
@@ -706,7 +709,7 @@ and also accepts the matching group 17 middle row. XG5000 rendered, checked,
 and resaved the generated project with both edits (0 errors, 1 warning
 category, 42 messages), preserving all seven decoded ProgramData and PB50
 local-symbol payloads byte-for-byte. The capture is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-middle-contact-branch/`.
+`smarthome-iec-middle-contact-branch/`.
 
 Program 3 groups 11–17 also have first lower two-contact rows beneath their
 top rows. Native Delete Line at group 11 L25 removes that row and reconnects
@@ -715,7 +718,7 @@ native group 11 bytes exactly. XG5000 4.82.1 opened, checked, and resaved a
 generated project with all seven matching first lower rows removed (0 errors,
 1 warning, 42 messages). All seven decoded ProgramData and PB50 local-symbol
 payloads survived Save As byte-for-byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-first-lower-contact-branch/`.
+`smarthome-iec-first-lower-contact-branch/`.
 
 Program 3 group 15 also has a middle row at L39 with one contact and a short
 wire. Native Delete Line reconnects L38 to the surviving L40 row, which
@@ -723,10 +726,10 @@ shifts to L39. The guarded writer matches XG5000's group bytes exactly.
 XG5000 opened, checked (0 errors, 1 warning, 42 messages), and resaved the
 generated file; all seven decoded ProgramData and PB50 local-symbol payloads
 remained byte-for-byte equal. The capture is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-middle-shortwire-branch/`.
+`smarthome-iec-middle-shortwire-branch/`.
 
 The branch removal preflight now accepts 75 of the project's 192 vertical
-segments. The reproducible audit is `cargo run --features write --manifest-path dev-tools/Cargo.toml --bin iec_branch_removal_audit -- /home/ne0ekspert/Downloads/smarthome_project_0225.xgwx`.
+segments. The reproducible audit is `cargo run --features write --manifest-path dev-tools/Cargo.toml --bin iec_branch_removal_audit -- /path/to/smarthome_project_0225.xgwx`.
 Of the 117 remaining segments, 84 need row-group rebuilds, 32 have
 unverified record layouts, and 1 has a connected `FF` and lower output row.
 That last row has a separate native-validated Delete Line action below.
@@ -759,7 +762,7 @@ not act as an independent L24–L25 branch deletion. Program Check reports one
 error for the resulting disconnected ladder. Treat that native result as a
 block-deletion and repair reference, not as a valid branch edit. The capture
 is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-function-branch-row/`.
+`smarthome-iec-function-branch-row/`.
 
 Program 6 group 13 is another function-fed branch chain. Native Delete Line on
 L47 removes the first `EQ`, its input/output expressions and link references,
@@ -771,7 +774,7 @@ both passed all-program Check Program with 0 errors, 1 warning category, and
 42 messages. XG5000 opened and resaved the generated project with all seven
 decoded ProgramData payloads byte-identical. The VS Code Delete block action
 exposes this captured site. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-p6-group13/`.
+`smarthome-iec-p6-group13/`.
 
 In the same group, native Delete Line on L51 and L55 separately removes the
 second or third `EQ`, its input/output pin records, and the last row of that
@@ -860,8 +863,8 @@ refreshes them during Save As. XG5000 also opened and resaved the generated
 file with all seven decoded ProgramData payloads byte-identical. This is a
 function and row deletion action; it does not count as branch segment removal
 in the 54/192 audit. Evidence is in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-group33-row-delete/`
-and `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-eq-chain-head/`.
+`smarthome-iec-group33-row-delete/`
+and `smarthome-iec-eq-chain-head/`.
 
 The same guarded branch edit now accepts all six addressed BOOL coil kinds,
 and its inverse removes the lower row for those kinds. For the supplied
@@ -870,7 +873,7 @@ and added `NC %MX760` below `NO %MX761`. Its circuit graph and inverse edit
 passed local checks; XG5000 4.82.1 opened the generated project, reported zero
 errors in Program Check, and preserved all seven decoded ProgramData payloads
 byte-for-byte on Save As. The bundled WASM produced the same project bytes.
-Evidence is in `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-parallel-set/`:
+Evidence is in `smarthome-iec-parallel-set/`:
 `generated_parallel_set.xgwx`, `native_resaved_parallel_set.xgwx`, and
 `check_program.png`. The other five coil kinds share the writer guard but
 have not been directly checked as parallel branches in XG5000.
@@ -924,7 +927,7 @@ records. The generated file rendered the same contact-only L1 and later MOVE
 blocks, and Check Program reported the expected unfinished-network result of 1
 error, 0 warnings, and 36 messages. XG5000 Save As preserved all seven
 generated ProgramData payloads byte-for-byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-function-delete/`.
+`smarthome-iec-function-delete/`.
 
 Native XG5000 insertion of `MOVE` after the retained first program 3 contact
 restored L2-L3 with input `1` and output `%MW300`. The generated
@@ -938,7 +941,7 @@ at this captured L1 site. A generated `2` to `%MW301` insertion rendered and
 passed all-program Check Program with 0 errors, 28 warnings, and 42 messages;
 Save As again preserved every ProgramData payload and local-symbol summary.
 Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-terminal-function-insert/`.
+`smarthome-iec-terminal-function-insert/`.
 
 Program 2 contains a standalone `WORD_TO_UDINT` group whose top row is a
 one-cell wire and the function block and whose two child rows contain only its
@@ -951,7 +954,7 @@ The generated file rendered the same blank gap, and Check Program reported the
 project baseline of 0 errors, 1 warning category, 27 warning instances, and 42
 messages. XG5000 Save As preserved all seven generated ProgramData payloads
 byte-for-byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-standalone-function-delete/`.
+`smarthome-iec-standalone-function-delete/`.
 
 The original program 4 has another three-row gap at L26-L28. Native XG5000
 inserted `WORD_TO_UDINT` there with `%MW301` input and the existing `div_값`
@@ -975,7 +978,7 @@ deletion with the blank function position at L14. Check Program reported the
 project baseline of 0 errors, 1 warning category, 27 warning instances, and 42
 messages. Save As preserved all seven generated ProgramData payloads
 byte-for-byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-function-cell-delete/`.
+`smarthome-iec-function-cell-delete/`.
 
 The deleted L14 shape exposes one guarded connected-function insertion site at
 raw x=4. Native XG5000 insertion adds a 108-byte `FF` function record using the
@@ -987,7 +990,7 @@ one row-header display-cache byte at program offset `0x636`. XG5000 4.82.1
 rendered the generated `FF` at L14, reported the project baseline of 0 errors,
 1 warning category, 27 warning instances, and 42 messages, and preserved all
 seven generated ProgramData payloads byte-for-byte during Save As. Evidence is
-under `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-function-cell-insert/`.
+under `smarthome-iec-function-cell-insert/`.
 
 Native Delete Line on the lower output row of this same two-row `FF` branch
 (program 0, group 9, L15) removes the lower row, branch start, connected `FF`
@@ -999,7 +1002,7 @@ unrelated display-cache bytes refreshed by XG5000. XG5000 4.82.1 opened and
 rendered the generated file, checked all programs with 0 errors, 1 warning
 category, and 42 messages, then Save As preserved all seven decoded
 ProgramData and local-symbol payloads byte-for-byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-function-output-branch/`.
+`smarthome-iec-function-output-branch/`.
 
 ## Remaining editor work
 
@@ -1015,7 +1018,7 @@ decoded ProgramData payloads and all seven PB50 symbol tables in that Save As
 were byte-identical to the generated file. The source remains at L2; review
 duplicated output operands or function instances before using a copy as
 independent logic. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-network-replace/`.
+`smarthome-iec-network-replace/`.
 
 The guarded `copy_iec_ld_group_to_program` operation copies complete
 contact, coil, wire, branch, comment, and function networks between IEC LD
@@ -1027,7 +1030,7 @@ project; its emitted file matched the library-generated file byte-for-byte.
 XG5000 4.82.1 rendered the new L8 network and Check Program reported 0 errors,
 1 warning category, and 42 messages. Native Save As preserved all seven
 generated ProgramData payloads byte-for-byte. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-group-copy/`.
+`smarthome-iec-group-copy/`.
 
 For a function copy, the writer cleared program 3 L1–L3 and copied program 2
 L1–L3, a `WORD_TO_UDINT` block whose output uses the existing UDINT local
@@ -1039,7 +1042,7 @@ decoded local symbol field in all seven programs remained equal. Program 2's
 local-variable table was opened during this capture; the cause of the binary
 normalization has not been isolated. The bundled WASM emitted the same bytes
 as the library and parsed the native result. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-cross-function-copy/`.
+`smarthome-iec-cross-function-copy/`.
 
 `copy_iec_ld_group_to_program_with_locals` extends cross-program copying when
 the source network uses primitive local variables absent from the destination.
@@ -1055,14 +1058,14 @@ the copied branch and `MOVE` block, checked all programs with 0 errors,
 ProgramData payloads and PB50 tables survived Save As byte-for-byte. The
 bundled WASM emitted the same file. This native capture validates the two
 mapped BOOL declarations. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-cross-local-copy/`.
+`smarthome-iec-cross-local-copy/`.
 
 Program 0's R_TRIG network at L32–L35 also copied into program 4 L22–L25
 with its missing `INST_사본2` declaration. XG5000 checked the result with zero
 errors and preserved all seven ProgramData payloads and the new program 4 PB50
 table byte-for-byte on Save As. The unrelated program 2 PB50 table was
 normalized, while its decoded symbols remained equal. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-cross-instance-copy/`.
+`smarthome-iec-cross-instance-copy/`.
 `replace_iec_ld_group_from_program` now composes destination deletion and
 cross-program copy on a private document, optionally adding missing locals.
 Replacing program 4 network 14 with the program 0 R_TRIG network emits the
@@ -1080,7 +1083,7 @@ displayed both the declaration and block, checked all programs with zero
 errors, and Save As preserved all seven ProgramData and PB50 payloads
 byte-for-byte. The bundled WASM and rendered webview copy emitted the exact
 generated file. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-cross-udint-copy/`.
+`smarthome-iec-cross-udint-copy/`.
 
 Program 0 L2 has enough room in its long wire for two serial contacts. The
 writer inserts `NO ON` at x25, then `NC 스위치_1` at x49 in the remaining wire.
@@ -1093,14 +1096,14 @@ IEC circuit graph. XG5000 4.82.1 rendered both contacts, Check Program reported
 decoded ProgramData and PB50 local-symbol payloads byte-for-byte. The VS Code
 webview produced exactly the generated bytes through two Insert contact edits,
 and the scrolled preview showed the second contact. Evidence is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-group-copy/`.
+`smarthome-iec-group-copy/`.
 
 The leading x1 contact on the captured L3 branch is also editable with native
 Delete semantics. XG5000 removes its record and leaves the first cell empty.
 The writer matches that change except eight unrelated row display-cache bytes;
 XG5000 opened and resaved the generated file without changing any decoded
 ProgramData payload. The capture is under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-branched-contact-insert/`.
+`smarthome-iec-branched-contact-insert/`.
 The inverse `insert_iec_ld_leading_contact` edit fills that empty x1 cell with
 an addressed BOOL contact. Inserting `NO 시작` into the native deleted capture
 matched all seven native XG5000 insertion payloads byte-for-byte. XG5000
@@ -1128,7 +1131,7 @@ keeps the contact-only lower row at L3, and shifts later coordinates up.
 display-cache bytes; XG5000 opened and resaved the generated file without
 changing any of the seven decoded ProgramData payloads. This operation can
 leave an incomplete contact line, as the native editor does. Evidence is in
-`/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-branched-contact-insert/`.
+`smarthome-iec-branched-contact-insert/`.
 
 Program 6 group 3 has nested contact branches at L4 and L6. Native XG5000
 Ctrl+D on either row passes Check Program with 0 errors, 1 warning, and 42
@@ -1139,7 +1142,7 @@ respective direct native Save As payloads apart from row-header display-cache
 bytes. XG5000 opened, checked, and resaved the generated L4 project without
 changing any of its seven decoded ProgramData payloads. Native deletion of
 the final output row L7 fails Check Program, so the UI exposes only L4 and L6.
-Evidence is in `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-p6-output-row/`.
+Evidence is in `smarthome-iec-p6-output-row/`.
 
 Program 6 group 8 repeats this row shape at L21 and L23. Direct native
 Ctrl+D on each row passed Check Program with 0 errors, 1 warning, and 42
@@ -1156,7 +1159,7 @@ rows up. Both generated decoded payloads match their native Save As across all
 seven programs except row-header display-cache bytes. XG5000 opened, checked,
 and resaved the generated L84 project with all seven decoded ProgramData payloads
 unchanged. The editor exposes L83 and L84 through a guarded action.
-Evidence is in `/home/ne0ekspert/VMs/xg5000-win10/captures/smarthome-iec-p6-output-row/`.
+Evidence is in `smarthome-iec-p6-output-row/`.
 
 Program 2 groups 7 and 8 each have a middle row containing only a branch end
 and branch start, at L21 and L28 respectively. Native XG5000 Delete Line on
@@ -1220,7 +1223,7 @@ Native Save As preserves all seven decoded ProgramData payloads byte for byte.
 The browser-emitted result matches the generated payloads exactly; its source
 row-height caches differ from the native-normalized result at only three bytes.
 Evidence and the reproducible acceptance tool are under
-`/home/ne0ekspert/VMs/xg5000-win10/captures/iec-terminal-feed-20261002/` and
+`iec-terminal-feed-20261002/` and
 `dev-tools/iec_terminal_feed_acceptance.rs`.
 
 This does not enable general group splitting, forked/open branches, or deletion

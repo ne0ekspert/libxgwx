@@ -1,5 +1,8 @@
 # Native XG5000 canvas and row captures
 
+Capture directory names below identify local validation archives; they are not
+paths bundled with this repository.
+
 Captured on 2026-10-06 from the installed offline XG5000 VM. All projects are
 synthetic blank XGK-CPUSN or XGI-CPUE projects with only direct memory contacts
 and coils; they contain no smart-home application data.
@@ -53,6 +56,6 @@ L65535 project passed Check Program again with zero errors.
 ## Evidence location
 
 Generated inputs, native outputs, decompressed payloads and screenshots:
-`~/VMs/xg5000-win10/captures/canvas-rows-20261006/`.
+`canvas-rows-20261006/`.
 VM control used QMP only. Saved files were extracted read-only after clean guest
 shutdown. No PLC communication was performed.

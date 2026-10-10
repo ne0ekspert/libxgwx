@@ -1,5 +1,8 @@
 # IEC function output wires
 
+Capture directory names below identify local validation archives; they are not
+paths bundled with this repository.
+
 These projects contain synthetic direct addresses and a public blank XGI-CPUE
 project. They contain no user project data.
 
@@ -15,7 +18,7 @@ These one-cell captures have dangling output wires; opening and Save As do
 not establish that an incomplete circuit passes Check Program.
 
 Native screenshots and original captures:
-`~/VMs/xg5000-win10/captures/function-output-wires-20261007/`.
+`function-output-wires-20261007/`.
 
 - `full-native.xgwx`: generated continuous short-wire feeds from all five
   output pins to output coils, opened and checked in XG5000 (logic, syntax,
@@ -32,4 +35,4 @@ Native screenshots and original captures:
   cell and reassignment of `%MD10`, then Save As. The writer matches the full
   ProgramData of both captures exactly, including the row header cursor cache.
 
-Evidence: `~/VMs/xg5000-win10/captures/function-output-clear-20261007/`.
+Evidence: `function-output-clear-20261007/`.
