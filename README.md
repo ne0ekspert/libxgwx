@@ -14,7 +14,8 @@ Unknown binary sections are preserved so callers can inspect them later.
 
 Add the package with `cargo add libxgwx`; import it as `xgwx`. Optional features
 are `write` for supported edits and project creation, `il` for LD-to-IL
-conversion, `wasm` for browser bindings, and `gui` for the repository's GUI example.
+conversion, `wasm` for browser bindings, `ffi` for the native C API, and `gui`
+for the repository's GUI example.
 
 ```rust
 use xgwx::XgwxDocument;
@@ -49,11 +50,13 @@ Read the [generated API documentation](https://ne0ekspert.github.io/libxgwx/api/
 for the parser and optional `write`, `il`, and `wasm` APIs. See the
 [user examples](examples/README.md) for runnable usage demonstrations.
 Hardware catalog details are in the [XGK module guide](docs/xgk-module-catalog.md).
+For C and other native-language bindings, see the [C API guide](docs/c-api.md)
+and the public header in `include/xgwx.h`.
 
 Generate and open the reference locally:
 
 ```sh
-cargo doc --open --lib --no-deps --features write,il,wasm
+cargo doc --open --lib --no-deps --features write,il,wasm,ffi
 ```
 
 ## LD to IL Conversion
@@ -247,8 +250,8 @@ suite. They are included with the original author's permission for parser
 development and testing; see `fixtures/README.md` for attribution and
 permission details.
 
-The crates.io package contains the library source, runtime defaults, README and
-license. It excludes all fixtures, repository integration tests, examples,
+The crates.io package contains the library source, runtime defaults, C header,
+README and license. It excludes all fixtures, repository integration tests, examples,
 development tools, scripts, and browser assets. Run the full test suite and
 acceptance tools from a repository checkout, where the fixtures are available.
 

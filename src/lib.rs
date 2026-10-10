@@ -7,6 +7,7 @@
 //! Enable the optional `il` feature for typed LD-to-IL conversion.
 //! Enable the optional `write` feature for supported module and program edits
 //! and loss-preserving container serialization.
+//! Enable `ffi` for the native C ABI and its `ffi` module documentation.
 //!
 //! # Example
 //!
@@ -55,6 +56,8 @@ pub use text_program::TextProgram;
 #[cfg(feature = "write")]
 pub use text_program::TextProgramPatch;
 mod error;
+#[cfg(all(feature = "ffi", not(target_arch = "wasm32")))]
+pub mod ffi;
 #[cfg(feature = "write")]
 mod iec_chain_comparison_write;
 #[cfg(feature = "write")]

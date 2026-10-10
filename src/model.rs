@@ -3,6 +3,7 @@ use std::fmt;
 
 /// High-level metadata from the root `<Project>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct ProjectInfo {
     pub name: Option<String>,
     pub attribute: Option<u32>,
@@ -33,6 +34,7 @@ impl ProjectInfo {
 
 /// High-level summary of a `<Configuration>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct ConfigurationSummary {
     pub name: Option<String>,
     pub version: Option<u32>,
@@ -63,6 +65,7 @@ impl ConfigurationSummary {
 
 /// High-level summary of a `<Network>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct NetworkSummary {
     pub name: Option<String>,
     pub type_name: Option<String>,
@@ -88,6 +91,7 @@ impl NetworkSummary {
 
 /// High-level summary of a `<NetworkModule>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct NetworkModuleSummary {
     pub config_name: Option<String>,
     pub config_type: Option<u32>,
@@ -124,6 +128,7 @@ impl NetworkModuleSummary {
 
 /// High-level summary of a hardware `<Base>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct BaseSummary {
     pub base: Option<u32>,
     pub slot_count: Option<u32>,
@@ -142,6 +147,7 @@ impl BaseSummary {
 
 /// High-level summary of a hardware `<Module>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct ModuleSummary {
     pub base: Option<u32>,
     pub slot: Option<u32>,
@@ -184,6 +190,7 @@ impl ModuleSummary {
 
 /// Digital input filter configured for an XGI-D24A/B module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub enum ModuleInputFilter {
     /// Use the module's default filter (`0`).
     Default,
@@ -269,6 +276,7 @@ impl fmt::Display for ModuleInputFilter {
 
 /// High-level summary of a `<Task>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct TaskSummary {
     pub name: Option<String>,
     pub version: Option<u32>,
@@ -307,6 +315,7 @@ impl TaskSummary {
 
 /// High-level summary of a `<Program>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct ProgramSummary {
     pub name: Option<String>,
     pub task: Option<String>,
@@ -343,6 +352,7 @@ impl ProgramSummary {
 
 /// High-level summary of one decoded variable symbol record.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct VariableSummary {
     pub format_version: Option<String>,
     pub name: Option<String>,
@@ -2026,6 +2036,7 @@ impl XmlElement {
 
 /// XML attribute stored on an [`XmlElement`].
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct XmlAttribute {
     pub name: String,
     pub value: String,

@@ -8,14 +8,14 @@ repository = "https://github.com/ne0ekspert/libxgwx"
 readme = "README.md"
 keywords = ["plc", "xg5000", "xgwx", "parser", "automation"]
 categories = ["parser-implementations"]
-include = ["/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE-APACHE", "/src/**"]
+include = ["/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE-APACHE", "/include/**", "/src/**"]
 
 [package.metadata.docs.rs]
-features = ["write", "il", "wasm"]
+features = ["write", "il", "wasm", "ffi"]
 
 [lib]
 name = "xgwx"
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
 base64 = "0.22"
@@ -35,6 +35,7 @@ ratatui = "0.29"
 
 [features]
 default = []
+ffi = ["dep:serde", "dep:serde_json"]
 gui = ["dep:eframe"]
 il = []
 wasm = ["dep:js-sys", "dep:serde", "dep:serde_json", "dep:wasm-bindgen"]

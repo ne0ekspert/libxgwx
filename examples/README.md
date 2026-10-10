@@ -11,8 +11,15 @@ fixtures and examples are excluded from the crates.io package.
 | `tui` | Browse a workspace in an interactive terminal | `cargo run --example tui -- project.xgwx` |
 | `gui` | View decoded ladder programs on a graphical desktop | `cargo run --features gui --example gui -- project.xgwx` |
 
-Only `write-module` writes a file. Its output path may be overwritten; choose a
-different path from the input when preserving the original.
+Among the Rust examples, only `write-module` writes a file. Its output path may
+be overwritten; choose a different path from the input when preserving the original.
+
+The [C inspector](c/inspect.c) demonstrates native JSON inspection and optional
+guarded renaming into a new file. Build commands and ownership rules are in
+the [C API guide](../docs/c-api.md).
+
+The [Python ctypes example](python/lists.py) loads module/network/program/global
+lists and optionally applies an atomic JSON edit batch through the same C ABI.
 
 Acceptance generators, diagnostics, probes and benchmarks live in
 [`dev-tools`](../dev-tools/README.md).

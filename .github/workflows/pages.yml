@@ -44,8 +44,23 @@ jobs:
       - name: Build optional APIs from the extracted crate
         run: |
           for manifest in target/package/libxgwx-*/Cargo.toml; do
-            cargo check --manifest-path "$manifest" --lib --features write,il,wasm
+            test -f "$(dirname "$manifest")/include/xgwx.h"
+            cargo check --manifest-path "$manifest" --lib --features write,il,wasm,ffi
           done
+
+  c-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test Rust panic containment and thread-local errors
+        run: cargo test --lib --features ffi,write,il panics_are_contained_and_errors_are_thread_local
+      - name: Test list editing and atomic transactions
+        run: cargo test --test ffi_lists --features ffi,write,il
+      - name: Build and run C ABI consumers
+        run: sh scripts/check-c-api.sh
+      - name: Run Python ctypes list example
+        run: python3 examples/python/lists.py target/debug/libxgwx.so fixtures/elements.xgwx > /tmp/xgwx-lists.json
 
   api-docs:
     runs-on: ubuntu-latest
@@ -56,7 +71,7 @@ jobs:
         env:
           RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
         run: |
-          cargo doc --lib --no-deps --no-default-features --features write,il,wasm
+          cargo doc --lib --no-deps --no-default-features --features write,il,wasm,ffi
           cat > target/doc/index.html <<'HTML'
           <!doctype html>
           <html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=xgwx/index.html"><title>libxgwx API docs</title></head><body><a href="xgwx/index.html">Open Rust API docs</a></body></html>
