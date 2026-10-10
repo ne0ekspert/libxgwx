@@ -12166,28 +12166,7 @@ impl XgwxDocument {
         }
 
         let preserved_trailer = self.supported_trailer_after_main_padding()?;
-        validate_preserved_security(preserved_trailer)?;
-
-        let main_gzip = gzip_xml(self.xml.as_bytes())?;
-        let aligned_len = align_up(main_gzip.len(), MAIN_GZIP_ALIGNMENT)
-            .ok_or(XgwxError::AuthenticatedRewriteUnsupported)?;
-        let aligned_len_u32 =
-            u32::try_from(aligned_len).map_err(|_| XgwxError::AuthenticatedRewriteUnsupported)?;
-        let padding_len = aligned_len - main_gzip.len();
-
-        let mut header = self.header.raw.clone();
-        header[COMPRESSED_SIZE_OFFSET..SUPPORTED_HEADER_LEN]
-            .copy_from_slice(&aligned_len_u32.to_le_bytes());
-        let checksum = workspace_checksum(&header, aligned_len_u32, &main_gzip);
-        header[HEADER_CHECKSUM_OFFSET..HEADER_CHECKSUM_INPUT_START]
-            .copy_from_slice(&checksum.to_le_bytes());
-
-        let mut bytes = Vec::with_capacity(header.len() + aligned_len + preserved_trailer.len());
-        bytes.extend_from_slice(&header);
-        bytes.extend_from_slice(&main_gzip);
-        bytes.resize(bytes.len() + padding_len, 0);
-        bytes.extend_from_slice(preserved_trailer);
-        Ok(bytes)
+        serialize_new_workspace(&self.header.raw, self.xml.as_bytes(), preserved_trailer)
     }
 
     /// Serialize, reparse, and verify the full XML plus untouched container data.
@@ -12730,6 +12709,38 @@ fn write_module_option(
     word = (word & !mask) | ((value & value_mask) << shift);
     range.copy_from_slice(&word.to_le_bytes()[..width]);
     Ok(())
+}
+
+/// Assemble a workspace from library-owned XML and native security defaults.
+pub(crate) fn serialize_new_workspace(
+    header: &[u8],
+    xml: &[u8],
+    preserved_trailer: &[u8],
+) -> Result<Vec<u8>, XgwxError> {
+    if header.len() != SUPPORTED_HEADER_LEN {
+        return Err(XgwxError::AuthenticatedRewriteUnsupported);
+    }
+    validate_preserved_security(preserved_trailer)?;
+    let main_gzip = gzip_xml(xml)?;
+    let aligned_len = align_up(main_gzip.len(), MAIN_GZIP_ALIGNMENT)
+        .ok_or(XgwxError::AuthenticatedRewriteUnsupported)?;
+    let aligned_len_u32 =
+        u32::try_from(aligned_len).map_err(|_| XgwxError::AuthenticatedRewriteUnsupported)?;
+    let padding_len = aligned_len - main_gzip.len();
+
+    let mut header = header.to_vec();
+    header[COMPRESSED_SIZE_OFFSET..SUPPORTED_HEADER_LEN]
+        .copy_from_slice(&aligned_len_u32.to_le_bytes());
+    let checksum = workspace_checksum(&header, aligned_len_u32, &main_gzip);
+    header[HEADER_CHECKSUM_OFFSET..HEADER_CHECKSUM_INPUT_START]
+        .copy_from_slice(&checksum.to_le_bytes());
+
+    let mut bytes = Vec::with_capacity(header.len() + aligned_len + preserved_trailer.len());
+    bytes.extend_from_slice(&header);
+    bytes.extend_from_slice(&main_gzip);
+    bytes.resize(bytes.len() + padding_len, 0);
+    bytes.extend_from_slice(preserved_trailer);
+    Ok(bytes)
 }
 
 fn gzip_xml(xml: &[u8]) -> Result<Vec<u8>, XgwxError> {

@@ -105,6 +105,10 @@ mod model;
 mod writer;
 #[cfg(feature = "write")]
 mod program_create;
+#[cfg(feature = "write")]
+mod project_create;
+#[cfg(feature = "write")]
+pub use project_create::create_project;
 mod program_support;
 #[cfg(all(feature="write",feature="il"))]
 mod vendor_il;

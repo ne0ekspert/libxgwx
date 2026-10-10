@@ -797,6 +797,22 @@ count of alternating nodes and the captured split/join entry/exit types. The
 extension can extend one selected path, remove one pair from it, or extend all
 paths together.
 
+### Creating blank workspaces
+
+With the `write` feature, `create_project(cpu_model, language)` generates a new
+`XgwxDocument` without reading a template workspace:
+
+```rust,ignore
+let doc = xgwx::create_project("XGI-CPUE", "ST")?;
+let bytes = doc.to_verified_bytes()?;
+```
+
+The WASM equivalent is `create_xgwx_project(cpuModel, language)`. LD/SFC/ST/IL
+choices use guarded CPU selection and the existing program writer. Native
+parameter and security defaults remain library-owned captured records;
+container compression, alignment, size and checksum are generated. See
+[src/project_defaults](src/project_defaults/README.md) for provenance and limits.
+
 ### Creating scan programs
 
 `create_program(&NewProgram)` appends a blank LD or SFC program using captured

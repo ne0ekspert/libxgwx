@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project Attribute="3145730" Version="513" Comment="" WksNodeCount="18" GUID="02705c49-f4ed-4e77-9747-f8233bf48f45" FileVer="4.82.1.0" FileLastWriteTime="2026-07-20 04:57:12">GST<NetworkConfiguration>
+		<NetworkList>
+			<Network Type="NETWORK ITEM:UNKNOWN" Name="기본 네트워크" NetworkType=""></Network>
+		</NetworkList>
+	</NetworkConfiguration>
+	<SystemVariable HMIGUID=""></SystemVariable>
+	<Configurations>
+		<Configuration Version="259" Attribute="272138081" Comment="" Kind="1" Type="114" FindGlobal="1" FindSymbol="1" WriteSignature="773e53b3-4446-4204-b905-4558a1d0de61" Encrytption="" Encrytption_UDF="" UploadProhibit="75" GUID="6f27cf98-f5fd-4594-80c9-66b3384b7c90" SD_UploadProhibit="74" SD_Password="" SD_MacLimit="">LSPLC<Options Details="{&#xA;   &quot;m_nExtBaseFormat&quot; : 0,&#xA;   &quot;m_nOptMultiUserRunEdit&quot; : 0,&#xA;   &quot;m_nOptNotUseExternalVar&quot; : 0,&#xA;   &quot;m_nOptNotUsedMCS&quot; : 0,&#xA;   &quot;m_nOptOnlineEditAllocSize&quot; : 400,&#xA;   &quot;m_nOptOnlineEditTypeK3&quot; : 0,&#xA;   &quot;m_nOptPartitionMode&quot; : 0,&#xA;   &quot;m_nOptPulsePercent&quot; : 10,&#xA;   &quot;m_nOptReservedAllocSize&quot; : 400,&#xA;   &quot;m_nOptTextEncoding&quot; : 0,&#xA;   &quot;m_nOptUseFBOnlineEdit&quot; : 0,&#xA;   &quot;m_nOptVariableStorage&quot; : 0&#xA;}&#xA;"></Options>
+			<Parameters>
+				<Parameter Type="BASIC PARAMETER"><XGIBasicParam bp_ver="100" head="1145128264" size="400" pmt_reserved1_0="0" pmt_reserved1_1="0" pmt_reserved1_2="0" pmt_reserved1_3="0" pmt_reserved1_4="0" OsVersion="1" CPUType="43009" STATIC_PERIOD_MODE="0" STATIC_PERIOD_TIME="10" RESTART_METHOD="43521" REMOTE_ACCESS_PERMIT="43522" RESET_DISABLE="0" O_RESET_DISABLE="0" DCLEAR_DISABLE="0" O_DCLEAR_DISABLE="0" BASIC_MOD_RESERVED_0="0" BASIC_MOD_RESERVED_1="0" BASIC_MOD_RESERVED_2="0" BASIC_MOD_RESERVED_3="0" BASIC_MOD_RESERVED_4="0" BASIC_MOD_RESERVED_5="0" BASIC_MOD_RESERVED_6="0" BASIC_MOD_RESERVED_7="0" BASIC_MOD_RESERVED_8="0" BASIC_MOD_RESERVED_9="0" SCAN_WD_TIME_0="500" SCAN_WD_TIME_1="500" SCAN_WD_TIME_2="500" SCAN_WD_TIME_3="500" STANDARD_INPUT_FILTER_TIME="3" BASIC_TIME_RESERVED_0="0" BASIC_TIME_RESERVED_1="0" BASIC_TIME_RESERVED_2="0" BASIC_TIME_RESERVED_3="0" BASIC_TIME_RESERVED_4="0" BASIC_TIME_RESERVED_5="0" BASIC_TIME_RESERVED_6="0" BASIC_TIME_RESERVED_7="0" BASIC_TIME_RESERVED_8="0" BASIC_TIME_RESERVED_9="0" BASIC_TIME_RESERVED_10="0" DEBUG_OUTPUT_PARAMETER="0" ERROR_MODE_OUTPUT_PARAMETER="0" RUN2STOP_OUTPUT_PARAMETER="0" STOP2RUN_OUTPUT_PARAMETER="0" ERROR_MODE_LATCH_PARAMETER="0" OUTPUT_PARAMETER_RESERVED_0="3299" OUTPUT_PARAMETER_RESERVED_1="58" OUTPUT_PARAMETER_RESERVED_2="61" OUTPUT_PARAMETER_RESERVED_3="40" OUTPUT_PARAMETER_RESERVED_4="42" SOE_RETAIN_HISTORY="43544" SOE_PARAMETER_RESERVED_0="0" SOE_PARAMETER_RESERVED_1="0" SOE_PARAMETER_RESERVED_2="0" SOE_PARAMETER_RESERVED_3="0" SOE_PARAMETER_RESERVED_4="0" RETAIN_SET_MODE="0" M_AREA_INIT="0" M_AREA_SIZE_0="32" M_AREA_SIZE_1="32" M_AREA_SIZE_2="32" M_AREA_SIZE_3="32" M_AREA_LATCH1_START="0" M_AREA_LATCH1_END="8191" RETAIN_SET_G1_MODE="0" RESERVE_G1="0" M_AREA_LATCH_G1_START="0" M_AREA_LATCH_G1_END="8191" RETAIN_SET_G2_MODE="0" RESERVE_G2="0" M_AREA_LATCH_G2_START="0" M_AREA_LATCH_G2_END="0" RETAIN_SET_G3_MODE="0" RESERVE_G3="0" M_AREA_LATCH_G3_START="0" M_AREA_LATCH_G3_END="0" RETAIN_SET_G4_MODE="0" RESERVE_G4="0" M_AREA_LATCH_G4_START="0" M_AREA_LATCH_G4_END="0" BASIC_RETAIN_RESERVED_0="0" BASIC_RETAIN_RESERVED_1="0" BASIC_RETAIN_RESERVED_2="0" BASIC_RETAIN_RESERVED_3="0" BASIC_RETAIN_RESERVED_4="0" BASIC_RETAIN_RESERVED_5="0" BASIC_RETAIN_RESERVED_6="0" BASIC_RETAIN_RESERVED_7="0" BASIC_RETAIN_RESERVED_8="0" BASIC_RETAIN_RESERVED_9="0" BASIC_RETAIN_RESERVED_10="0" BASIC_RETAIN_RESERVED_11="0" BASIC_RETAIN_RESERVED_12="0" BASIC_RETAIN_RESERVED_13="0" BASIC_RETAIN_RESERVED_14="0" BASIC_RETAIN_RESERVED_15="0" BASIC_RETAIN_RESERVED_16="0" BASIC_RETAIN_RESERVED_17="0" BASIC_RETAIN_RESERVED_18="0" BASIC_RETAIN_RESERVED_19="0" BASIC_RETAIN_RESERVED_20="0" BASIC_RETAIN_RESERVED_21="0" BASIC_RETAIN_RESERVED_22="0" BASIC_RETAIN_RESERVED_23="0" BASIC_RETAIN_RESERVED_24="0" BASIC_RETAIN_RESERVED_25="0" TIMER_RANGE_RESERVED_0="0" TIMER_RANGE_RESERVED_1="0" TIMER_RANGE_RESERVED_2="0" TIMER_RANGE_RESERVED_3="0" TIMER_RANGE_RESERVED_4="0" TIMER_RANGE_RESERVED_5="0" TIMER_RANGE_RESERVED_6="0" TIMER_RANGE_RESERVED_7="0" TIMER_RANGE_RESERVED_8="0" TIMER_RANGE_RESERVED_9="0" TIMER_RANGE_RESERVED_10="0" TIMER_RANGE_RESERVED_11="0" TIMER_RANGE_RESERVED_12="0" TIMER_RANGE_RESERVED_13="0" TIMER_RANGE_RESERVED_14="0" TIMER_RANGE_RESERVED_15="0" CHECK_FUSE_ERROR="43572" FUSE_ERROR_MODE="0" CHECK_IO_ERROR="43574" IO_ERROR_MODE="43575" CHECK_EXT_BASE_ERROR="0" EXT_BASE_ERROR_MODE="0" ERROR_REACTION_RESERVED_0="0" ERROR_REACTION_RESERVED_1="0" ERROR_REACTION_RESERVED_2="0" ERROR_REACTION_RESERVED_3="0" ERROR_REACTION_RESERVED_4="0" ERROR_REACTION_RESERVED_5="0" ERROR_REACTION_RESERVED_6="0" ERROR_REACTION_RESERVED_7="0" ERROR_REACTION_RESERVED_8="0" ERROR_REACTION_RESERVED_9="0" ERROR_REACTION_RESERVED_10="0" ERROR_REACTION_RESERVED_11="0" ERROR_REACTION_RESERVED_12="0" ERROR_REACTION_RESERVED_13="0" ERROR_REACTION_RESERVED_14="0" ERROR_REACTION_RESERVED_15="0" ERROR_REACTION_RESERVED_16="0" ERROR_REACTION_RESERVED_17="0" ERROR_REACTION_RESERVED_18="0" ERROR_REACTION_RESERVED_19="0" ERROR_REACTION_RESERVED_20="0" ERROR_REACTION_RESERVED_21="0" CHECK_SP_ERROR="43576" SP_ERROR_MODE="43577" CHECK_CP_ERROR="43578" CP_ERROR_MODE="43579" MODBUS_STATION="63" MODBUS_BAUDRATE="4434" MODBUS_DATABIT="43592" MODBUS_PARITY="43602" MODBUS_STOPBIT="43617" MODBUS_TRX_MODE="43632" DI_START_DEVICE_TYPE="73" DO_START_DEVICE_TYPE="81" AI_START_DEVICE_TYPE="77" AO_START_DEVICE_TYPE="77" DI_DEVICE_OFFSET="0" DO_DEVICE_OFFSET="0" AI_DEVICE_OFFSET="2000" AO_DEVICE_OFFSET="4000" pmt_reserved2_0="0" pmt_reserved2_1="0" pmt_reserved2_2="0" pmt_reserved2_3="0" pmt_reserved2_4="0" pmt_reserved2_5="0" check_sum="0" tail="1414483782"></XGIBasicParam>
+				</Parameter>
+				<Parameter Type="IO PARAMETER"><BaseInfo>
+						<Base Base="0" SlotCount="2"></Base>
+					</BaseInfo>
+				</Parameter>
+			</Parameters>
+			<GlobalVariables>
+				<GlobalVariable Version="Ver 2.0" EIPGUID="383ee76f-13cf-4c14-be23-862f03820e53" EIPChangedID="0" HMIGUID="e7d8add1-0073-47e3-a6a3-fbe9ef643a04" MultiUserRunEdit="0" MotionGUID="e5e95c54-f9b6-4037-843c-bd3e7d439a70" SymDocGUID="1eca9ca9_a74d_40af_996c_a3b46a819f92"><Symbols Count="0"></Symbols>
+					<TempVar Count="0"></TempVar>
+					<HMIFlags Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</HMIFlags>
+					<DirectVarComment Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWf9Im4IAAADAAEAAIAAhGEbC7kinChIf6RNwQA==</DirectVarComment>
+					<DirectVarCommentV2 Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWZkrtpMAACT/lPgCSAhAAQgASAQoACMilAAgAAgAAAggAFRWgANAAaDFNT1B
+6jQAHqWOzISSWfByCQyPyyQe6gAEKGoMUJREZzpSj1xkeuboul4hI4AHxdyRThQkJkrt
+pMA=</DirectVarCommentV2>
+				</GlobalVariable>
+			</GlobalVariables>
+			<Tasks>
+				<Task Version="257" Type="0" Attribute="2" Kind="0" Priority="0" TaskIndex="0" Device="" DeviceType="0" WordValue="0" WordCondition="0" BitCondition="0">스캔 프로그램</Task>
+			</Tasks>
+			<POU>
+				<Programs>
+					<Program Task="스캔 프로그램" Version="256" LocalVariable="1" Kind="4" InstanceName="" Comment="" ObjectId="586f93e1-2eef-40b7-aa77-464fc2c76fcc" FindProgram="1" FindVar="1" Encrytption="">NewProgram<Body>
+							<ST_Program Version="Ver 1.1" StepCount="0"><CodeList CodeCount="0"></CodeList>
+								<Breakpoints></Breakpoints>
+								<Bookmarks></Bookmarks>
+							</ST_Program>
+						</Body>
+						<LocalVar Version="Ver 2.0" NotUseExternalVar="0" ProgramKind="1" MultiUserRunEdit="0" SymDocGUID="591111ae_c921_456a_9a3d_e2dc7c5929d7"><Symbols Count="0"></Symbols>
+							<TempVar Count="0"></TempVar>
+						</LocalVar>
+						<RungTable BinaryEncoded="1">
+							<RungTableData dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes"></RungTableData>
+						</RungTable>
+					</Program>
+				</Programs>
+				<UserFunctions></UserFunctions>
+				<UserDataTypes></UserDataTypes>
+				<UserLibrary></UserLibrary>
+			</POU>
+			<OnlineElements>
+				<ProgramTable Type="2" Version="0" BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</ProgramTable>
+				<NCProgramTable></NCProgramTable>
+				<TaskTable BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</TaskTable>
+				<UploadTable BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</UploadTable>
+				<LabelCodeTable BinaryEncoded="1">
+					<ArrayData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></ArrayData>
+				</LabelCodeTable>
+				<UsedFunctionCodeTable BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</UsedFunctionCodeTable>
+				<ForNextCodeTable BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</ForNextCodeTable>
+				<SubroutineAllocationTable bPartitioned="0" bOwner="1" BinaryEncoded="1">
+					<StringTableData Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</StringTableData>
+				</SubroutineAllocationTable>
+				<LabelAllocationTable bPartitioned="0" bOwner="0" BinaryEncoded="1">
+					<StringTableData Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</StringTableData>
+				</LabelAllocationTable>
+				<PulseAllocationTable bPartitioned="0" BinaryEncoded="1">
+					<PulseTableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes">AAAAAA==</PulseTableData>
+				</PulseAllocationTable>
+				<ForAllocationTable bPartitioned="0" BinaryEncoded="1">
+					<PulseTableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes">AAAAAA==</PulseTableData>
+				</ForAllocationTable>
+				<XGCommSettings Connnections="01000001010188130000010100C20100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000D20700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000">
+					<SafetySignature dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWesUlJwAAALIAMQAQAAAASAAISGgzTTWAg8XckU4UJDrFJScAAAA</SafetySignature>
+					<RWItem_StateMemento dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWUQfwC0AAA/eAMAkQAFgAAMkEQAAAaAAMUwAARlDR6jCORCSUTE8ftkCizYu
+/i7kinChIIg/gFoAAAA=</RWItem_StateMemento>
+				</XGCommSettings>
+				<TrendMonitoring>
+					<TraceConfiguration MaxSample="1000" MaxDisplaySample="1000" SamplingFrequency="1000">
+						<BitDeviceList></BitDeviceList>
+						<TrendDeviceList></TrendDeviceList>
+						<XYDeviceList></XYDeviceList>
+					</TraceConfiguration>
+					<GraphConfiguration ShowGrid="1" AxisOption="65807" BitLegendPos="1" TrendLegendPos="1" XYLegendPos="1" MinValue="0.0000000000000000" MaxValue="100.0000000000000000">
+						<BitGraphGroup></BitGraphGroup>
+						<TrendGraphGroup></TrendGraphGroup>
+					</GraphConfiguration>
+					<WindowConfiguration ViewGraph="7" ViewBitValue="0" ViewTrendValue="0" VieXYValue="0"></WindowConfiguration>
+				</TrendMonitoring>
+				<DataRepository></DataRepository>
+				<UsedLibraryForPlatV2></UsedLibraryForPlatV2>
+				<RetainValue Compressed="0" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">//7/BlYAZQByADEALgAwAAAAAAAAAAAA</RetainValue>
+			</OnlineElements>
+			<XGPD>
+				<XGPD_CONFIG_INFO_GROUP></XGPD_CONFIG_INFO_GROUP>
+				<XGPD_HS_LINK_GROUP></XGPD_HS_LINK_GROUP>
+				<XGPD_P2P_GROUP></XGPD_P2P_GROUP>
+			</XGPD>
+			<Properties Value=""></Properties>
+			<Folders></Folders>
+			<DataTrace Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</DataTrace>
+		</Configuration>
+	</Configurations>
+	<SpecialModules></SpecialModules>
+</Project>

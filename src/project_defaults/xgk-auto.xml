@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project Attribute="3145733" Version="513" Comment="" WksNodeCount="17" GUID="f894783f-3cd6-46c9-bc7d-6694656225ca" FileVer="4.82.1.0" FileLastWriteTime="2026-07-20 04:57:12">GKAST<NetworkConfiguration>
+		<NetworkList>
+			<Network Type="NETWORK ITEM:UNKNOWN" Name="기본 네트워크" NetworkType=""></Network>
+		</NetworkList>
+	</NetworkConfiguration>
+	<SystemVariable HMIGUID=""></SystemVariable>
+	<Configurations>
+		<Configuration Version="259" Attribute="3673185" Comment="" Kind="1" Type="3" FindGlobal="1" FindSymbol="1" WriteSignature="773e53b3-4446-4204-b905-4558a1d0de61" Encrytption="" Encrytption_UDF="" UploadProhibit="75" GUID="5feb2b8a-8586-4a5a-867b-e5435e0ca440" SD_UploadProhibit="74" SD_Password="" SD_MacLimit="">LSPLC<Options Details="{&#xA;   &quot;m_nExtBaseFormat&quot; : 0,&#xA;   &quot;m_nOptMultiUserRunEdit&quot; : 0,&#xA;   &quot;m_nOptNotUseExternalVar&quot; : 0,&#xA;   &quot;m_nOptNotUsedMCS&quot; : 0,&#xA;   &quot;m_nOptOnlineEditAllocSize&quot; : 400,&#xA;   &quot;m_nOptOnlineEditTypeK3&quot; : 0,&#xA;   &quot;m_nOptPartitionMode&quot; : 0,&#xA;   &quot;m_nOptPulsePercent&quot; : 10,&#xA;   &quot;m_nOptReservedAllocSize&quot; : 400,&#xA;   &quot;m_nOptTextEncoding&quot; : 0,&#xA;   &quot;m_nOptUseFBOnlineEdit&quot; : 0,&#xA;   &quot;m_nOptVariableStorage&quot; : 0&#xA;}&#xA;"></Options>
+			<Parameters>
+				<Parameter Type="AUTO ALLOCATION PARAMETER" Version="Ver 1.0"><AllocData Success="1" StartDevice="D28769" EndDevice="D32767"></AllocData>
+					<AllocData Success="1" StartDevice="T0900" EndDevice="T0999"></AllocData>
+					<AllocData Success="1" StartDevice="T1400" EndDevice="T1499"></AllocData>
+					<AllocData Success="1" StartDevice="T1900" EndDevice="T1999"></AllocData>
+					<AllocData Success="1" StartDevice="T2027" EndDevice="T2047"></AllocData>
+					<AllocData Success="1" StartDevice="C1949" EndDevice="C2047"></AllocData>
+				</Parameter>
+				<Parameter Type="BASIC PARAMETER"><XGTBasicParam bp_ver="100" head="1145128264" size="400" pmt_reserved1_0="0" pmt_reserved1_1="0" pmt_reserved1_2="0" pmt_reserved1_3="0" pmt_reserved1_4="0" pmt_reserved1_5="0" STATIC_PERIOD_MODE="0" STATIC_PERIOD_TIME="10" IO_POINT_METHOD="0" REMOTE_ACCESS_PERMIT="43522" RESET_DISABLE="0" O_RESET_DISABLE="0" DCLEAR_DISABLE="0" O_DCLEAR_DISABLE="0" BASIC_MOD_RESERVED_0="0" BASIC_MOD_RESERVED_1="0" BASIC_MOD_RESERVED_2="0" BASIC_MOD_RESERVED_3="0" BASIC_MOD_RESERVED_4="0" BASIC_MOD_RESERVED_5="0" BASIC_MOD_RESERVED_6="0" BASIC_MOD_RESERVED_7="0" BASIC_MOD_RESERVED_8="0" BASIC_MOD_RESERVED_9="0" SCAN_WD_TIME="500" STANDARD_INPUT_FILTER_TIME="3" BASIC_TIME_RESERVED_0="0" BASIC_TIME_RESERVED_1="0" BASIC_TIME_RESERVED_2="0" BASIC_TIME_RESERVED_3="0" BASIC_TIME_RESERVED_4="0" BASIC_TIME_RESERVED_5="0" BASIC_TIME_RESERVED_6="0" BASIC_TIME_RESERVED_7="0" BASIC_TIME_RESERVED_8="0" BASIC_TIME_RESERVED_9="0" BASIC_TIME_RESERVED_10="0" BASIC_TIME_RESERVED_11="0" BASIC_TIME_RESERVED_12="0" BASIC_TIME_RESERVED_13="0" DEBUG_OUTPUT_PARAMETER="0" ERROR_MODE_OUTPUT_PARAMETER="0" RUN2STOP_OUTPUT_PARAMETER="0" STOP2RUN_OUTPUT_PARAMETER="0" ERROR_MODE_LATCH_PARAMETER="0" OUTPUT_PARAMETER_RESERVED_0="0" OUTPUT_PARAMETER_RESERVED_1="0" OUTPUT_PARAMETER_RESERVED_2="0" OUTPUT_PARAMETER_RESERVED_3="0" OUTPUT_PARAMETER_RESERVED_4="0" SOE_RETAIN_HISTORY="43544" SOE_PARAMETER_RESERVED_0="0" SOE_PARAMETER_RESERVED_1="0" SOE_PARAMETER_RESERVED_2="0" SOE_PARAMETER_RESERVED_3="0" SOE_PARAMETER_RESERVED_4="0" LATCH1_SET_MODE="0" LATCH1_DEVICE_SET="0" D_AREA_LATCH1_START="0" D_AREA_LATCH1_START_W="0" D_AREA_LATCH1_END="32767" D_AREA_LATCH1_END_W="32767" M_AREA_LATCH1_START="0" M_AREA_LATCH1_END="2047" S_AREA_LATCH1_START="0" S_AREA_LATCH1_END="127" C_AREA_LATCH1_START="0" C_AREA_LATCH1_END="2047" L_AREA_LATCH1_START="0" L_AREA_LATCH1_END="11263" T_100US_AREA_LATCH1_START="2000" T_100US_AREA_LATCH1_END="2047" T_001MS_AREA_LATCH1_START="1500" T_001MS_AREA_LATCH1_END="1999" T_010MS_AREA_LATCH1_START="1000" T_010MS_AREA_LATCH1_END="1499" T_100MS_AREA_LATCH1_START="0" T_100MS_AREA_LATCH1_END="999" BASIC_LATCH1_RESERVED_0="0" BASIC_LATCH1_RESERVED_1="0" BASIC_LATCH1_RESERVED_2="0" BASIC_LATCH1_RESERVED_3="0" BASIC_LATCH1_RESERVED_4="0" BASIC_LATCH1_RESERVED_5="0" BASIC_LATCH1_RESERVED_6="0" BASIC_LATCH1_RESERVED_7="0" LATCH2_SET_MODE="0" LATCH2_DEVICE_SET="0" D_AREA_LATCH2_START="0" D_AREA_LATCH2_START_W="0" D_AREA_LATCH2_END="0" D_AREA_LATCH2_END_W="0" M_AREA_LATCH2_START="0" M_AREA_LATCH2_END="0" S_AREA_LATCH2_START="0" S_AREA_LATCH2_END="0" C_AREA_LATCH2_START="0" C_AREA_LATCH2_END="0" L_AREA_LATCH2_START="0" L_AREA_LATCH2_END="0" T_100US_AREA_LATCH2_START="0" T_100US_AREA_LATCH2_END="0" T_001MS_AREA_LATCH2_START="0" T_001MS_AREA_LATCH2_END="0" T_010MS_AREA_LATCH2_START="0" T_010MS_AREA_LATCH2_END="0" T_100MS_AREA_LATCH2_START="0" T_100MS_AREA_LATCH2_END="0" BASIC_LATCH2_RESERVED_0="0" BASIC_LATCH2_RESERVED_1="0" BASIC_LATCH2_RESERVED_2="0" BASIC_LATCH2_RESERVED_3="0" BASIC_LATCH2_RESERVED_4="0" BASIC_LATCH2_RESERVED_5="0" BASIC_LATCH2_RESERVED_6="0" BASIC_LATCH2_RESERVED_7="0" T_100US_AREA_RANGE_START="2000" T_100US_AREA_RANGE_END="2047" T_001MS_AREA_RANGE_START="1500" T_001MS_AREA_RANGE_END="1999" T_010MS_AREA_RANGE_START="1000" T_010MS_AREA_RANGE_END="1499" T_100MS_AREA_RANGE_START="0" T_100MS_AREA_RANGE_END="999" TIMER_RANGE_RESERVED_0="0" TIMER_RANGE_RESERVED_1="0" TIMER_RANGE_RESERVED_2="0" TIMER_RANGE_RESERVED_3="0" ZINDEX_DEVICE_SET="0" Z_AREA_DWORD_TYPE_RESERVED1="0" Z_32BIT_AREA_RANGE_START="0" Z_32BIT_AREA_RANGE_END="0" CHECK_ARITHMETIC_ERROR="43568" ARITHMETIC_ERROR_MODE="0" CHECK_FPU_ERROR="43570" FPU_ERROR_MODE="43571" CHECK_FUSE_ERROR="43572" FUSE_ERROR_MODE="43573" CHECK_IO_ERROR="43574" IO_ERROR_MODE="43575" ERROR_REACTION_RESERVED_0="0" ERROR_REACTION_RESERVED_1="0" ERROR_REACTION_RESERVED_2="0" ERROR_REACTION_RESERVED_3="0" ERROR_REACTION_RESERVED_4="0" ERROR_REACTION_RESERVED_5="0" ERROR_REACTION_RESERVED_6="0" ERROR_REACTION_RESERVED_7="0" ERROR_REACTION_RESERVED_8="0" ERROR_REACTION_RESERVED_9="0" ERROR_REACTION_RESERVED_10="0" ERROR_REACTION_RESERVED_11="0" ERROR_REACTION_RESERVED_12="0" ERROR_REACTION_RESERVED_13="0" ERROR_REACTION_RESERVED_14="0" ERROR_REACTION_RESERVED_15="0" ERROR_REACTION_RESERVED_16="0" ERROR_REACTION_RESERVED_17="0" ERROR_REACTION_RESERVED_18="0" ERROR_REACTION_RESERVED_19="0" CHECK_SP_ERROR="43576" SP_ERROR_MODE="43577" CHECK_CP_ERROR="43578" CP_ERROR_MODE="43579" MODBUS_STATION="63" MODBUS_BAUDRATE="4434" MODBUS_DATABIT="43592" MODBUS_PARITY="43602" MODBUS_STOPBIT="43617" MODBUS_TRX_MODE="43632" DI_START_DEVICE_TYPE="80" DO_START_DEVICE_TYPE="80" AI_START_DEVICE_TYPE="68" AO_START_DEVICE_TYPE="68" DI_DEVICE_OFFSET="0" DO_DEVICE_OFFSET="2000" AI_DEVICE_OFFSET="0" AO_DEVICE_OFFSET="2000" pmt_reserved2_0="0" pmt_reserved2_1="0" pmt_reserved2_2="0" pmt_reserved2_3="0" pmt_reserved2_4="0" pmt_reserved2_5="0" check_sum="0" tail="1414483782"></XGTBasicParam>
+				</Parameter>
+				<Parameter Type="IO PARAMETER"><BaseInfo>
+						<Base Base="0" SlotCount="12"></Base>
+						<Base Base="1" SlotCount="12"></Base>
+						<Base Base="2" SlotCount="12"></Base>
+						<Base Base="3" SlotCount="12"></Base>
+						<Base Base="4" SlotCount="12"></Base>
+						<Base Base="5" SlotCount="12"></Base>
+						<Base Base="6" SlotCount="12"></Base>
+						<Base Base="7" SlotCount="12"></Base>
+					</BaseInfo>
+				</Parameter>
+			</Parameters>
+			<GlobalVariables>
+				<GlobalVariable Version="Ver 2.0" EIPGUID="5b751dc6-f322-44b7-9edc-46fef66a7bc7" EIPChangedID="0" HMIGUID="35abb317-369a-4cd3-9c74-cd13cbf69e4a" MultiUserRunEdit="0" MotionGUID="2925a8e6-b5a6-48ce-8c7c-69021046c25f" SymDocGUID="bfba26fa_ff21_4ef6_87c1_a289f11225c2">
+					<Symbols Count="0"></Symbols>
+					<TempVar Count="0"></TempVar>
+					<HMIFlags Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</HMIFlags>
+					<DirectVarComment Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWf9Im4IAAADAAEAAIAAhGEbC7kinChIf6RNwQA==</DirectVarComment>
+					<DirectVarCommentV2 Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</DirectVarCommentV2>
+				</GlobalVariable>
+			</GlobalVariables>
+			<Tasks>
+				<Task Version="257" Type="0" Attribute="2" Kind="0" Priority="0" TaskIndex="0" Device="" DeviceType="0" WordValue="0" WordCondition="0" BitCondition="0">스캔 프로그램</Task>
+			</Tasks>
+			<POU>
+				<Programs>
+					<Program Task="스캔 프로그램" Version="256" LocalVariable="1" Kind="4" InstanceName="" Comment="" ObjectId="d96567ea-1f83-467d-a25d-7438dd1006b3" FindProgram="1" FindVar="1" Encrytption="">NewProgram<Body>
+							<ST_Program Version="Ver 1.1" StepCount="0">
+								<CodeList CodeCount="0"></CodeList>
+								<Breakpoints></Breakpoints>
+								<Bookmarks></Bookmarks>
+							</ST_Program>
+						</Body>
+						<LocalVar Version="Ver 2.0" NotUseExternalVar="0" ProgramKind="1" MultiUserRunEdit="0" SymDocGUID="2865ad55_7c32_41b5_a566_26c1e5bfb706">
+							<Symbols Count="0"></Symbols>
+							<TempVar Count="0"></TempVar>
+						</LocalVar>
+						<RungTable BinaryEncoded="1">
+							<RungTableData dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes"></RungTableData>
+						</RungTable>
+					</Program>
+				</Programs>
+				<UserFunctions></UserFunctions>
+				<UserDataTypes></UserDataTypes>
+				<UserLibrary></UserLibrary>
+			</POU>
+			<OnlineElements>
+				<ProgramTable Type="4" Version="0" BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</ProgramTable>
+				<NCProgramTable></NCProgramTable>
+				<TaskTable BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</TaskTable>
+				<UploadTable BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</UploadTable>
+				<LabelCodeTable BinaryEncoded="1">
+					<ArrayData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></ArrayData>
+				</LabelCodeTable>
+				<UsedFunctionCodeTable BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</UsedFunctionCodeTable>
+				<ForNextCodeTable BinaryEncoded="1">
+					<TableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes"></TableData>
+				</ForNextCodeTable>
+				<SubroutineAllocationTable bPartitioned="0" bOwner="1" BinaryEncoded="1">
+					<StringTableData Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</StringTableData>
+				</SubroutineAllocationTable>
+				<LabelAllocationTable bPartitioned="0" bOwner="1" BinaryEncoded="1">
+					<StringTableData Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</StringTableData>
+				</LabelAllocationTable>
+				<PulseAllocationTable bPartitioned="0" BinaryEncoded="1">
+					<PulseTableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes">AAAAAA==</PulseTableData>
+				</PulseAllocationTable>
+				<ForAllocationTable bPartitioned="0" BinaryEncoded="1">
+					<PulseTableData dt:dt="bin.base64" Compressed="0" xmlns:dt="urn:schemas-microsoft-com:datatypes">AAAAAA==</PulseTableData>
+				</ForAllocationTable>
+				<XGCommSettings Connnections="01000001010188130000010100C20100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000D20700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000">
+					<SafetySignature dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWesUlJwAAALIAMQAQAAAASAAISGgzTTWAg8XckU4UJDrFJScAAAA</SafetySignature>
+					<RWItem_StateMemento dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWUQfwC0AAA/eAMAkQAFgAAMkEQAAAaAAMUwAARlDR6jCORCSUTE8ftkCizYu
+/i7kinChIIg/gFoAAAA=</RWItem_StateMemento>
+				</XGCommSettings>
+				<TrendMonitoring>
+					<TraceConfiguration MaxSample="1000" MaxDisplaySample="1000" SamplingFrequency="1000">
+						<BitDeviceList></BitDeviceList>
+						<TrendDeviceList></TrendDeviceList>
+						<XYDeviceList></XYDeviceList>
+					</TraceConfiguration>
+					<GraphConfiguration ShowGrid="1" AxisOption="65807" BitLegendPos="1" TrendLegendPos="1" XYLegendPos="1" MinValue="0.0000000000000000" MaxValue="100.0000000000000000">
+						<BitGraphGroup></BitGraphGroup>
+						<TrendGraphGroup></TrendGraphGroup>
+					</GraphConfiguration>
+					<WindowConfiguration ViewGraph="7" ViewBitValue="0" ViewTrendValue="0" VieXYValue="0"></WindowConfiguration>
+				</TrendMonitoring>
+				<DataRepository></DataRepository>
+				<UsedLibraryForPlatV2></UsedLibraryForPlatV2>
+				<RetainValue Compressed="0" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">//7/BlYAZQByADEALgAwAAAAAAAAAAAA</RetainValue>
+			</OnlineElements>
+			<XGPD>
+				<XGPD_CONFIG_INFO_GROUP></XGPD_CONFIG_INFO_GROUP>
+				<XGPD_HS_LINK_GROUP></XGPD_HS_LINK_GROUP>
+				<XGPD_P2P_GROUP></XGPD_P2P_GROUP>
+			</XGPD>
+			<Properties Value=""></Properties>
+			<Folders></Folders>
+			<DataTrace Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWTj7IoQAAAJAAEAAIAAhGEawu5IpwoSBx9kUIA==</DataTrace>
+		</Configuration>
+	</Configurations>
+	<SpecialModules></SpecialModules>
+</Project>

@@ -1,0 +1,2 @@
+# Preserve captured native XML line endings used by project generation.
+src/project_defaults/*.xml -text whitespace=cr-at-eol

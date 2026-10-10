@@ -13,6 +13,15 @@ use network::*;
 use parameters::*;
 use project::*;
 
+/// Generate a new blank project from library-owned native defaults.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = create_xgwx_project)]
+pub fn create_xgwx_project_wasm(cpu_model: &str, language: &str) -> Result<Vec<u8>, JsValue> {
+    crate::create_project(cpu_model, language)
+        .and_then(|doc| doc.to_verified_bytes())
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Bounded hardware form edit with stale-field and full-container validation.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_browser_hardware)]

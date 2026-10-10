@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "profile": "xgk",
+      "source": "fixtures/empty-projects/new-xgk.xgwx",
+      "source_sha256": "168296bd4049aff9edc6c75eeffd005ba108d9a5bf2686f0a959bf7401279c06",
+      "xml_sha256": "885d97216f46bcffd19c36c2aba23b197f2e125db8dbbc9296a57a81406164ae",
+      "security_sha256": "20b468f16b3851de5e6e31ca9987152c0c4721a62dde6ae4357bdc8154501563"
+    },
+    {
+      "profile": "xgi",
+      "source": "fixtures/empty-projects/new-xgi.xgwx",
+      "source_sha256": "d738e4625a838d8a1954b50512fddbcb0fa40e89b56ac04fa9d9a593745d63c7",
+      "xml_sha256": "75e175d9b89cc2cfc7e9d38789a6a05fb52ee919969081f63dae3f38a5192563",
+      "security_sha256": "b7ffa0e95aab6a8193144587a67852045a7dacf6da886213a293deff22f49c61"
+    },
+    {
+      "profile": "xgi-sfc",
+      "source": "fixtures/sfc/new-xgi-sfc.xgwx",
+      "source_sha256": "891c988a575473386fb623c7eb65d10600bda6ac1ed28b4d1db0690ca4c023e7",
+      "xml_sha256": "f0c4befb0f6e2ab0b2fadf09c69c51ccb0363ef744fbd58d14d4a0b9cbd90fd4",
+      "security_sha256": "cd5637ac21c4312849921e74964b1d9451c392e9dd43abf17dae6b433bfe0431"
+    },
+    {
+      "profile": "xgk-auto",
+      "source": "fixtures/text-cpus/xgk-auto-native-blank.xgwx",
+      "source_sha256": "90819a0973182f4ece67b0f7b9bc3ee51f0e68365eff53c303bddc4818249aec",
+      "xml_sha256": "95f03906b33203b7b9222aef39b7ab26b997dd88e3c70248d7d249b8adcfab26",
+      "security_sha256": "18c4c04b52e60a0d65c94019513897b1e5de88491a0af0efc38cc96823b46092"
+    },
+    {
+      "profile": "xece",
+      "source": "fixtures/text-cpus/xece-native-blank.xgwx",
+      "source_sha256": "5f99c8f96fa12f34078dc1e6b105909fbcedff738942d10292d272eb60211ba8",
+      "xml_sha256": "10ade6f050041b22ac2c385b4c5fec62be9e5ce0f211c01a6bf10e6b4951bf9c",
+      "security_sha256": "82d965525efd4ee8a62e7e1584424e3c55cce6c93c243d180fd6e0ef3523d645"
+    },
+    {
+      "profile": "xech",
+      "source": "fixtures/text-cpus/xech-native-blank.xgwx",
+      "source_sha256": "354cf669ce41dd54f6ac55ab0e8fa0ad57104b6db0496da29084c3a0fc11345c",
+      "xml_sha256": "c44fc1cac1773d73719d64c677eb0c27e3a68394ab75713f75873441e9730770",
+      "security_sha256": "727c4e02e5ca76a32eaf0b48ae5e59de11f41cf5f9deb702ac6529f52461769d"
+    },
+    {
+      "profile": "xecs",
+      "source": "fixtures/text-cpus/xecs-native-blank.xgwx",
+      "source_sha256": "61b1a0fe4abf6fae34b1e682fa864b993f2c9262edad1c7e2a4eff54b6e803e4",
+      "xml_sha256": "cd567548d696a5c7da7ad0798eaca05564144182a6fa68d8cd25604b0fcae368",
+      "security_sha256": "5e42fbcc2d3c8bc48200ceccc2c15cbbd29d837a4b4cfa8e63b37b5a8479d2be"
+    },
+    {
+      "profile": "xecu",
+      "source": "fixtures/text-cpus/xecu-native-blank.xgwx",
+      "source_sha256": "3a1bc3af05fc6b2f57c77e80cbfcfc31821e15802db140cd8dde59891a6376e8",
+      "xml_sha256": "633620830d3def00d84c814e9bf37ced412b76fd77b70606f8b992ad6e003065",
+      "security_sha256": "b47ac8b18c3834cee216bcbba8a200446d2e5bbe9bd5874a256a62b63402ac95"
+    },
+    {
+      "profile": "xemh2",
+      "source": "fixtures/text-cpus/xemh2-native-blank.xgwx",
+      "source_sha256": "196a1242e19e615dacf4381413b1cb06bbedbeec2ee6b8d46e737fe21066c820",
+      "xml_sha256": "4bd17f67e52fabec4cff059dd3c9d2abd0d3b6c22986930a0ba2ad7a5f9c53b4",
+      "security_sha256": "dd649c86f866bbc3d31526c95f86bd24f21dd9b6024b52000e875f9897a3028f"
+    },
+    {
+      "profile": "xemhp",
+      "source": "fixtures/text-cpus/xemhp-native-blank.xgwx",
+      "source_sha256": "60f050692948e05b72f0bd54d5feb159054a1ed57e34820b3d514633e6ff2ecc",
+      "xml_sha256": "ef57ba3130f1f1850f159f60c8701dd97734f33f06227246ed9ea6b61708c2dc",
+      "security_sha256": "9664c7ea1d1e6951f9084669da5f77220ad29dbe0498870b867af980c740611d"
+    },
+    {
+      "profile": "gipam",
+      "source": "fixtures/text-cpus/gipam-native-blank.xgwx",
+      "source_sha256": "a6a69a917fb3c010bc15d208e47c82a4966b7269267b1fe15510f359788740cd",
+      "xml_sha256": "75442c2dbd6b6150359102d56df3107a8482e6d6737964848d8507676cad3401",
+      "security_sha256": "8ff6a493c0ccfff946c18dcb69bfd92fde44a91e3cd968c234efd65b7cd995ba"
+    },
+    {
+      "profile": "kl",
+      "source": "fixtures/text-cpus/kl-native-blank.xgwx",
+      "source_sha256": "df63d8a66cd0f8c5d0cd7ee721e6688ad77001322e79f1c5be8394d5792615c4",
+      "xml_sha256": "129539aaefe3aa361cab1ca515873cabefd6144c04471d3ee91c78fb1715a49a",
+      "security_sha256": "11cfb9bb1194834e5cd6f11c515fb5a410630348f94b019df43396776dd033c6"
+    },
+    {
+      "profile": "xgr",
+      "source": "fixtures/text-cpus/xgr-native-blank.xgwx",
+      "source_sha256": "ffabeeebe052d2b4214438d4534d9f3eacfa7dca12719d8abc791a5a4fc0d774",
+      "xml_sha256": "903019fec85a4686fc7f8db119c09a1d2dd145195d313efa0b3602d446de4df8",
+      "security_sha256": "22201a7b2cecdc8e8ce67b27ee17eaa1f126b265641c6b715185d0c32eac4f31"
+    }
+  ]
+}
