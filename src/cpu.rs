@@ -220,6 +220,8 @@ const CPU_CATALOG: &[CpuCatalogEntry] = &[
         max_base: 1,
         max_slot: 11,
     },
+    // Captured from native XG5000 4.82.1 XGR ST/IL projects.
+    CpuCatalogEntry { model: "XGR-CPUH", family: "XGR", type_code: 101, max_base: 8, max_slot: 12 },
     // The ordered CPU-name table on the installed XG5000 4.82.1 disk, anchored
     // to known XGK/XGB types, yields these XGI Configuration Type mappings.
     // Physical rack limits come from LS ELECTRIC's CPU documentation.

@@ -44,6 +44,10 @@ mod comparison_catalog;
 mod cpu;
 mod document;
 mod sfc;
+mod text_program;
+pub use text_program::TextProgram;
+#[cfg(feature = "write")]
+pub use text_program::TextProgramPatch;
 pub use sfc::{
     SfcArrayBound, SfcBlock, SfcDeclaration, SfcEntity, SfcPosition, SfcProgram, SfcRow, SfcVariable,
 };
@@ -101,6 +105,11 @@ mod model;
 mod writer;
 #[cfg(feature = "write")]
 mod program_create;
+mod program_support;
+#[cfg(all(feature="write",feature="il"))]
+mod vendor_il;
+#[cfg(all(feature="write",feature="il"))]
+pub use vendor_il::{VendorIlProgram, VendorIlPatch};
 #[cfg(feature = "write")]
 pub use program_create::NewProgram;
 

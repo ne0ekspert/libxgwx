@@ -821,3 +821,47 @@ complete program XML records and task assignments, and leaves workspace counts
 unchanged. The WASM export is `move_xgwx_program`. The extension provides sidebar
 dragging with insertion feedback and the normal Undo/Save lifecycle. XG5000 executes
 programs in list order within their scan/task; task scheduling remains independent.
+
+### Standalone ST and IEC IL source
+
+`XgwxDocument::text_programs()` reads validated Structured Text (`Kind=4`) and IEC
+Instruction List (`Kind=9`) programs from their native `Body/ST_Program/CodeList`
+records. Both languages store bzip2-compressed UTF-16 source with a `CodeCount`
+measured in UTF-16 code units. Blank programs use the captured XG5000 templates.
+
+With `write`, `edit_text_program(&TextProgramPatch)` checks program identity,
+language and expected source before replacing only CodeList. It accepts up to
+65536 UTF-16 units, rejects NUL characters, and preserves program metadata,
+declarations and neighboring programs. Unknown source layouts, encrypted
+programs and bookmark/breakpoint metadata remain read only.
+`edit_text_variable(object_id, &SfcVariablePatch)` uses the existing IEC
+PB50 declaration encoder, including arrays, STRING, initial values, Retain and
+captured function blocks. Referenced declarations cannot be removed or have
+their type/bounds changed. The WASM exports are `edit_xgwx_text_program` and
+`edit_xgwx_text_variable`; browser summaries include `textPrograms` with source,
+language, editability and declaration metadata.
+
+Generate the native acceptance project with:
+
+```sh
+cargo run --features write --example text-program-acceptance
+```
+
+The paired native capture and generated fixtures are in `fixtures/text-programs`.
+
+`select_cpu()` also supports ST/IEC IL and mixed SFC/ST/IL workspaces when they
+use captured default parameters, one configuration and empty I/O tables. It
+preserves source, language, identities and declarations while migrating default
+memory ranges and CPUUN Ethernet/motion sections. All pairs among XGI-CPUU,
+CPUH, CPUS, CPUE, CPUU/D and CPUUN are tested. All six generated text conversions
+passed native XG5000 strict syntax/type checks and Save As with zero errors and
+warnings; native saves can be converted back to CPUE. See the fixture README
+for the XGK-CPUSN mnemonic audit and the distinction from XGI IEC IL.
+
+### Additional text-program CPU families
+
+`program_languages()` supplies the CPU/project-mode capabilities used by both the writer and VS Code. Native blank captures enable ST/IEC IL on XEC-E/H/S/U, XEM-H2/HP, GIPAM, KL and XGR-CPUH. XGK Auto-allocation enables ST and native LD creation. XGK scalar declarations use a separately captured type-ID mapping; native D allocations are normalized only in the reading copy. Advanced XGK declaration shapes remain guarded. XGI-CPUS/P text creation stays disabled until a native profile is captured.
+
+With `write,il`, `vendor_il_programs()` exposes classic XGK ladder programs as vendor IL. `edit_vendor_il(&VendorIlPatch)` checks identity and stale source and builds native ladder records using existing cell/catalog writers and CPU operand guards. It supports series LOAD/AND contacts, negated and edge variants, OUT/SET/RST outputs and fixed-arity catalog instructions. Branches, comments and Auto-allocation ladder text replacement remain guarded. IEC CodeList is never used to store XGK vendor IL. Read eligibility validates each instruction without rebuilding the full ladder; applying an edit builds and verifies a candidate atomically.
+
+Generate CPU-family acceptance candidates with `cargo run --features write,il --example text-cpu-expansion-acceptance`. Native captures and semantic Save As comparisons are in `fixtures/text-cpus/`.

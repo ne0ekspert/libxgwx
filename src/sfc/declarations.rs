@@ -515,3 +515,60 @@ mod tests {
         assert_eq!(bytes, original);
     }
 }
+
+// XGK Auto-allocation scalar IDs captured from XG5000 4.82.1.
+const XGK_SCALARS: &[(u32, &str)] = &[
+    (1, "BOOL"),
+    (3, "BYTE"),
+    (4, "WORD"),
+    (5, "DWORD"),
+    (6, "LWORD"),
+    (16, "SINT"),
+    (9, "INT"),
+    (10, "DINT"),
+    (11, "LINT"),
+    (17, "USINT"),
+    (18, "UINT"),
+    (19, "UDINT"),
+    (20, "ULINT"),
+    (7, "REAL"),
+    (8, "LREAL"),
+];
+pub(super) fn normalize_xgk_types(bytes: &mut [u8]) -> Result<(), crate::XgwxError> {
+    for fields in records(bytes)? {
+        let at = fields.get(1).ok_or_else(fail)?.end_offset + 4;
+        let code = word(bytes, at)?;
+        let name = XGK_SCALARS
+            .iter()
+            .find(|(id, _)| *id == code)
+            .map(|(_, name)| *name)
+            .ok_or_else(fail)?;
+        let code = crate::iec_symbols::iec_primitive_type_code(name).ok_or_else(fail)?;
+        bytes[at..at + 4].copy_from_slice(&code.to_le_bytes());
+        // Native Auto-allocation assigns D storage after Check Program. The
+        // shared symbol reader uses M for allocated internal scalar storage;
+        // normalize only the decoding copy, retaining the original D record.
+        if fields.len() == 8 && fields[5].value == "D" {
+            bytes[fields[5].offset + 4..fields[5].end_offset]
+                .copy_from_slice(&('M' as u16).to_le_bytes());
+        }
+    }
+    Ok(())
+}
+#[cfg(feature = "write")]
+pub(super) fn xgk_record(patch: &SfcVariablePatch) -> Result<Vec<u8>, crate::XgwxError> {
+    if patch.declaration.clone().unwrap_or_default() != SfcDeclaration::default() {
+        return Err(crate::XgwxError::SfcEdit(
+            "XGK advanced declarations have not been captured".into(),
+        ));
+    }
+    let code = XGK_SCALARS
+        .iter()
+        .find(|(_, name)| *name == patch.data_type)
+        .map(|(id, _)| *id)
+        .ok_or_else(fail)?;
+    let mut bytes = record(patch)?;
+    let at = records(&bytes)?[0][1].end_offset + 4;
+    bytes[at..at + 4].copy_from_slice(&code.to_le_bytes());
+    Ok(bytes)
+}

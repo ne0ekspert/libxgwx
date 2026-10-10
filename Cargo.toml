@@ -497,3 +497,18 @@ required-features = ["write"]
 [[example]]
 name = "program_delete_acceptance"
 required-features = ["write"]
+
+[[example]]
+name = "text-program-acceptance"
+path = "examples/text_program_acceptance.rs"
+required-features = ["write"]
+
+[[example]]
+name = "text-cpu-acceptance"
+path = "examples/text_cpu_acceptance.rs"
+required-features = ["write", "il"]
+
+[[example]]
+name = "text-cpu-expansion-acceptance"
+path = "examples/text_cpu_expansion_acceptance.rs"
+required-features = ["write", "il"]

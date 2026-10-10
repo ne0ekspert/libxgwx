@@ -1,0 +1,13 @@
+<Program Task="스캔 프로그램" Version="256" LocalVariable="1" Kind="9" InstanceName="" Comment="" ObjectId="eadfa872-95c4-4ac5-9f9c-03c36e1ca7e1" FindProgram="1" FindVar="1" Encrytption="">NewProgram<Body>
+							<ST_Program Version="Ver 1.1" StepCount="0"><CodeList CodeCount="0"></CodeList>
+								<Breakpoints></Breakpoints>
+								<Bookmarks></Bookmarks>
+							</ST_Program>
+						</Body>
+						<LocalVar Version="Ver 2.0" NotUseExternalVar="0" ProgramKind="1" MultiUserRunEdit="0" SymDocGUID="6292a0d5_f67f_46f5_9f8c_ba8fd1af08cf"><Symbols Count="0"></Symbols>
+							<TempVar Count="0"></TempVar>
+						</LocalVar>
+						<RungTable BinaryEncoded="1">
+							<RungTableData dt:dt="bin.base64" Compressed="1" xmlns:dt="urn:schemas-microsoft-com:datatypes"></RungTableData>
+						</RungTable>
+					</Program>

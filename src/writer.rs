@@ -856,7 +856,7 @@ impl XgwxDocument {
     /// This updates the authoritative `<Configuration Type>` value while
     /// preserving the existing basic parameters, programs, hardware, and
     /// network configuration. XGK changes require retained hardware to fit.
-    /// Captured XGI model changes support validated SFC projects with default
+    /// Captured XGI model changes support validated SFC, ST and IL projects with default
     /// parameters and empty I/O tables. Other model changes require
     /// a migration and are rejected. Selecting the current type is a no-op.
     pub fn select_cpu(&mut self, model: &str) -> Result<(), XgwxError> {
@@ -866,7 +866,7 @@ impl XgwxDocument {
             return Ok(());
         }
         if current.family == "XGI" && entry.family == "XGI" {
-            return self.select_sfc_xgi_cpu(current, entry);
+            return self.select_xgi_source_cpu(current, entry);
         }
         if current.family != "XGK" || entry.family != "XGK" {
             return Err(XgwxError::UnsupportedCpuChange {
@@ -919,7 +919,7 @@ impl XgwxDocument {
         Ok(())
     }
 
-    fn select_sfc_xgi_cpu(
+    fn select_xgi_source_cpu(
         &mut self,
         current: &CpuCatalogEntry,
         target: &CpuCatalogEntry,
@@ -936,20 +936,22 @@ impl XgwxDocument {
         if !defaults.iter().any(|(code, _)| *code == current.type_code)
             || !defaults.iter().any(|(code, _)| *code == target.type_code)
         {
-            return Err(unsupported(
-                "this XGI model has no captured SFC CPU conversion",
-            ));
+            return Err(unsupported("this XGI model has no captured CPU conversion"));
         }
-        let programs = self.sfc_programs();
-        if programs.is_empty()
-            || programs.len() != self.programs().len()
-            || programs.iter().any(|p| {
+        let charts = self.sfc_programs();
+        let sources = self.text_programs();
+        let program_count = self.programs().len();
+        if self.configurations().len() != 1
+            || program_count == 0
+            || charts.len() + sources.len() != program_count
+            || charts.iter().any(|p| {
                 p.variables_error.is_some()
                     || !p.blocks.iter().any(|b| b.main && b.editable_rows.is_some())
             })
+            || sources.iter().any(|p| !p.editable || p.variables_error.is_some())
         {
             return Err(unsupported(
-                "the workspace must contain only supported SFC programs",
+                "the workspace must contain only supported SFC, ST or IEC IL programs in one configuration",
             ));
         }
         if !self.modules().is_empty() || !self.network_modules().is_empty() {
@@ -981,6 +983,7 @@ impl XgwxDocument {
                     .collect::<Vec<_>>()
             })
         };
+        let blank = XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgi.xgwx"))?;
         let loop_reserved = Some(
             ["2578", "45", "0", "0", "0"]
                 .map(|v| Some(v.to_owned()))
@@ -990,6 +993,7 @@ impl XgwxDocument {
             .iter()
             .any(|(_, doc)| reserved(self) == reserved(doc))
             && reserved(self) != loop_reserved
+            && reserved(self) != reserved(&blank)
         {
             return Err(unsupported("unknown reserved basic-parameter values"));
         }
@@ -11924,7 +11928,7 @@ impl XgwxDocument {
 
     // Reject only documented incompatibilities. Unknown CPU/command tables
     // remain editable under the existing structural and operand guards.
-    fn validate_ladder_instruction_cpu(&self, mnemonic: &str) -> Result<(), XgwxError> {
+    pub(crate) fn validate_ladder_instruction_cpu(&self, mnemonic: &str) -> Result<(), XgwxError> {
         let cpu = self
             .configurations()
             .first()
@@ -12032,7 +12036,7 @@ impl XgwxDocument {
         })
     }
 
-    fn edit_ladder_payload(
+    pub(crate) fn edit_ladder_payload(
         &mut self,
         program_index: usize,
         update: impl FnOnce(&[u8]) -> Result<Vec<u8>, XgwxError>,

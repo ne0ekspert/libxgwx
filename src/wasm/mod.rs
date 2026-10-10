@@ -2358,6 +2358,10 @@ struct WasmDocumentSummary {
     hardware: WasmHardwareSummary,
     ladder: Vec<WasmLadderProgramSummary>,
     sfc: Vec<SfcProgram>,
+    text_programs: Vec<TextProgram>,
+    program_languages: Vec<&'static str>,
+    #[cfg(all(feature="write",feature="il"))]
+    vendor_il_programs: Vec<crate::VendorIlProgram>,
     networks: Vec<WasmNetworkSummary>,
     xgpd: Vec<WasmXgpdSummary>,
     cnet: Vec<WasmCnetSummary>,
@@ -2409,9 +2413,11 @@ impl WasmDocumentSummary {
         };
         let variable_count = variable_summaries.as_ref().map(Vec::len);
         let sfc_programs = doc.sfc_programs();
+        let text_programs = doc.text_programs();
         let sfc_indices = sfc_programs
             .iter()
             .map(|program| program.program_index)
+            .chain(text_programs.iter().map(|program| program.program_index))
             .collect::<std::collections::HashSet<_>>();
         let local_variables = doc
             .iec_local_symbols()
@@ -2482,6 +2488,10 @@ impl WasmDocumentSummary {
 
         Self {
             sfc: sfc_programs,
+            text_programs,
+            program_languages: doc.program_languages(),
+            #[cfg(all(feature="write",feature="il"))]
+            vendor_il_programs: doc.vendor_il_programs(),
             header: WasmHeaderSummary::from_header(&doc.header, doc.trailer.len()),
             project: WasmProjectSummary {
                 name: project.name,
@@ -2604,7 +2614,7 @@ fn decode_browser_ladder(
         .take(MAX_WASM_LADDER_PROGRAMS)
         .enumerate()
     {
-        if element.descendants_named("SFC_ProgramList").next().is_some() {
+        if element.descendants_named("SFC_ProgramList").next().is_some() || matches!(element.attribute("Kind"), Some("4" | "9")) {
             continue;
         }
         let cached = previous.get(program_index).filter(|cached| {
@@ -2806,4 +2816,34 @@ pub fn edit_xgwx_sfc_variable_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_sfc_variable(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.to_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_text_program)]
+pub fn edit_xgwx_text_program_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("text patch is not JSON-serializable"))?;
+    let patch: TextProgramPatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_text_program(&patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_text_variable)]
+pub fn edit_xgwx_text_variable_wasm(bytes: &[u8], expected_object_id: &str, patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(|| JsValue::from_str("variable patch is not JSON-serializable"))?;
+    let patch: SfcVariablePatch = serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_text_variable(expected_object_id, &patch).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes().map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(all(feature="write",feature="il"))]
+#[wasm_bindgen(js_name=edit_xgwx_vendor_il)]
+pub fn edit_xgwx_vendor_il_wasm(bytes:&[u8],patch:JsValue)->Result<Vec<u8>,JsValue>{
+ let json=js_sys::JSON::stringify(&patch)?.as_string().ok_or_else(||JsValue::from_str("IL patch must be JSON"))?;
+ let patch:crate::VendorIlPatch=serde_json::from_str(&json).map_err(|e|JsValue::from_str(&e.to_string()))?;
+ let mut doc=XgwxDocument::parse(bytes).map_err(|e|JsValue::from_str(&e.to_string()))?;
+ doc.edit_vendor_il(&patch).map_err(|e|JsValue::from_str(&e.to_string()))?;
+ doc.to_verified_bytes().map_err(|e|JsValue::from_str(&e.to_string()))
 }

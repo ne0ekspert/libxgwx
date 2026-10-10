@@ -1002,7 +1002,7 @@ impl XgwxDocument {
 }
 
 // Native ST CodeList contains exactly CodeCount UTF-16 units, compressed with bzip2.
-fn read_st_source(block: &XmlElement) -> Option<String> {
+pub(crate) fn read_st_source(block: &XmlElement) -> Option<String> {
     let st = block.children.iter().find(|n| n.name == "ST_Program")?;
     if st.attribute("Version") != Some("Ver 1.1")
         || st.attributes.len() != 2
@@ -1178,15 +1178,16 @@ impl XgwxDocument {
             .next()
             .and_then(|n| n.descendants_named("Symbols").next())
             .ok_or_else(|| crate::XgwxError::SfcEdit("symbols are absent".into()))?;
-        let bytes =
+        let mut bytes =
             crate::decode_base64_payload(&table.text, table.attribute("Compressed") == Some("1"))?
                 .data;
+        if self.xgk_auto_allocation() { declarations::normalize_xgk_types(&mut bytes)?; }
         let metadata = declarations::metadata(&bytes)?;
         Ok(self
             .sfc_symbols(program_index)?
             .into_iter()
             .map(|s| SfcVariable {
-                system: matches!(s.name.as_str(), "TRANS" | "GOTO_INIT"),
+                system: program.descendants_named("SFC_ProgramList").next().is_some() && matches!(s.name.as_str(), "TRANS" | "GOTO_INIT"),
                 declaration: metadata
                     .get(&s.name)
                     .map(|(_, v)| v.clone())
@@ -1214,13 +1215,10 @@ impl XgwxDocument {
             .descendants_named("Program")
             .nth(program_index)
             .ok_or_else(fail)?;
-        if program
-            .descendants_named("SFC_ProgramList")
-            .next()
-            .is_none()
-        {
-            return Err(fail());
-        }
+        let is_sfc = program.descendants_named("SFC_ProgramList").next().is_some();
+        let is_text = matches!(program.attribute("Kind"), Some("4" | "9"))
+            && program.children.iter().find(|n| n.name == "Body").is_some_and(|b| read_st_source(b).is_some());
+        if !is_sfc && !is_text { return Err(fail()); }
         let mut table = program
             .descendants_named("LocalVar")
             .next()
@@ -1234,7 +1232,7 @@ impl XgwxDocument {
             crate::decode_base64_payload(&table.text, table.attribute("Compressed") == Some("1"))?
                 .data;
         // Class 11/12 and the SFC-only flag differ from ordinary VAR declarations.
-        for (name, class) in [("GOTO_INIT", 11_u32), ("TRANS", 12_u32)] {
+        for (name, class) in [("GOTO_INIT", 11_u32), ("TRANS", 12_u32)].into_iter().filter(|_| is_sfc) {
             let mut marker = vec![0xff, 0xfe, 0xff, name.len() as u8];
             marker.extend(name.encode_utf16().flat_map(u16::to_le_bytes));
             let hits = bytes
@@ -1262,6 +1260,7 @@ impl XgwxDocument {
             bytes[start..start + 4].copy_from_slice(&1_u32.to_le_bytes());
             bytes[start + 8..start + 12].fill(0);
         }
+        if self.xgk_auto_allocation() { declarations::normalize_xgk_types(&mut bytes)?; }
         let offsets = declarations::normalize(&mut bytes)?;
         table.text = base64::engine::general_purpose::STANDARD.encode(bytes);
         for a in &mut table.attributes {
@@ -1360,7 +1359,7 @@ impl XgwxDocument {
                     "variable description is too long or contains control characters",
                 ));
             }
-            let record = declarations::record(patch)?;
+            let record = if self.xgk_auto_allocation() { declarations::xgk_record(patch)? } else { declarations::record(patch)? };
             let offset = symbols
                 .iter()
                 .find(|s| s.name.to_lowercase() > name.to_lowercase())
@@ -1398,30 +1397,22 @@ impl XgwxDocument {
                 bytes.splice(offset..offset, record);
             }
         }
-        let count = table.attributes().find(|a| a.name() == "Count").unwrap();
-        let text = table
-            .children()
-            .find(|n| n.is_text())
-            .ok_or_else(|| fail("symbol payload is absent"))?;
+        let count = table.attributes().find(|a| a.name() == "Count").ok_or_else(|| fail("symbol count is absent"))?;
+        let text = table.children().find(|n| n.is_text());
         use base64::Engine;
         let encoded = if table.attribute("Compressed") == Some("1") {
             encode_sfc_payload(&bytes)
         } else {
             base64::engine::general_purpose::STANDARD.encode(&bytes)
         };
+        let new_count = if patch.remove { symbols.len() - 1 } else { symbols.len() + usize::from(!patch.update) };
+        let replacements = if let Some(text) = text {
+            vec![(count.range_value(), new_count.to_string()), (text.range(), encoded)]
+        } else if symbols.is_empty() && table.attributes().len() == 1 && table.children().next().is_none() {
+            vec![(table.range(), format!("<Symbols Count=\"{new_count}\" dt:dt=\"bin.base64\" xmlns:dt=\"urn:schemas-microsoft-com:datatypes\" Compressed=\"0\">{encoded}</Symbols>"))]
+        } else { return Err(fail("symbol payload is absent")); };
         let mut candidate = self.clone();
-        candidate.apply_xml_replacements(vec![
-            (
-                count.range_value(),
-                (if patch.remove {
-                    symbols.len() - 1
-                } else {
-                    symbols.len() + usize::from(!patch.update)
-                })
-                .to_string(),
-            ),
-            (text.range(), encoded),
-        ])?;
+        candidate.apply_xml_replacements(replacements)?;
         candidate.sfc_variables(patch.program_index)?;
         candidate.to_verified_bytes()?;
         *self = candidate;
@@ -1430,6 +1421,11 @@ impl XgwxDocument {
     fn sfc_variable_referenced(&self, index: usize, name: &str) -> Result<bool, crate::XgwxError> {
         let fail =
             || crate::XgwxError::SfcEdit("cannot check references in this program language".into());
+        if let Some(text) = self.text_programs().into_iter().find(|p| p.program_index == index) {
+            if !text.editable { return Err(fail()); }
+            let source = text.source.ok_or_else(fail)?;
+            return Ok(source.split(|c: char| !c.is_alphanumeric() && c != '_').any(|v| v.eq_ignore_ascii_case(name)));
+        }
         let sfc = self
             .sfc_programs()
             .into_iter()

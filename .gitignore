@@ -18,3 +18,10 @@
 
 # Native program creation, deletion and reorder acceptance fixtures
 !fixtures/program-create/*.xgwx
+
+# Native ST/IL source and declaration acceptance fixtures
+!fixtures/text-programs/*.xgwx
+
+# Native CPU-family text-program acceptance fixtures
+!fixtures/text-cpus/*.xgwx
+!fixtures/text-programs/cpu/*.xgwx
