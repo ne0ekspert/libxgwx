@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Parse LS XG5000 .xgwx workspace files with libxgwx, an open-source Rust library. Inspect projects, programs, variables and hardware locally in your browser." />
+  <meta name="description" content="Explore and edit LS XG5000 .xgwx files with libxgwx, a Rust library powering a local browser explorer, a VS Code extension and an MCP server for AI agents." />
   <meta name="robots" content="index, follow, max-image-preview:large" />
   <meta name="google-site-verification" content="-0PT9AOKaMSFUm4jZEIXc7bd4O8mqFwyeLfReWeYzC0" />
   <meta name="theme-color" content="#17241f" />
@@ -15,7 +15,7 @@
   <meta property="og:site_name" content="libxgwx" />
   <meta property="og:locale" content="en_US" />
   <meta property="og:title" content="libxgwx | Rust parser for LS XG5000 .xgwx files" />
-  <meta property="og:description" content="Explore XG5000 project structure, programs, variables and hardware with a Rust library and a local browser tool for inspection and supported metadata and IEC record edits." />
+  <meta property="og:description" content="Explore and edit LS XG5000 .xgwx files with libxgwx, a Rust library powering a local browser explorer, a VS Code extension and an MCP server for AI agents." />
   <meta property="og:url" content="https://ne0ekspert.github.io/libxgwx/" />
   <meta property="og:image" content="https://ne0ekspert.github.io/libxgwx/social-card.png" />
   <meta property="og:image:type" content="image/png" />
@@ -24,35 +24,41 @@
   <meta property="og:image:alt" content="libxgwx: Rust parser for LS XG5000 .xgwx workspace files" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="libxgwx | Rust parser for LS XG5000 .xgwx files" />
-  <meta name="twitter:description" content="Explore XG5000 project structure, programs, variables and hardware with a Rust library and a local browser tool for inspection and supported metadata and IEC record edits." />
+  <meta name="twitter:description" content="Explore and edit LS XG5000 .xgwx files with libxgwx, a Rust library powering a local browser explorer, a VS Code extension and an MCP server for AI agents." />
   <meta name="twitter:image" content="https://ne0ekspert.github.io/libxgwx/social-card.png" />
   <meta name="twitter:image:alt" content="libxgwx: Rust parser for LS XG5000 .xgwx workspace files" />
   <link rel="stylesheet" href="./landing.css" />
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebPage",
-        "@id": "https://ne0ekspert.github.io/libxgwx/#webpage",
-        "url": "https://ne0ekspert.github.io/libxgwx/",
-        "name": "libxgwx | Rust parser for LS XG5000 .xgwx files",
-        "description": "Parse LS XG5000 .xgwx workspace files with libxgwx, an open-source Rust library. Inspect projects, programs, variables and hardware locally in your browser.",
-        "inLanguage": "en",
-        "about": { "@id": "https://github.com/ne0ekspert/libxgwx#source" }
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "@id": "https://ne0ekspert.github.io/libxgwx/#webpage",
+      "url": "https://ne0ekspert.github.io/libxgwx/",
+      "name": "libxgwx | Rust parser for LS XG5000 .xgwx files",
+      "description": "Explore and edit LS XG5000 .xgwx files with libxgwx, a Rust library powering a local browser explorer, a VS Code extension and an MCP server for AI agents.",
+      "inLanguage": "en",
+      "about": {
+        "@id": "https://github.com/ne0ekspert/libxgwx#source"
       },
-      {
-        "@type": "SoftwareSourceCode",
-        "@id": "https://github.com/ne0ekspert/libxgwx#source",
-        "name": "libxgwx",
-        "description": "Open-source Rust parser for LS XG5000 .xgwx workspace files, with partial ladder decoding and optional guarded write operations.",
-        "url": "https://ne0ekspert.github.io/libxgwx/",
-        "codeRepository": "https://github.com/ne0ekspert/libxgwx",
-        "programmingLanguage": "Rust",
-        "license": "https://www.apache.org/licenses/LICENSE-2.0"
-      }
-    ]
-  }
+      "relatedLink": [
+        "https://github.com/ne0ekspert/xgwx-mcp",
+        "https://github.com/ne0ekspert/vscode-xgwx"
+      ]
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://github.com/ne0ekspert/libxgwx#source",
+      "name": "libxgwx",
+      "description": "Open-source Rust parser for LS XG5000 .xgwx workspace files, with partial ladder decoding and optional guarded write operations.",
+      "url": "https://ne0ekspert.github.io/libxgwx/",
+      "codeRepository": "https://github.com/ne0ekspert/libxgwx",
+      "programmingLanguage": "Rust",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0"
+    }
+  ]
+}
   </script>
 </head>
 <body>
@@ -61,6 +67,7 @@
     <a class="brand" href="./" aria-label="libxgwx home">libxgwx</a>
     <nav aria-label="Main navigation">
       <a href="#capabilities">Capabilities</a>
+      <a href="#tools">Tools</a>
       <a href="#quick-start">Quick start</a>
       <a href="https://github.com/ne0ekspert/libxgwx">GitHub</a>
       <a class="button primary" href="./editor.html">Open editor <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
@@ -70,7 +77,7 @@
     <section class="hero wrap" aria-labelledby="hero-title">
       <div class="hero-copy">
         <h1 id="hero-title">Open up your<br />XG5000 workspace.</h1>
-        <p>An open-source Rust parser for LS XG5000 <code>.xgwx</code> workspace files. Explore project structure, programs, variables and hardware — in code or in your browser.</p>
+        <p>An open-source Rust parser for LS XG5000 <code>.xgwx</code> workspace files. Explore project structure, programs, variables and hardware in Rust, your browser, VS Code or an AI agent workflow.</p>
         <div class="actions">
           <a class="button primary" href="./editor.html">Open editor <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a>
           <a class="button secondary" href="#quick-start">Quick start</a>
@@ -93,6 +100,43 @@
         <article><h3>Program insights</h3><p>Explore programs, tasks and variables. Partially decode ladder logic and inspect available rungs, cells and wire segments in the browser viewer.</p><a href="./editor.html">Try your workspace <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></svg></a></article>
         <article><h3>Rust tooling</h3><p>Parse bytes or a file through a straightforward Rust API. Optional <code>il</code> and <code>write</code> features expose instruction-list output and guarded workspace edits.</p><a href="https://github.com/ne0ekspert/libxgwx/blob/master/docs/ladder-editing.md">Read editing limits <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></svg></a></article>
       </div>
+    </section>
+    <section class="companion-tools wrap" id="tools" aria-labelledby="tools-title">
+      <div class="tools-heading">
+        <h2 id="tools-title">Use it where you work.</h2>
+        <p>Two companion tools, powered by libxgwx, for working with local XG5000 projects.</p>
+      </div>
+      <div class="tool-grid">
+        <article class="tool-card" aria-labelledby="mcp-title">
+          <span class="tool-audience">For AI agents</span>
+          <h3 id="mcp-title">XGWX MCP server</h3>
+          <p>Give an MCP-compatible agent access to project inspection, new project creation and guarded edits for programs, symbols, I/O modules and networks.</p>
+          <ul>
+            <li>Discover operation schemas and supported edit sites.</li>
+            <li>Edit ladder, SFC and ST/IL through supported writers.</li>
+            <li>Preview changes with dry-runs; verified saves retain a backup.</li>
+          </ul>
+          <div class="tool-links">
+            <a class="button primary" href="https://github.com/ne0ekspert/xgwx-mcp">Get the MCP server <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></svg></a>
+            <a class="tool-guide" href="https://github.com/ne0ekspert/xgwx-mcp/blob/main/SKILLS.md">Setup &amp; agent guide</a>
+          </div>
+        </article>
+        <article class="tool-card" aria-labelledby="vscode-title">
+          <span class="tool-audience">For VS Code</span>
+          <h3 id="vscode-title">XGWX Workspace Editor</h3>
+          <p>Open <code>.xgwx</code> files in a VS Code custom editor. Browse the project tree, inspect hardware and networks, and edit supported program data in your workspace.</p>
+          <ul>
+            <li>Create projects and manage programs and variables.</li>
+            <li>Work with supported ladder, SFC and ST/IL editors.</li>
+            <li>Apply edits through the document's Undo, Redo and Save flow.</li>
+          </ul>
+          <div class="tool-links">
+            <a class="button primary" href="https://github.com/ne0ekspert/vscode-xgwx">Get the VS Code extension <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></svg></a>
+            <a class="tool-guide" href="https://github.com/ne0ekspert/vscode-xgwx#readme">Installation &amp; usage</a>
+          </div>
+        </article>
+      </div>
+      <p class="tools-note">Supported formats and edit shapes vary by project. Local verification is separate from native acceptance: open the result in XG5000, run Check Program, then Save As and compare.</p>
     </section>
     <section class="quick-start" id="quick-start" aria-labelledby="quick-start-title">
       <div class="wrap start-layout">

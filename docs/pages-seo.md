@@ -10,7 +10,10 @@ update the absolute URLs in `web/index.html`, `web/editor.html` and
 
 The static landing page is the search entry point. Its title, description,
 headings, capability text, API/documentation links and Rust quick start are
-available without JavaScript. It describes partial ladder decoding and guarded
+available without JavaScript. Its Tools section links the companion MCP server
+and VS Code custom editor, with setup guides, guarded editing and native acceptance
+boundaries. Related repository links are included in WebPage structured data.
+It describes partial ladder decoding and guarded
 optional library writes; it does not advertise a complete browser editor.
 
 The file-dependent browser explorer is `noindex, follow` because its initial

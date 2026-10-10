@@ -577,3 +577,79 @@ pre {
 
 
 .capability-columns a svg { width: 15px; height: 15px; }
+
+.companion-tools {
+  padding-block:0 64px
+}
+.tools-heading>p {
+  color:var(--muted);
+  font-size:17px;
+  line-height:1.6;
+  margin:-14px 0 28px
+}
+.tool-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:24px
+}
+.tool-card {
+  display:flex;
+  flex-direction:column;
+  padding:32px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:#f7f9f6
+}
+.tool-audience {
+  align-self:flex-start;
+  background:var(--lime);
+  padding:6px 10px;
+  border-radius:4px;
+  font-size:12px;
+  font-weight:650;
+  margin-bottom:20px
+}
+.tool-card h3 {
+  font-size:25px;
+  letter-spacing:-.6px
+}
+.tool-card p,.tool-card li,.tools-note {
+  color:var(--muted);
+  font-size:15px;
+  line-height:1.7
+}
+.tool-card p {
+  margin:0 0 16px
+}
+.tool-card ul {
+  padding-left:20px;
+  margin:0 0 28px
+}
+.tool-card li+li {
+  margin-top:7px
+}
+.tool-links {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:16px;
+  margin-top:auto
+}
+.tool-guide {
+  font-size:13px;
+  font-weight:650;
+  text-decoration:underline;
+  text-underline-offset:4px
+}
+.tools-note {
+  margin:24px 0 0;
+  max-width:900px;
+  font-size:13px
+}
+@media(max-width:760px) {
+  .site-header nav { flex-wrap:wrap; justify-content:flex-start; gap:14px 20px }
+  .tool-grid { grid-template-columns:1fr }
+  .tool-card { padding:24px }
+  .companion-tools { padding-bottom:40px }
+  .tool-links .button { white-space:normal; text-align:center; max-width:100% }
+}
