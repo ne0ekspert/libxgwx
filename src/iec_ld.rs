@@ -3,10 +3,15 @@
 //! XG5000 stores these comments in `FF 3F` records immediately followed by a
 //! marker-prefixed UTF-16 string. Element record markers likewise identify a
 //! subset of contact and coil operands without including function pin labels.
-use crate::{IecRecordKind, LadderProgramData, LadderString};
+#[cfg(any(feature = "write", feature = "wasm"))]
+use crate::LadderString;
+use crate::{IecRecordKind, LadderProgramData};
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 const COMMENT_PREFIX: [u8; 6] = [0xff, 0x3f, 0, 0, 0, 1];
+#[cfg(any(feature = "write", feature = "wasm"))]
 const FUNCTION_OPERAND_PREFIX: [u8; 2] = [0xff, 0x46];
+#[cfg(any(feature = "write", feature = "wasm"))]
 const STRING_OFFSET_FROM_RECORD: usize = 15;
 
 /// One stored IEC LD row envelope. `records_start..end` contains its records.
@@ -316,6 +321,7 @@ fn row_frames(program: &LadderProgramData) -> Option<Vec<IecRowFrame>> {
     (frames.len() == rows.len()).then_some(frames)
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 #[derive(Debug, Clone)]
 pub(crate) struct ElementOperand {
     pub(crate) string: LadderString,
@@ -328,6 +334,7 @@ pub(crate) struct ElementOperand {
     pub(crate) raw_y: u16,
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 #[derive(Debug, Clone)]
 pub(crate) struct FixedFunctionBlock {
     pub(crate) string: LadderString,
@@ -337,6 +344,7 @@ pub(crate) struct FixedFunctionBlock {
     pub(crate) raw_y: u16,
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 pub(crate) fn comments(program: &LadderProgramData) -> Vec<LadderString> {
     if program.project_type != Some(2) || program.version.as_deref() != Some("LD VER 1.1") {
         return Vec::new();
@@ -350,6 +358,7 @@ pub(crate) fn comments(program: &LadderProgramData) -> Vec<LadderString> {
         .collect()
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 pub(crate) fn rising_contact_operands(program: &LadderProgramData) -> Vec<LadderString> {
     element_operands(program)
         .into_iter()
@@ -358,6 +367,7 @@ pub(crate) fn rising_contact_operands(program: &LadderProgramData) -> Vec<Ladder
         .collect()
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 pub(crate) fn function_operands(program: &LadderProgramData) -> Vec<LadderString> {
     if program.project_type != Some(2) || program.version.as_deref() != Some("LD VER 1.1") {
         return Vec::new();
@@ -371,6 +381,7 @@ pub(crate) fn function_operands(program: &LadderProgramData) -> Vec<LadderString
         .collect()
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 pub(crate) fn arithmetic_function_names(program: &LadderProgramData) -> Vec<LadderString> {
     fixed_function_blocks(program)
         .into_iter()
@@ -379,6 +390,7 @@ pub(crate) fn arithmetic_function_names(program: &LadderProgramData) -> Vec<Ladd
         .collect()
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 pub(crate) fn comparison_function_names(program: &LadderProgramData) -> Vec<LadderString> {
     fixed_function_blocks(program)
         .into_iter()
@@ -392,6 +404,7 @@ pub(crate) fn comparison_function_names(program: &LadderProgramData) -> Vec<Ladd
         .collect()
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 pub(crate) fn fixed_function_blocks(program: &LadderProgramData) -> Vec<FixedFunctionBlock> {
     if program.project_type != Some(2) || program.version.as_deref() != Some("LD VER 1.1") {
         return Vec::new();
@@ -433,6 +446,7 @@ pub(crate) fn fixed_function_blocks(program: &LadderProgramData) -> Vec<FixedFun
         .collect()
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 pub(crate) fn element_operands(program: &LadderProgramData) -> Vec<ElementOperand> {
     if program.project_type != Some(2) || program.version.as_deref() != Some("LD VER 1.1") {
         return Vec::new();
@@ -474,6 +488,7 @@ pub(crate) fn element_operands(program: &LadderProgramData) -> Vec<ElementOperan
         .collect()
 }
 
+#[cfg(any(feature = "write", feature = "wasm"))]
 fn is_record(data: &[u8], string_offset: usize, prefix: &[u8]) -> bool {
     string_offset
         .checked_sub(STRING_OFFSET_FROM_RECORD)

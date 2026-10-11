@@ -106,6 +106,7 @@ pub(crate) struct Row {
 }
 #[derive(Debug)]
 pub(crate) struct EditableProgram {
+    #[cfg(feature = "write")]
     pub(crate) header: Vec<u8>,
     pub(crate) rows: Vec<Row>,
     #[cfg(feature = "write")]
@@ -286,6 +287,7 @@ impl EditableProgram {
             }
         }
         Ok(Self {
+            #[cfg(feature = "write")]
             header: bytes[..header_len].to_vec(),
             rows,
             #[cfg(feature = "write")]
