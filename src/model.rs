@@ -130,8 +130,11 @@ impl NetworkModuleSummary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct BaseSummary {
+    /// Native rack/base number; distinct from its document record index.
     pub base: Option<u32>,
+    /// Stored physical slot count, if present and valid.
     pub slot_count: Option<u32>,
+    /// All preserved native XML attributes, including unknown ones.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -1742,6 +1745,7 @@ impl CnetMode {
         }
     }
 
+    /// Return the display label for this decoded serial-port setting.
     pub fn label(self) -> &'static str {
         match self {
             Self::Rs232C => "RS232C",
@@ -1769,6 +1773,7 @@ impl CnetDataBits {
         }
     }
 
+    /// Return the display label for this decoded serial-port setting.
     pub fn label(self) -> &'static str {
         match self {
             Self::Seven => "7 bits",
@@ -1795,6 +1800,7 @@ impl CnetStopBits {
         }
     }
 
+    /// Return the display label for this decoded serial-port setting.
     pub fn label(self) -> &'static str {
         match self {
             Self::One => "1",
@@ -1824,6 +1830,7 @@ impl CnetParity {
         }
     }
 
+    /// Return the display label for this decoded serial-port setting.
     pub fn label(self) -> &'static str {
         match self {
             Self::None => "NONE",

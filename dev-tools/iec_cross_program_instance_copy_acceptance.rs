@@ -8,24 +8,37 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_cross_program_instance_copy_acceptance SOURCE OUTPUT".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    document.delete_iec_ld_group(4, 14, 22)?;
+    document
+        .program_mut()
+        .get(4)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(14, 22))?;
     let cleared = document.to_bytes()?;
     if document
-        .copy_iec_ld_group_to_program(0, 18, 32, 4, 22)
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .copy_group_to_program(18, 32, 4, 22)
+        })
         .is_ok()
         || document.to_bytes()? != cleared
     {
         return Err("missing destination R_TRIG instance was not rejected atomically".into());
     }
     if document
+        .variable_mut()
         .copy_iec_instance_declaration_to_program(0, "INST_사본2", 4, "Timer")
         .is_ok()
         || document.to_bytes()? != cleared
     {
         return Err("existing destination instance name was not rejected atomically".into());
     }
-    document.copy_iec_instance_declaration_to_program(0, "INST_사본2", 4, "INST_사본2")?;
+    document
+        .variable_mut()
+        .copy_iec_instance_declaration_to_program(0, "INST_사본2", 4, "INST_사본2")?;
     let instance = document
+        .variable()
         .iec_local_symbols()
         .remove(4)?
         .into_iter()
@@ -38,8 +51,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         return Err(format!("copied R_TRIG declaration has wrong allocation: {instance:?}").into());
     }
-    document.copy_iec_ld_group_to_program(0, 18, 32, 4, 22)?;
-    let program = document.ladder_programs().remove(4)?;
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .copy_group_to_program(18, 32, 4, 22)
+        })?;
+    let program = document.program().ladder_programs().remove(4)?;
     if program.iec_circuit_graph().is_none()
         || !program
             .iec_function_blocks()
@@ -57,8 +77,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("copied R_TRIG network failed graph or instance verification".into());
     }
     let mut automatic = XgwxDocument::from_path(source)?;
-    automatic.delete_iec_ld_group(4, 14, 22)?;
-    automatic.copy_iec_ld_group_to_program_with_locals(0, 18, 32, 4, 22)?;
+    automatic
+        .program_mut()
+        .get(4)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(14, 22))?;
+    automatic
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .copy_group_to_program_with_locals(18, 32, 4, 22)
+        })?;
     if automatic.to_bytes()? != document.to_bytes()? {
         return Err(
             "automatic instance copy differs from the validated declaration and network copy"
@@ -68,7 +98,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut replacement = XgwxDocument::from_path(source)?;
     let original = replacement.to_bytes()?;
     if replacement
-        .replace_iec_ld_group_from_program(0, 18, 32, 4, 14, 22, false)
+        .program_mut()
+        .get(4)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .replace_group_from_program(0, 18, 32, 14, 22, false)
+        })
         .is_ok()
         || replacement.to_bytes()? != original
     {
@@ -76,7 +112,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             "replacement without the missing function instance was not rejected atomically".into(),
         );
     }
-    replacement.replace_iec_ld_group_from_program(0, 18, 32, 4, 14, 22, true)?;
+    replacement
+        .program_mut()
+        .get(4)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .replace_group_from_program(0, 18, 32, 14, 22, true)
+        })?;
     if replacement.to_bytes()? != document.to_bytes()? {
         return Err("cross-program replacement differs from the native-validated copy".into());
     }

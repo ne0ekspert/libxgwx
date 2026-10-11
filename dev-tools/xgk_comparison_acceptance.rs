@@ -40,16 +40,34 @@ fn main() -> Result<(), Box<dyn Error>> {
         for (index, spec) in specs.iter().enumerate() {
             // Insert ahead of the captured END; never emit unreachable code.
             let y = u32::try_from(8 + index * 4)?;
-            document.insert_ladder_row(0, y)?;
-            document.insert_ladder_comparison(0, y, 0, spec.mnemonic, &operands(spec))?;
-            document.insert_ladder_instruction(
-                0,
-                y,
-                "MOV",
-                &["1".into(), format!("D{}", 200 + index)],
-            )?;
+            document
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| selected_program.ladder()?.insert_row(y))?;
+            document
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program.ladder()?.insert_comparison(
+                        y,
+                        0,
+                        spec.mnemonic,
+                        &operands(spec),
+                    )
+                })?;
+            document
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program.ladder()?.insert_instruction(
+                        y,
+                        "MOV",
+                        &["1".into(), format!("D{}", 200 + index)],
+                    )
+                })?;
         }
         let programs = document
+            .program()
             .ladder_programs()
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;

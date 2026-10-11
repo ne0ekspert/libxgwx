@@ -2468,7 +2468,7 @@ impl WasmDocumentSummary {
         });
         let networks = doc.networks();
         let bases = doc.bases();
-        let modules = doc.modules();
+        let modules = doc.module_summaries();
         let programs = doc.programs();
         let parameters = doc.parameters();
         let safety_comm = doc.safety_comm();
@@ -2606,6 +2606,11 @@ impl WasmDocumentSummary {
                 .collect(),
             hardware: WasmHardwareSummary {
                 cpu_profile: doc.cpu_hardware_profile(),
+                typed_modules: doc
+                    .modules()
+                    .into_iter()
+                    .map(WasmTypedModule::from_module)
+                    .collect(),
                 bases: bases.into_iter().map(WasmBaseSummary::from_base).collect(),
                 modules: modules
                     .into_iter()

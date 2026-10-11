@@ -10,12 +10,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     };
     let mut document = XgwxDocument::from_path(source)?;
-    document.edit_iec_ld_branch_segment(1, 2, 4, 5, 6, true, false)?;
+    document
+        .program_mut()
+        .get(1)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(2, 4, 5, 6, true, false)
+        })?;
     fs::write(p1_output, document.to_bytes()?)?;
-    document.edit_iec_ld_branch_segment(2, 11, 34, 35, 6, true, false)?;
+    document
+        .program_mut()
+        .get(2)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(11, 34, 35, 6, true, false)
+        })?;
     fs::write(both_output, document.to_bytes()?)?;
     for index in [1, 2] {
         document
+            .program()
             .ladder_programs()
             .remove(index)?
             .iec_circuit_graph()

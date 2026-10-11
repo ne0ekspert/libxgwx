@@ -15,16 +15,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let original = XgwxDocument::from_path(source)?;
     let original_programs = original
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|value| value.data))
         .collect::<Result<Vec<_>, _>>()?;
     let mut generated = XgwxDocument::from_path(source)?;
-    generated.update_iec_local_symbol_address(0, 12, "조명_1", "%QX10", "")?;
-    generated.update_iec_local_symbol_address(1, 3, "커튼_제어", "%IX0.0.7", "")?;
+    generated
+        .variable_mut()
+        .update_iec_local_symbol_address(0, 12, "조명_1", "%QX10", "")?;
+    generated
+        .variable_mut()
+        .update_iec_local_symbol_address(1, 3, "커튼_제어", "%IX0.0.7", "")?;
     let encoded = generated.to_bytes()?;
     let reparsed = XgwxDocument::parse(&encoded)?;
     let symbols = reparsed
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
@@ -40,6 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     let edited_programs = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|value| value.data))
@@ -50,6 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(resaved_path) = rest.first() {
         let resaved = XgwxDocument::from_path(resaved_path)?;
         let mut native_programs = resaved
+            .program()
             .ladder_programs()
             .into_iter()
             .map(|program| program.map(|value| value.data))
@@ -71,6 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err("XG5000 Save As changed IEC ProgramData beyond known display bytes".into());
         }
         let mut native_symbols = resaved
+            .variable()
             .iec_local_symbols()
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;

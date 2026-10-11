@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let p = a[2].parse::<usize>()?;
     let row = a[3].parse::<u16>()?;
     let b = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(p)
@@ -22,12 +23,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|b| b.row_index == row && b.name.value == a[4])
         .ok_or("missing target")?;
-    doc.delete_iec_ld_standalone_function(p, b.record_offset, &a[4])?;
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .delete_standalone_function(b.record_offset, &a[4])
+    })?;
     std::fs::write(&a[1], doc.to_bytes()?)?;
     if let Some(native_path) = a.get(5) {
         let native = XgwxDocument::from_path(native_path)?;
-        let generated = doc.ladder_programs();
-        let captured = native.ladder_programs();
+        let generated = doc.program().ladder_programs();
+        let captured = native.program().ladder_programs();
         assert_eq!(generated.len(), captured.len());
         for (i, (generated, captured)) in generated.into_iter().zip(captured).enumerate() {
             let (mut generated, mut captured) = (generated?, captured?);

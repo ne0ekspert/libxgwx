@@ -41,9 +41,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     println!("networks: {}", doc.networks().len());
-    println!("modules: {}", doc.modules().len());
-    println!("programs: {}", doc.programs().len());
-    for (program, decoded) in doc.programs().into_iter().zip(doc.ladder_programs()) {
+    println!("modules: {}", doc.module_summaries().len());
+    println!("programs: {}", doc.program().programs().len());
+    for (program, decoded) in doc
+        .program()
+        .programs()
+        .into_iter()
+        .zip(doc.program().ladder_programs())
+    {
         let name = program.name.as_deref().unwrap_or("<unnamed>");
         match decoded {
             Ok(body) => println!(
@@ -55,7 +60,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(error) => println!("  {name}: payload decode failed: {error}"),
         }
     }
-    println!("variables: {}", doc.variables().map(|items| items.len())?);
+    println!(
+        "variables: {}",
+        doc.variable().variables().map(|items| items.len())?
+    );
     println!("payloads: {}", doc.decoded_payloads().len());
 
     print_cnet(&doc);
@@ -68,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn print_cnet(doc: &XgwxDocument) {
-    let cnet = doc.cnet_config_infos();
+    let cnet = doc.network().cnet_config_infos();
     println!("cnet modules: {}", cnet.len());
     for config in cnet {
         println!(
@@ -85,7 +93,7 @@ fn print_cnet(doc: &XgwxDocument) {
 }
 
 fn print_fenet(doc: &XgwxDocument) {
-    let fenet = doc.fenet_config_infos();
+    let fenet = doc.network().fenet_config_infos();
     println!("fenet modules: {}", fenet.len());
     for config in fenet {
         println!(

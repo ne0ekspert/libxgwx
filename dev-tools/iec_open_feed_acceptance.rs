@@ -3,14 +3,14 @@ use std::{env, error::Error};
 use xgwx::XgwxDocument;
 
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    let aa = a.ladder_programs();
-    let bb = b.ladder_programs();
+    let aa = a.program().ladder_programs();
+    let bb = b.program().ladder_programs();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?.data, b?.data, "native program payload {i}");
     }
-    let aa = a.iec_local_symbols();
-    let bb = b.iec_local_symbols();
+    let aa = a.variable().iec_local_symbols();
+    let bb = b.variable().iec_local_symbols();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?, b?, "every local field including offsets {i}");
@@ -33,9 +33,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     .enumerate()
     {
         let mut edited = source.clone();
-        edited.edit_iec_ld_vertical_wire(p, gap_group, gap_start, gap_end, gap_x, true, false)?;
+        edited
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .edit_vertical_wire(gap_group, gap_start, gap_end, gap_x, true, false)
+            })?;
         edited.write_to(directory.join(format!("{name}SRC.xgwx")))?;
-        let before = edited.ladder_programs().remove(p)?;
+        let before = edited.program().ladder_programs().remove(p)?;
         let original = before.iec_circuit_layout().ok_or("invalid source layout")?;
         assert_eq!(original.open_branch_endpoints.len(), 2);
         assert!(
@@ -44,8 +51,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .iter()
                 .all(|point| point.group_index == gap_group)
         );
-        edited.edit_iec_ld_branch_segment(p, group, start, end, x, true, false)?;
-        let intermediate = edited.ladder_programs().remove(p)?;
+        edited
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .edit_branch_segment(group, start, end, x, true, false)
+            })?;
+        let intermediate = edited.program().ladder_programs().remove(p)?;
         let layout = intermediate
             .iec_circuit_layout()
             .ok_or("invalid feed layout")?;
@@ -81,16 +95,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             .into_iter()
             .find(|b| b.group_index == group && b.end_row_index == start && b.x == x)
             .ok_or("missing tail")?;
-        edited.edit_iec_ld_branch_segment(
-            p,
-            group,
-            tail.start_row_index,
-            tail.end_row_index,
-            x,
-            true,
-            false,
-        )?;
-        let after = edited.ladder_programs().remove(p)?;
+        edited
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.edit_branch_segment(
+                    group,
+                    tail.start_row_index,
+                    tail.end_row_index,
+                    x,
+                    true,
+                    false,
+                )
+            })?;
+        let after = edited.program().ladder_programs().remove(p)?;
         let layout = after.iec_circuit_layout().ok_or("invalid tail layout")?;
         assert_eq!(layout.open_branch_endpoints, retained_endpoints);
         let translate = |bindings: Vec<xgwx::IecFunctionBinding>, shift: bool| {
@@ -112,9 +130,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             translate(layout.function_bindings, false)
         );
         for (i, (a, b)) in source
+            .program()
             .ladder_programs()
             .into_iter()
-            .zip(edited.ladder_programs())
+            .zip(edited.program().ladder_programs())
             .enumerate()
         {
             if i != p {
@@ -132,33 +151,49 @@ fn main() -> Result<(), Box<dyn Error>> {
         // original closed network: no masked native error may hide a different
         // edited circuit. Compare every payload and every local field.
         let mut closed = edited.clone();
-        closed.edit_iec_ld_vertical_wire(
-            p,
-            gap_group,
-            gap_start - u16::from(gap_start > end),
-            gap_end - u16::from(gap_end > end),
-            gap_x,
-            false,
-            true,
-        )?;
+        closed
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.edit_vertical_wire(
+                    gap_group,
+                    gap_start - u16::from(gap_start > end),
+                    gap_end - u16::from(gap_end > end),
+                    gap_x,
+                    false,
+                    true,
+                )
+            })?;
         assert!(
             closed
+                .program()
                 .ladder_programs()
                 .remove(p)?
                 .iec_circuit_graph()
                 .is_some()
         );
         let mut expected = source.clone();
-        expected.edit_iec_ld_branch_segment(p, group, start, end, x, true, false)?;
-        expected.edit_iec_ld_branch_segment(
-            p,
-            group,
-            tail.start_row_index,
-            tail.end_row_index,
-            x,
-            true,
-            false,
-        )?;
+        expected
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .edit_branch_segment(group, start, end, x, true, false)
+            })?;
+        expected
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.edit_branch_segment(
+                    group,
+                    tail.start_row_index,
+                    tail.end_row_index,
+                    x,
+                    true,
+                    false,
+                )
+            })?;
         exact(&closed, &expected)?;
         println!(
             "PASS {name}: feed and tail cleanup, every translated binding, and exact commutativity with unrelated gap refill"

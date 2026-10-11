@@ -10,6 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let p = a[2].parse::<usize>()?;
     let row = a[3].parse::<u16>()?;
     let block = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(p)
@@ -19,12 +20,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|b| b.row_index == row && b.name.value == a[4])
         .ok_or("missing block")?;
-    doc.delete_iec_ld_terminal_function(p, block.record_offset, &a[4])?;
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .delete_terminal_function(block.record_offset, &a[4])
+    })?;
     std::fs::write(&a[1], doc.to_bytes()?)?;
     if a[5] != "-" {
         let native = XgwxDocument::from_path(&a[5])?;
-        let generated = doc.ladder_programs();
-        let native = native.ladder_programs();
+        let generated = doc.program().ladder_programs();
+        let native = native.program().ladder_programs();
         if generated.len() != native.len() {
             return Err("program count changed".into());
         }

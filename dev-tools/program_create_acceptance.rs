@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("fixtures/sfc/native-loop.xgwx", "SFC", "NEWSFC"),
     ] {
         let mut doc = XgwxDocument::from_path(file)?;
-        doc.create_program(&NewProgram {
+        doc.program_mut().create_program(&NewProgram {
             name: "AddedProgram".into(),
             language: language.into(),
             object_id: "abcdef01-1234-4567-89ab-0123456789ab".into(),

@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let p = args[2].parse()?;
     let row = args[3].parse()?;
     let mut doc = XgwxDocument::from_path(&args[0])?;
-    let program = doc.ladder_programs().remove(p)?;
+    let program = doc.program().ladder_programs().remove(p)?;
     let block = program
         .iec_function_blocks()
         .ok_or("invalid blocks")?
@@ -21,9 +21,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         "sites: {:?}",
         program.iec_connected_arithmetic_deletion_sites()
     );
-    doc.delete_iec_ld_connected_arithmetic(p, block.record_offset, &block.name.value)?;
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .delete_connected_arithmetic(block.record_offset, &block.name.value)
+    })?;
     if args.len() > 4 {
-        doc.insert_iec_ld_function(p, row, block.raw_x, &args[4], &args[5..])?;
+        doc.program_mut().get(p).and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_function(row, block.raw_x, &args[4], &args[5..])
+        })?;
     }
     doc.write_to(&args[1])?;
     println!("PASS connected arithmetic edit");

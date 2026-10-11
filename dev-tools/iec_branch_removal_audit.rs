@@ -12,21 +12,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut editable = 0;
     let mut rejected = BTreeMap::<String, (usize, Vec<String>)>::new();
     let mut group_counts = BTreeMap::<(usize, usize, String), usize>::new();
-    for (program_index, result) in document.ladder_programs().into_iter().enumerate() {
+    for (program_index, result) in document.program().ladder_programs().into_iter().enumerate() {
         let program = result?;
         let geometry = program.iec_geometry().ok_or("invalid IEC geometry")?;
         for segment in geometry.vertical {
             total += 1;
             let mut trial = document.clone();
-            match trial.edit_iec_ld_branch_segment(
-                program_index,
-                segment.group_index,
-                segment.start_row_index,
-                segment.end_row_index,
-                segment.x,
-                true,
-                false,
-            ) {
+            match trial
+                .program_mut()
+                .get(program_index)
+                .and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.edit_branch_segment(
+                        segment.group_index,
+                        segment.start_row_index,
+                        segment.end_row_index,
+                        segment.x,
+                        true,
+                        false,
+                    )
+                }) {
                 Ok(()) => editable += 1,
                 Err(error) => {
                     let reason = error.to_string();

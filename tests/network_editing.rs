@@ -20,10 +20,10 @@ fn patch(field: &str, expected: &str, replacement: &str) -> FenetFieldPatch {
 fn fenet_address_and_dhcp_edits_preserve_other_modules_and_programs() {
     let mut doc = project();
     let original = doc.xml.clone();
-    let before = doc.ladder_programs().remove(0).unwrap().data;
+    let before = doc.program().ladder_programs().remove(0).unwrap().data;
     doc.edit_fenet_field(&patch("ipAddress", "192.168.0.100", "10.20.30.40"))
         .unwrap();
-    let ips = doc.fenet_config_infos();
+    let ips = doc.network().fenet_config_infos();
     assert_eq!(ips[0].ip_address.as_ref().unwrap().address, "10.20.30.40");
     assert_eq!(ips[1].ip_address.as_ref().unwrap().address, "192.168.0.100");
     doc.edit_fenet_field(&patch("ipAddress", "10.20.30.40", "192.168.0.100"))
@@ -45,7 +45,10 @@ fn fenet_address_and_dhcp_edits_preserve_other_modules_and_programs() {
         doc.edit_fenet_field(&patch(field, new, old)).unwrap();
         assert_eq!(doc.xml, original);
     }
-    assert_eq!(doc.ladder_programs().remove(0).unwrap().data, before);
+    assert_eq!(
+        doc.program().ladder_programs().remove(0).unwrap().data,
+        before
+    );
 }
 #[test]
 fn invalid_and_stale_fenet_edits_are_atomic() {
@@ -74,7 +77,7 @@ fn invalid_and_stale_fenet_edits_are_atomic() {
 #[test]
 fn network_metadata_edits_preserve_linked_configuration() {
     let mut doc = project();
-    let fenet = doc.fenet_config_infos();
+    let fenet = doc.network().fenet_config_infos();
     for (module, field, old, new) in [
         (false, "name", "기본 네트워크", "Home & Office"),
         (true, "alias", "", "Main PLC"),
@@ -90,7 +93,7 @@ fn network_metadata_edits_preserve_linked_configuration() {
             replacement: new.into(),
         })
         .unwrap();
-        assert_eq!(doc.fenet_config_infos(), fenet);
+        assert_eq!(doc.network().fenet_config_infos(), fenet);
         XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
     }
 }
@@ -139,7 +142,7 @@ fn native_saved_fenet_project_remains_editable() {
         "../fixtures/networks/fenet-edited-native.xgwx"
     ))
     .unwrap();
-    let native = doc.fenet_config_infos();
+    let native = doc.network().fenet_config_infos();
     assert_eq!(
         native[0].ip_address.as_ref().unwrap().address,
         "10.20.30.40"
@@ -153,7 +156,7 @@ fn native_saved_fenet_project_remains_editable() {
     let original = doc.xml.clone();
     doc.edit_fenet_field(&patch("ipAddress", "10.20.30.40", "10.20.30.41"))
         .unwrap();
-    assert_eq!(doc.fenet_config_infos()[1], native[1]);
+    assert_eq!(doc.network().fenet_config_infos()[1], native[1]);
     doc.edit_fenet_field(&patch("ipAddress", "10.20.30.41", "10.20.30.40"))
         .unwrap();
     assert_eq!(doc.xml, original);
@@ -163,7 +166,7 @@ fn native_saved_fenet_project_remains_editable() {
 fn fenet_numeric_fields_edit_atomically_and_preserve_other_settings() {
     let mut doc = project();
     let original = doc.xml.clone();
-    let other = doc.fenet_config_infos()[1].clone();
+    let other = doc.network().fenet_config_infos()[1].clone();
     for (field, old, new) in [
         ("stationNo", "0", "63"),
         ("driverType", "2", "5"),
@@ -173,7 +176,7 @@ fn fenet_numeric_fields_edit_atomically_and_preserve_other_settings() {
         ("glofaSocketCount", "3", "16"),
     ] {
         doc.edit_fenet_field(&patch(field, old, new)).unwrap();
-        assert_eq!(doc.fenet_config_infos()[1], other);
+        assert_eq!(doc.network().fenet_config_infos()[1], other);
         XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
         doc.edit_fenet_field(&patch(field, new, old)).unwrap();
         assert_eq!(doc.xml, original);
@@ -212,8 +215,8 @@ fn native_driver_and_timeout_encodings_remain_editable() {
     ] {
         let mut doc = XgwxDocument::parse(bytes).unwrap();
         let original = doc.xml.clone();
-        let other = doc.fenet_config_infos()[1].clone();
-        let program = doc.ladder_programs().remove(0).unwrap().data;
+        let other = doc.network().fenet_config_infos()[1].clone();
+        let program = doc.program().ladder_programs().remove(0).unwrap().data;
         for (field, old, new) in [
             ("driverType", driver, "2"),
             ("rcvWaitTime", receive, "100"),
@@ -227,8 +230,11 @@ fn native_driver_and_timeout_encodings_remain_editable() {
                 .unwrap();
             assert_eq!(record.attribute("RcvWaitTimeUnit"), Some(unit));
             assert_eq!(record.attribute("ClientWaitTimeUnit"), Some(unit));
-            assert_eq!(doc.fenet_config_infos()[1], other);
-            assert_eq!(doc.ladder_programs().remove(0).unwrap().data, program);
+            assert_eq!(doc.network().fenet_config_infos()[1], other);
+            assert_eq!(
+                doc.program().ladder_programs().remove(0).unwrap().data,
+                program
+            );
             doc.edit_fenet_field(&patch(field, new, old)).unwrap();
             assert_eq!(doc.xml, original);
         }

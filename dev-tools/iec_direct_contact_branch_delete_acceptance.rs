@@ -8,10 +8,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_direct_contact_branch_delete_acceptance <source> <output>".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    document.edit_iec_ld_branch_segment(3, 7, 17, 18, 3, true, false)?;
+    document
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(7, 17, 18, 3, true, false)
+        })?;
     fs::write(output, document.to_bytes()?)?;
     let parsed = XgwxDocument::from_path(output)?;
-    let program = parsed.ladder_programs().remove(3)?;
+    let program = parsed.program().ladder_programs().remove(3)?;
     let row = program
         .iec_row_frames()
         .ok_or("row framing failed")?

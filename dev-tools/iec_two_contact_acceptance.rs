@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut document = XgwxDocument::from_path(source)?;
     let program = document
+        .program()
         .ladder_programs()
         .into_iter()
         .next()
@@ -25,9 +26,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|site| site.row_index == 2 && site.start_x == 4 && site.end_x == 91)
         .ok_or("program 0 L2 long wire not found")?;
-    document.insert_iec_ld_contact(0, wire.wire_offset, 25, 4, 91, "NO", "ON")?;
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_contact(wire.wire_offset, 25, 4, 91, "NO", "ON")
+        })?;
 
     let program = document
+        .program()
         .ladder_programs()
         .into_iter()
         .next()
@@ -38,9 +47,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|site| site.row_index == 2 && site.start_x == 28 && site.end_x == 91)
         .ok_or("remaining program 0 L2 long wire not found")?;
-    document.insert_iec_ld_contact(0, wire.wire_offset, 49, 28, 91, "NC", "스위치_1")?;
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_contact(
+                wire.wire_offset,
+                49,
+                28,
+                91,
+                "NC",
+                "스위치_1",
+            )
+        })?;
 
     let program = document
+        .program()
         .ladder_programs()
         .into_iter()
         .next()

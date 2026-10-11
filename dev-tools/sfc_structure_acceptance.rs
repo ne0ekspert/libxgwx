@@ -29,8 +29,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         row("jump", "Cycle", false, None),
     ];
     let apply = |doc: &mut XgwxDocument, rows| {
-        let expected = doc.sfc_programs()[0].blocks[0].entities.clone();
-        doc.replace_sfc_sequence(&SfcSequencePatch {
+        let expected = doc.program().sfc_programs()[0].blocks[0].entities.clone();
+        doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
             expected_rows: None,
             program_index: 0,
             block_index: 0,
@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         doc.to_verified_bytes()?,
     )?;
     let mut native = XgwxDocument::from_path("fixtures/sfc/native-action.xgwx")?;
-    let mut rows = native.sfc_programs()[0].blocks[0]
+    let mut rows = native.program().sfc_programs()[0].blocks[0]
         .editable_rows
         .clone()
         .ok_or("native action not editable")?;

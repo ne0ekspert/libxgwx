@@ -18,10 +18,10 @@
 //!     let project = doc.project_info();
 //!
 //!     println!("project: {:?}", project.name);
-//!     println!("programs: {}", doc.programs().len());
-//!     println!("modules: {}", doc.modules().len());
+//!     println!("programs: {}", doc.program().programs().len());
+//!     println!("modules: {}", doc.module_summaries().len());
 //!
-//!     for fenet in doc.fenet_config_infos() {
+//!     for fenet in doc.network().fenet_config_infos() {
 //!         println!(
 //!             "FEnet type={:?} ip={:?}",
 //!             fenet.type_code,
@@ -29,7 +29,7 @@
 //!         );
 //!     }
 //!
-//!     for cnet in doc.cnet_config_infos() {
+//!     for cnet in doc.network().cnet_config_infos() {
 //!         println!("Cnet type={:?} ports={}", cnet.type_code, cnet.ports.len());
 //!     }
 //! }
@@ -41,9 +41,26 @@ mod catalog;
 mod cnet_write;
 #[cfg(feature = "write")]
 pub use cnet_write::{CnetFieldEdit, CnetSettingsPatch};
+mod base_api;
 mod comparison_catalog;
 mod cpu;
 mod document;
+mod document_api;
+pub use base_api::{Base, BaseView};
+mod network_api;
+pub use network_api::NetworkView;
+mod program_api;
+#[cfg(feature = "write")]
+pub use document_api::{ProgramEditor, VariableEditor};
+pub use document_api::{ProgramView, VariableView};
+pub use program_api::ProgramRef;
+#[cfg(feature = "write")]
+pub use program_api::{
+    IecLdEditor, LadderEditor, Program, ProgramVariableEditor, ProgramVariablePatch, SfcEditor,
+    SfcEntityEdit, SfcSequenceEdit, TextEditor, TextSourcePatch,
+};
+#[cfg(all(feature = "write", feature = "il"))]
+pub use program_api::{VendorIlEditor, VendorIlSourcePatch};
 mod sfc;
 mod text_program;
 pub use sfc::{
@@ -105,6 +122,11 @@ mod ladder_records;
 mod ladder_write;
 mod mnemonic;
 mod model;
+mod modules;
+pub use modules::{
+    ConfigurationMatch, HardwareModule, IOKind, IOModule, Module, NetworkConfiguration,
+    NetworkModule,
+};
 #[cfg(feature = "write")]
 mod program_create;
 #[cfg(feature = "write")]

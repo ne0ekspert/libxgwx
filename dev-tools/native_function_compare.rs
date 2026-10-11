@@ -9,10 +9,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let old_document = XgwxDocument::from_path(before)?;
     let new_document = XgwxDocument::from_path(after)?;
     let old_locals = old_document
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     let new_locals = new_document
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
@@ -23,8 +25,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         "local symbols: {} program tables match exactly",
         old_locals.len()
     );
-    let old = old_document.ladder_programs();
-    let new = new_document.ladder_programs();
+    let old = old_document.program().ladder_programs();
+    let new = new_document.program().ladder_programs();
     if old.len() != new.len() {
         return Err("program count changed".into());
     }

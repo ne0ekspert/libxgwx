@@ -4,6 +4,7 @@ use xgwx::XgwxDocument;
 
 fn payloads(document: &XgwxDocument) -> Result<Vec<Vec<u8>>, xgwx::XgwxError> {
     document
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|program| program.data))
@@ -18,6 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let original_bytes = fs::read(source)?;
     let mut document = XgwxDocument::parse(&original_bytes)?;
     let source_group = document
+        .program()
         .ladder_programs()
         .remove(5)?
         .iec_row_frames()
@@ -26,7 +28,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .find(|row| row.row_index == 4)
         .ok_or("program 5 L4 missing")?
         .group_index;
-    document.copy_iec_ld_group_to_program(5, source_group, 4, 6, 8)?;
+    document
+        .program_mut()
+        .get(5)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .copy_group_to_program(source_group, 4, 6, 8)
+        })?;
     fs::write(output, document.to_bytes()?)?;
 
     let original = XgwxDocument::parse(&original_bytes)?;
@@ -41,6 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("cross-program copy changed a program other than its destination".into());
     }
     let copied_row = document
+        .program()
         .ladder_programs()
         .remove(6)?
         .iec_row_frames()
@@ -48,7 +58,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|row| row.row_index == 8)
         .ok_or("copied L8 missing")?;
-    document.delete_iec_ld_group(6, copied_row.group_index, 8)?;
+    document
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_group(copied_row.group_index, 8)
+        })?;
     if payloads(&document)? != original_payloads {
         return Err("deleting the copied network did not restore every program payload".into());
     }

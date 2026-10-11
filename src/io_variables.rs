@@ -15,20 +15,34 @@ struct IoSpec {
 #[path = "io_variable_data.rs"]
 mod data;
 
+/// One proposed XGK digital I/O symbol from the guarded generation plan.
+/// A preview describes whether the writer will create, overwrite, or retain a symbol
+/// without modifying the document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 pub struct IoVariableGenerationRow {
+    /// Current rack/base number owning the digital module.
     pub base: u32,
+    /// Current module slot within the rack/base.
     pub slot: u32,
+    /// Catalog model name of the supported digital I/O module.
     pub model: String,
+    /// Generated symbol name derived from base, slot, and I/O point.
     pub name: String,
+    /// Formatted XGK P-area bit address.
     pub address: String,
+    /// Numeric P-area bit address used by the symbol record.
     pub address_number: u32,
+    /// Generated native symbol type; currently `BIT`.
     pub data_type: String,
+    /// Description supplied by the validated I/O point template.
     pub description: String,
+    /// Generation identity in the form `IO:base:slot:bit:direction`.
     pub source_ref: String,
+    /// Planned action: `create`, `overwrite`, or `unchanged`.
     pub action: String,
+    /// Existing symbol names selected by name, source reference, or overlapping address.
     pub existing_names: Vec<String>,
     pub(crate) duplicate_indices: Vec<usize>,
 }
@@ -59,7 +73,7 @@ pub(crate) fn plan(doc: &XgwxDocument) -> Result<Vec<IoVariableGenerationRow>, X
             "I/O variable generation requires variable point allocation",
         ));
     }
-    let modules = doc.modules();
+    let modules = doc.module_summaries();
     let mut positions = HashMap::new();
     for module in &modules {
         let key = module
@@ -71,7 +85,7 @@ pub(crate) fn plan(doc: &XgwxDocument) -> Result<Vec<IoVariableGenerationRow>, X
         }
     }
     let existing = doc.variables()?;
-    let mut bases = doc.bases();
+    let mut bases = doc.base_summaries();
     bases.sort_by_key(|b| b.base);
     let mut seen_bases = HashSet::new();
     let mut address = 0u32;
@@ -170,7 +184,7 @@ pub(crate) fn plan(doc: &XgwxDocument) -> Result<Vec<IoVariableGenerationRow>, X
         !seen_bases.contains(&m.base.unwrap_or(u32::MAX))
             || m.slot
                 .zip(
-                    doc.bases()
+                    doc.base_summaries()
                         .iter()
                         .find(|b| b.base == m.base)
                         .and_then(|b| b.slot_count),

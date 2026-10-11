@@ -55,7 +55,7 @@ fn refill(
     block: &IecFunctionBlock,
     args: &[String],
 ) -> Result<(), XgwxError> {
-    let program = doc.ladder_programs().remove(p)?;
+    let program = doc.program().ladder_programs().remove(p)?;
     let at = |row, x| row == block.row_index && x == block.raw_x;
     if block.name.value == "MOVE" && args.len() == 2 {
         if let Some(site) = program
@@ -64,7 +64,13 @@ fn refill(
             .into_iter()
             .find(|s| at(s.row_index, s.raw_x))
         {
-            return doc.insert_iec_ld_terminal_move(p, site.contact_offset, &args[0], &args[1]);
+            return doc.program_mut().get(p).and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_terminal_move(
+                    site.contact_offset,
+                    &args[0],
+                    &args[1],
+                )
+            });
         }
     }
     if block.name.value == "WORD_TO_UDINT" && args.len() == 2 {
@@ -74,13 +80,14 @@ fn refill(
             .into_iter()
             .find(|s| at(s.row_index, s.raw_x))
         {
-            return doc.insert_iec_ld_standalone_function(
-                p,
-                site.insertion_offset,
-                &block.name.value,
-                &args[0],
-                &args[1],
-            );
+            return doc.program_mut().get(p).and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_standalone_function(
+                    site.insertion_offset,
+                    &block.name.value,
+                    &args[0],
+                    &args[1],
+                )
+            });
         }
     }
     if let Some(instance) = &block.instance {
@@ -90,12 +97,13 @@ fn refill(
             .into_iter()
             .find(|s| at(s.row_index, s.raw_x) && s.function_name == block.name.value)
         {
-            return doc.insert_iec_ld_function_cell(
-                p,
-                site.insertion_offset,
-                &block.name.value,
-                &instance.value,
-            );
+            return doc.program_mut().get(p).and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_function_cell(
+                    site.insertion_offset,
+                    &block.name.value,
+                    &instance.value,
+                )
+            });
         }
     }
     if block.name.value == "TON" && args.len() == 3 {
@@ -105,16 +113,24 @@ fn refill(
             .into_iter()
             .find(|s| at(s.row_index, s.raw_x))
         {
-            return doc.insert_iec_ld_terminal_timer(
-                p,
-                site.contact_offset,
-                &args[0],
-                &args[1],
-                &args[2],
-            );
+            return doc.program_mut().get(p).and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_terminal_timer(
+                    site.contact_offset,
+                    &args[0],
+                    &args[1],
+                    &args[2],
+                )
+            });
         }
     }
-    doc.insert_iec_ld_function(p, block.row_index, block.raw_x, &block.name.value, args)
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program.iec_ld()?.insert_function(
+            block.row_index,
+            block.raw_x,
+            &block.name.value,
+            args,
+        )
+    })
 }
 fn main() -> Result<(), Box<dyn Error>> {
     let source = env::args()
@@ -151,60 +167,138 @@ fn main() -> Result<(), Box<dyn Error>> {
         .transpose()?;
     let doc = XgwxDocument::from_path(source)?;
     let original_payloads = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|p| p.map(|p| p.data))
         .collect::<Result<Vec<_>, _>>()?;
     let writers: &[(&str, Delete)] = &[
-        ("branch_scalar", XgwxDocument::delete_iec_ld_branch_function),
-        (
-            "scalar_chain",
-            XgwxDocument::delete_iec_ld_scalar_chain_function,
-        ),
-        (
-            "branched_arithmetic",
-            XgwxDocument::delete_iec_ld_branched_arithmetic,
-        ),
-        (
-            "terminal_function",
-            XgwxDocument::delete_iec_ld_terminal_function,
-        ),
-        (
-            "standalone_function",
-            XgwxDocument::delete_iec_ld_standalone_function,
-        ),
-        ("function_cell", XgwxDocument::delete_iec_ld_function_cell),
-        (
-            "connected_arithmetic",
-            XgwxDocument::delete_iec_ld_connected_arithmetic,
-        ),
-        ("eq_chain_head", XgwxDocument::delete_iec_ld_eq_chain_head),
-        (
-            "heating_chain_head",
-            XgwxDocument::delete_iec_ld_heating_chain_head,
-        ),
-        (
-            "heating_chain_middle",
-            XgwxDocument::delete_iec_ld_heating_chain_middle,
-        ),
+        ("branch_scalar", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_branch_function(offset, name)
+                })
+        }),
+        ("scalar_chain", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_scalar_chain_function(offset, name)
+                })
+        }),
+        ("branched_arithmetic", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_branched_arithmetic(offset, name)
+                })
+        }),
+        ("terminal_function", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_terminal_function(offset, name)
+                })
+        }),
+        ("standalone_function", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_standalone_function(offset, name)
+                })
+        }),
+        ("function_cell", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_function_cell(offset, name)
+                })
+        }),
+        ("connected_arithmetic", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_connected_arithmetic(offset, name)
+                })
+        }),
+        ("eq_chain_head", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_eq_chain_head(offset, name)
+                })
+        }),
+        ("heating_chain_head", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_head(offset, name)
+                })
+        }),
+        ("heating_chain_middle", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_middle(offset, name)
+                })
+        }),
         (
             "heating_chain_x3_eq_repaired",
-            XgwxDocument::delete_iec_ld_heating_chain_x3_eq_repaired,
+            |doc, program, offset, name| {
+                doc.program_mut()
+                    .get(program)
+                    .and_then(|mut selected_program| {
+                        selected_program
+                            .iec_ld()?
+                            .delete_heating_chain_x3_eq_repaired(offset, name)
+                    })
+            },
         ),
-        (
-            "heating_chain_contact_eq",
-            XgwxDocument::delete_iec_ld_heating_chain_contact_eq,
-        ),
-        (
-            "heating_chain_x15_eq",
-            XgwxDocument::delete_iec_ld_heating_chain_x15_eq,
-        ),
+        ("heating_chain_contact_eq", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_contact_eq(offset, name)
+                })
+        }),
+        ("heating_chain_x15_eq", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_x15_eq(offset, name)
+                })
+        }),
     ];
     let mut total = 0;
     let mut accepted = 0;
     let mut refilled = 0;
     let mut exact = 0;
-    for (p, program) in doc.ladder_programs().into_iter().enumerate() {
+    for (p, program) in doc.program().ladder_programs().into_iter().enumerate() {
         let program = program?;
         if program.project_type != Some(2) {
             continue;
@@ -259,6 +353,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 )?;
                             }
                             let payloads = deleted
+                                .program()
                                 .ladder_programs()
                                 .into_iter()
                                 .map(|p| p.map(|p| p.data))

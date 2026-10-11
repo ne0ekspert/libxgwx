@@ -4,40 +4,64 @@ mod branches;
 mod declarations;
 pub use declarations::{SfcArrayBound, SfcDeclaration};
 
+/// Decoded native SFC charts and declarations for one document program.
+/// This is an owned inspection snapshot; edit the document through its selected program handle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 pub struct SfcProgram {
+    /// Zero-based program index in document order.
     pub program_index: usize,
+    /// Native SFC blocks in document order.
     pub blocks: Vec<SfcBlock>,
+    /// Decoded local declarations, including system records.
     pub variables: Vec<SfcVariable>,
+    /// Declaration decoding failure, if any; the program body can still be inspected.
     pub variables_error: Option<String>,
 }
 
+/// One native SFC block, preserving its grid metadata and all entity properties.
+/// `editable_rows` is available only when the chart matches a supported editing layout.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 pub struct SfcBlock {
+    /// Zero-based block index within the selected SFC program.
     pub block_index: usize,
+    /// Native block name from the stored `PragramName` attribute.
     pub name: String,
+    /// Whether the native MainBlock flag selects this as the main chart.
     pub main: bool,
+    /// Native LanguageType value, or `None` if absent or invalid.
     pub language_type: Option<u32>,
+    /// Native Language value, or `None` if absent or invalid.
     pub language: Option<u32>,
+    /// Stored grid RowSize; zero when no valid row size is present.
     pub rows: u32,
+    /// Stored grid ColSize; zero when no valid column size is present.
     pub columns: u32,
+    /// All stored grid entities in document order.
     pub entities: Vec<SfcEntity>,
+    /// Supported editable chart projection; `None` for unrecognized layouts.
     pub editable_rows: Option<Vec<SfcRow>>,
 }
 
+/// One SFC grid entity with its native type, position, and raw property attributes.
+/// Unknown entity types and properties are retained for inspection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 pub struct SfcEntity {
+    /// Zero-based entity index within the selected SFC block.
     pub entity_index: usize,
+    /// Native Type code, retained even for unknown entity kinds.
     pub type_code: Option<u32>,
+    /// Native Row coordinate, or `None` if absent or invalid.
     pub row: Option<u32>,
+    /// Native Col coordinate, or `None` if absent or invalid.
     pub column: Option<u32>,
+    /// Property element name to its preserved XML attribute names and values.
     pub properties: BTreeMap<String, BTreeMap<String, String>>,
 }
 
@@ -48,7 +72,7 @@ fn number(node: &XmlElement, key: &str) -> Option<u32> {
 impl XgwxDocument {
     /// Read native SFC XML independently of binary ladder program bodies.
     /// Unknown entity kinds and property attributes remain available to callers.
-    pub fn sfc_programs(&self) -> Vec<SfcProgram> {
+    pub(crate) fn sfc_programs(&self) -> Vec<SfcProgram> {
         self.root
             .descendants_named("Program")
             .enumerate()
@@ -136,19 +160,31 @@ impl XgwxDocument {
     }
 }
 
+/// Indexed SFC entity edit for native C/WASM adapters and collection dispatch.
+/// Expected type, position, and value checks reject stale selections.
+/// For a selected SFC editor, use [`crate::SfcEntityEdit`] without a program index.
 #[cfg(feature = "write")]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct SfcEntityPatch {
+    /// Zero-based program index in document order.
     pub program_index: usize,
+    /// Zero-based block index within the selected SFC program.
     pub block_index: usize,
+    /// Zero-based entity index within the selected SFC block.
     pub entity_index: usize,
+    /// Previously read native entity type code.
     pub expected_type: u32,
+    /// Previously read native entity row coordinate.
     pub expected_row: u32,
+    /// Previously read native entity column coordinate.
     pub expected_column: u32,
+    /// Supported entity property field name for the bounded SFC writer.
     pub field: String,
+    /// Previously read field value that must still match before replacement.
     pub expected_value: String,
+    /// Replacement value for the selected field.
     pub replacement: String,
 }
 
@@ -156,7 +192,10 @@ pub struct SfcEntityPatch {
 impl XgwxDocument {
     /// Edit captured SFC step comments or direct BOOL M transitions.
     /// Identity and old-value checks reject stale selections; all other XML is preserved.
-    pub fn edit_sfc_entity(&mut self, patch: &SfcEntityPatch) -> Result<(), crate::XgwxError> {
+    pub(crate) fn edit_sfc_entity(
+        &mut self,
+        patch: &SfcEntityPatch,
+    ) -> Result<(), crate::XgwxError> {
         use crate::XgwxError;
         let fail = |message: &str| XgwxError::SfcEdit(message.to_owned());
         if patch.replacement.len() > 65536 {
@@ -276,36 +315,47 @@ impl XgwxDocument {
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct SfcRow {
+    /// Supported chart row kind, such as `step`, `transition`, or a branch boundary.
     pub kind: String,
+    /// Step name, transition expression/name, label, or jump target for this row.
     pub title: String,
+    /// Stored step or transition annotation.
     pub comment: String,
+    /// Whether a step is an initial step.
     pub initial: bool,
+    /// Step action name or direct BOOL operand, when present.
     pub action: Option<String>,
+    /// Native action qualifier, such as `N`, `S`, or `R`, when explicitly stored.
     #[cfg_attr(
         feature = "wasm",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub action_qualifier: Option<String>,
+    /// Native time expression for an action qualifier requiring a duration.
     #[cfg_attr(
         feature = "wasm",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub action_time: Option<String>,
+    /// ST source belonging to the named action, when decoded.
     #[cfg_attr(
         feature = "wasm",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub action_code: Option<String>,
+    /// ST source belonging to the named transition, when decoded.
     #[cfg_attr(
         feature = "wasm",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub transition_code: Option<String>,
+    /// Native grid position; absent for newly constructed linear rows.
     #[cfg_attr(
         feature = "wasm",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub position: Option<SfcPosition>,
+    /// Ending column of a branch boundary, when the row represents one.
     #[cfg_attr(
         feature = "wasm",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -313,11 +363,14 @@ pub struct SfcRow {
     pub branch_end: Option<u32>,
 }
 
+/// Native row and column coordinates of an SFC chart entity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct SfcPosition {
+    /// Native SFC grid row coordinate.
     pub row: u32,
+    /// Native SFC grid column coordinate.
     pub column: u32,
 }
 
@@ -739,15 +792,22 @@ fn validate_rows(
     Ok(())
 }
 
+/// Indexed, guarded replacement of an SFC chart for native C/WASM adapters.
+/// For a selected SFC editor, use [`crate::SfcSequenceEdit`] without a program index.
 #[cfg(feature = "write")]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct SfcSequencePatch {
+    /// Zero-based program index in document order.
     pub program_index: usize,
+    /// Zero-based block index within the selected SFC program.
     pub block_index: usize,
+    /// Previously read entity list that must still match the chart.
     pub expected_entities: Vec<SfcEntity>,
+    /// Replacement editable chart rows, in chart order.
     pub rows: Vec<SfcRow>,
+    /// Previously read editable rows, or `None` when no editable row projection was available.
     #[cfg_attr(feature = "wasm", serde(default))]
     pub expected_rows: Option<Vec<SfcRow>>,
 }
@@ -755,7 +815,7 @@ pub struct SfcSequencePatch {
 #[cfg(feature = "write")]
 impl XgwxDocument {
     /// Replace a captured linear chart atomically, retaining program identities and local symbols.
-    pub fn replace_sfc_sequence(
+    pub(crate) fn replace_sfc_sequence(
         &mut self,
         patch: &SfcSequencePatch,
     ) -> Result<(), crate::XgwxError> {
@@ -1189,14 +1249,21 @@ fn st_block_xml(name: &str, kind: u32, source: &str) -> String {
     )
 }
 
+/// Decoded program-local declaration used by native SFC and standalone ST/IL.
+/// System records remain visible, but cannot be edited as ordinary declarations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct SfcVariable {
+    /// Name of the declaration or symbol.
     pub name: String,
+    /// Native declaration type name, such as `BOOL`, `DINT`, or a supported instance type.
     pub data_type: String,
+    /// Human-readable declaration or symbol description.
     pub description: String,
+    /// Whether this is one of the preserved native SFC system declarations.
     pub system: bool,
+    /// Advanced declaration metadata (array bounds, initial value, retention), when available.
     #[cfg_attr(
         feature = "wasm",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -1205,7 +1272,7 @@ pub struct SfcVariable {
 }
 impl XgwxDocument {
     /// Decode regular IEC declarations while retaining the two captured SFC system records.
-    pub fn sfc_variables(
+    pub(crate) fn sfc_variables(
         &self,
         program_index: usize,
     ) -> Result<Vec<SfcVariable>, crate::XgwxError> {
@@ -1336,26 +1403,42 @@ impl XgwxDocument {
         Ok(symbols)
     }
 }
+/// Indexed insertion, update, or deletion of a program-local declaration.
+/// The expected declaration list guards against stale edits. `remove` and `update`
+/// are mutually exclusive; when both are false, the writer inserts a declaration.
+/// For a selected program, use [`crate::ProgramVariablePatch`].
 #[cfg(feature = "write")]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct SfcVariablePatch {
+    /// Zero-based program index in document order.
     pub program_index: usize,
+    /// Previously read declaration list, including system records, used to reject stale edits.
     pub expected_variables: Vec<SfcVariable>,
+    /// Name of the declaration or symbol.
     pub name: String,
+    /// Native declaration type name, such as `BOOL`, `DINT`, or a supported instance type.
     pub data_type: String,
+    /// Human-readable declaration or symbol description.
     pub description: String,
+    /// Delete the named ordinary declaration; cannot be combined with `update`.
     pub remove: bool,
+    /// Replacement array bounds, initial value, and retention settings.
+    /// `None` uses default scalar metadata with no initial value or retention.
     #[cfg_attr(feature = "wasm", serde(default))]
     pub declaration: Option<SfcDeclaration>,
+    /// Modify the named existing declaration; false with `remove` false means insertion.
     #[cfg_attr(feature = "wasm", serde(default))]
     pub update: bool,
 }
 #[cfg(feature = "write")]
 impl XgwxDocument {
     /// Insert, update, or remove captured program-local SFC declarations.
-    pub fn edit_sfc_variable(&mut self, patch: &SfcVariablePatch) -> Result<(), crate::XgwxError> {
+    pub(crate) fn edit_sfc_variable(
+        &mut self,
+        patch: &SfcVariablePatch,
+    ) -> Result<(), crate::XgwxError> {
         let fail = |s: &str| crate::XgwxError::SfcEdit(s.into());
         if self.sfc_variables(patch.program_index)? != patch.expected_variables {
             return Err(fail("stale SFC variable table"));

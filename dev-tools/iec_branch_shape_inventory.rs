@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .nth(1)
         .ok_or("usage: iec_branch_shape_inventory SOURCE")?;
     let doc = XgwxDocument::from_path(source)?;
-    for (p, program) in doc.ladder_programs().into_iter().enumerate() {
+    for (p, program) in doc.program().ladder_programs().into_iter().enumerate() {
         let program = program?;
         let rows = program.iec_row_frames().ok_or("invalid rows")?;
         let records = program.iec_record_frames().ok_or("invalid records")?;

@@ -10,7 +10,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut document = XgwxDocument::from_path(source)?;
     let original = document.to_bytes()?;
     if document
-        .copy_iec_ld_group_to_program(2, 1, 1, 4, 26)
+        .program_mut()
+        .get(2)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .copy_group_to_program(1, 1, 4, 26)
+        })
         .is_ok()
         || document.to_bytes()? != original
     {
@@ -18,9 +24,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             "copy without the Unicode UDINT destination local was not rejected atomically".into(),
         );
     }
-    let before_symbols = document.iec_local_symbols().remove(4)?;
-    document.copy_iec_ld_group_to_program_with_locals(2, 1, 1, 4, 26)?;
-    let after_symbols = document.iec_local_symbols().remove(4)?;
+    let before_symbols = document.variable().iec_local_symbols().remove(4)?;
+    document
+        .program_mut()
+        .get(2)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .copy_group_to_program_with_locals(1, 1, 4, 26)
+        })?;
+    let after_symbols = document.variable().iec_local_symbols().remove(4)?;
     let local = after_symbols
         .iter()
         .find(|symbol| symbol.name == "변환")
@@ -32,7 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         return Err(format!("copied Unicode UDINT local is invalid: {local:?}").into());
     }
-    let program = document.ladder_programs().remove(4)?;
+    let program = document.program().ladder_programs().remove(4)?;
     if program.iec_circuit_graph().is_none()
         || !program
             .iec_function_blocks()

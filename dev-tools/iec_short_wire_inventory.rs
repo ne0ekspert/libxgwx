@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .nth(1)
         .ok_or("usage: iec_short_wire_inventory <file.xgwx>")?;
     let doc = XgwxDocument::from_path(path)?;
-    for (program_index, program) in doc.ladder_programs().into_iter().enumerate() {
+    for (program_index, program) in doc.program().ladder_programs().into_iter().enumerate() {
         let program = program?;
         let Some(sites) = program.iec_horizontal_wire_deletion_sites() else {
             continue;

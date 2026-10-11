@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut accepted = 0;
     let mut row_preserving = 0;
     let mut failures = BTreeMap::<String, usize>::new();
-    for (p, program) in document.ladder_programs().into_iter().enumerate() {
+    for (p, program) in document.program().ladder_programs().into_iter().enumerate() {
         let program = program?;
         if program.project_type != Some(2) {
             continue;
@@ -27,15 +27,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             total += 1;
             if document
                 .clone()
-                .edit_iec_ld_vertical_wire(
-                    p,
-                    segment.group_index,
-                    segment.start_row_index,
-                    segment.end_row_index,
-                    segment.x,
-                    true,
-                    false,
-                )
+                .program_mut()
+                .get(p)
+                .and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.edit_vertical_wire(
+                        segment.group_index,
+                        segment.start_row_index,
+                        segment.end_row_index,
+                        segment.x,
+                        true,
+                        false,
+                    )
+                })
                 .is_ok()
             {
                 row_preserving += 1;
@@ -43,15 +46,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             let group = groups.entry(segment.group_index).or_default();
             group.1 += 1;
             let mut candidate = document.clone();
-            match candidate.edit_iec_ld_branch_segment(
-                p,
-                segment.group_index,
-                segment.start_row_index,
-                segment.end_row_index,
-                segment.x,
-                true,
-                false,
-            ) {
+            match candidate
+                .program_mut()
+                .get(p)
+                .and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.edit_branch_segment(
+                        segment.group_index,
+                        segment.start_row_index,
+                        segment.end_row_index,
+                        segment.x,
+                        true,
+                        false,
+                    )
+                }) {
                 Ok(()) => {
                     accepted += 1;
                     group.0 += 1;

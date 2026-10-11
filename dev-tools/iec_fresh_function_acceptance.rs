@@ -11,25 +11,33 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let source = XgwxDocument::from_path(&args[0])?;
     let mut doc = source.clone();
-    let p = doc.ladder_programs().remove(6)?;
+    let p = doc.program().ladder_programs().remove(6)?;
     println!(
         "source rows {}",
         u16::from_le_bytes(p.data[4..6].try_into()?)
     );
-    doc.insert_iec_ld_function(6, 87, 4, "MOVE", &["%MW129".into(), "%MW130".into()])?;
+    doc.program_mut().get(6).and_then(|mut selected_program| {
+        selected_program.iec_ld()?.insert_function(
+            87,
+            4,
+            "MOVE",
+            &["%MW129".into(), "%MW130".into()],
+        )
+    })?;
     doc.write_to(&args[1])?;
     let generated_original = doc.clone();
     let native = XgwxDocument::from_path(&args[2])?;
     for (index, (before, after)) in source
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(doc.ladder_programs())
+        .zip(doc.program().ladder_programs())
         .enumerate()
     {
         let (before, after) = (before?, after?);
         if index == 6 {
             assert_eq!(&before.data[8..], &after.data[8..before.data.len()]);
-            let captured = native.ladder_programs().remove(6)?;
+            let captured = native.program().ladder_programs().remove(6)?;
             let top = captured
                 .iec_row_frames()
                 .ok_or("invalid native rows")?
@@ -45,9 +53,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     for (before, after) in source
+        .variable()
         .iec_local_symbols()
         .into_iter()
-        .zip(doc.iec_local_symbols())
+        .zip(doc.variable().iec_local_symbols())
     {
         assert_eq!(
             before?, after?,
@@ -59,10 +68,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Removing this final group retains every preceding payload byte and
     // every local record. Recreating it must restore the capture exactly.
     let mut doc = native.clone();
-    doc.delete_iec_ld_group(6, 15, 87)?;
-    doc.insert_iec_ld_function(6, 87, 4, "MOVE", &["%MW129".into(), "%MW130".into()])?;
-    let generated = doc.ladder_programs();
-    let captured = native.ladder_programs();
+    doc.program_mut()
+        .get(6)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(15, 87))?;
+    doc.program_mut().get(6).and_then(|mut selected_program| {
+        selected_program.iec_ld()?.insert_function(
+            87,
+            4,
+            "MOVE",
+            &["%MW129".into(), "%MW130".into()],
+        )
+    })?;
+    let generated = doc.program().ladder_programs();
+    let captured = native.program().ladder_programs();
     assert_eq!(generated.len(), captured.len());
     let mut exact = true;
     for (i, (a, b)) in generated.into_iter().zip(captured).enumerate() {
@@ -78,8 +96,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         exact &= differences.is_empty();
     }
-    let a = doc.iec_local_symbols();
-    let b = native.iec_local_symbols();
+    let a = doc.variable().iec_local_symbols();
+    let b = native.variable().iec_local_symbols();
     assert_eq!(a.len(), b.len());
     for (i, (a, b)) in a.into_iter().zip(b).enumerate() {
         assert_eq!(a?, b?, "all local fields including offsets in program {i}");
@@ -91,14 +109,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("PASS all program payloads and all local fields match native Save As");
     if let Some(path) = args.get(3) {
         let saved = XgwxDocument::from_path(path)?;
-        let a = generated_original.ladder_programs();
-        let b = saved.ladder_programs();
+        let a = generated_original.program().ladder_programs();
+        let b = saved.program().ladder_programs();
         assert_eq!(a.len(), b.len());
         for (index, (a, b)) in a.into_iter().zip(b).enumerate() {
             assert_eq!(a?.data, b?.data, "native generated Save As payload {index}");
         }
-        let a = generated_original.iec_local_symbols();
-        let b = saved.iec_local_symbols();
+        let a = generated_original.variable().iec_local_symbols();
+        let b = saved.variable().iec_local_symbols();
         assert_eq!(a.len(), b.len());
         for (index, (a, b)) in a.into_iter().zip(b).enumerate() {
             assert_eq!(

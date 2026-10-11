@@ -10,6 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let p = a[2].parse::<usize>()?;
     let row = a[3].parse::<u16>()?;
     let site = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(p)
@@ -19,7 +20,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|s| s.row_index == row)
         .ok_or("missing insertion site")?;
-    doc.insert_iec_ld_terminal_timer(p, site.contact_offset, &a[4], &a[5], &a[6])?;
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .insert_terminal_timer(site.contact_offset, &a[4], &a[5], &a[6])
+    })?;
     std::fs::write(&a[1], doc.to_bytes()?)?;
     Ok(())
 }

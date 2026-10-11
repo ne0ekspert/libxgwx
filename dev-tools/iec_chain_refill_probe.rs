@@ -14,10 +14,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let p = args[2].parse()?;
     let row: u16 = args[3].parse()?;
     let x = args[4].parse()?;
-    doc.insert_iec_ld_blank_row(p, row + 2)?;
+    doc.program_mut()
+        .get(p)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.insert_blank_row(row + 2))?;
     std::fs::write(&args[1], doc.to_bytes()?)?;
     println!("blank row restored; insertion candidate saved");
-    let result = doc.insert_iec_ld_function(p, row, x, "EQ", &args[5..8]);
+    let result = doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .insert_function(row, x, "EQ", &args[5..8])
+    });
     println!("refill: {result:?}");
     if result.is_ok() {
         std::fs::write(format!("{}.refill.xgwx", args[1]), doc.to_bytes()?)?;

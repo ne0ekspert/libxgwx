@@ -46,14 +46,14 @@ fn operands(program: &LadderProgramData, block: &IecFunctionBlock) -> Option<Vec
 }
 
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    let aa = a.ladder_programs();
-    let bb = b.ladder_programs();
+    let aa = a.program().ladder_programs();
+    let bb = b.program().ladder_programs();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?.data, b?.data, "native payload {i}");
     }
-    let aa = a.iec_local_symbols();
-    let bb = b.iec_local_symbols();
+    let aa = a.variable().iec_local_symbols();
+    let bb = b.variable().iec_local_symbols();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?, b?, "all local fields including offsets {i}");
@@ -62,7 +62,8 @@ fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
 }
 
 fn block(doc: &XgwxDocument, row: u16, x: u8) -> Result<IecFunctionBlock, Box<dyn Error>> {
-    doc.ladder_programs()
+    doc.program()
+        .ladder_programs()
         .remove(0)?
         .iec_function_blocks()
         .ok_or("invalid blocks")?
@@ -76,7 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_open_move_layout_cycle SOURCE DELETED RESTORED [NATIVE_DELETED NATIVE_RESTORED]".into());
     }
     let source = XgwxDocument::from_path(&a[0])?;
-    let program = source.ladder_programs().remove(0)?;
+    let program = source.program().ladder_programs().remove(0)?;
     let open = program
         .iec_circuit_layout()
         .ok_or("invalid source")?
@@ -96,7 +97,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut deleted = source.clone();
     for (row, x, name, _) in &values {
         let b = block(&deleted, *row, *x)?;
-        deleted.delete_iec_ld_scalar_chain_function(0, b.record_offset, name)?;
+        deleted
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_scalar_chain_function(b.record_offset, name)
+            })?;
     }
     let mut moved = open.clone();
     for p in &mut moved {
@@ -105,6 +113,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(
         moved,
         deleted
+            .program()
             .ladder_programs()
             .remove(0)?
             .iec_circuit_layout()
@@ -114,11 +123,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     deleted.write_to(&a[1])?;
     let mut restored = deleted.clone();
     for (row, x, name, args) in &values {
-        restored.insert_iec_ld_function(0, *row, *x, name, args)?;
+        restored
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .insert_function(*row, *x, name, args)
+            })?;
     }
     assert_eq!(
         open,
         restored
+            .program()
             .ladder_programs()
             .remove(0)?
             .iec_circuit_layout()

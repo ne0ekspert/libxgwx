@@ -263,8 +263,8 @@ pub unsafe extern "C" fn xgwx_document_inspect_json(
                 "schema_version": 1,
                 "project": doc.project_info(),
                 "configurations": doc.configurations(),
-                "bases": doc.bases(),
-                "modules": doc.modules(),
+                "bases": doc.base_summaries(),
+                "modules": doc.module_summaries(),
                 "tasks": doc.tasks(),
                 "programs": doc.programs(),
                 "networks": doc.networks(),
@@ -312,7 +312,7 @@ pub unsafe extern "C" fn xgwx_document_list_json(
             buffer_output(out)?;
             let doc = handle(doc)?;
             let items = match list {
-                XGWX_LIST_MODULES => serde_json::to_value(doc.modules()),
+                XGWX_LIST_MODULES => serde_json::to_value(doc.module_summaries()),
                 XGWX_LIST_NETWORKS => serde_json::to_value(doc.networks()),
                 XGWX_LIST_PROGRAMS => serde_json::to_value(doc.programs()),
                 XGWX_LIST_VARIABLES => serde_json::to_value(doc.variables().map_err(operation)?),

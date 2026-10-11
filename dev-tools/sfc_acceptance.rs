@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (2, 2, "condition", "%MX0", "%MX2"),
         (3, 3, "comment", "Ready for cycle", "Cycle active & ready"),
     ] {
-        doc.edit_sfc_entity(&SfcEntityPatch {
+        doc.program_mut().edit_sfc_entity(&SfcEntityPatch {
             program_index: 0,
             block_index: 0,
             entity_index,

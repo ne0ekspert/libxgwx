@@ -3,17 +3,28 @@
 use crate::XgwxError;
 use crate::{XgwxDocument, XmlElement};
 
+/// Owned snapshot of a standalone ST or IEC IL program and its declarations.
+/// Source can be inspected even when the layout is unsupported for editing;
+/// check `editable` and `reason` before offering changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 pub struct TextProgram {
+    /// Zero-based program index in document order.
     pub program_index: usize,
+    /// Native program ObjectId preserved as its identity.
     pub object_id: String,
+    /// Standalone source language, `ST` or `IL`.
     pub language: String,
+    /// Decoded standalone source; `None` when its payload cannot be decoded.
     pub source: Option<String>,
+    /// Whether the captured layout and metadata permit the corresponding guarded writer.
     pub editable: bool,
+    /// Explanation of why editing is unavailable; `None` when editing is supported.
     pub reason: Option<String>,
+    /// Decoded local declarations, including preserved system records.
     pub variables: Vec<crate::SfcVariable>,
+    /// Declaration decoding failure, if any; the program body can still be inspected.
     pub variables_error: Option<String>,
 }
 
@@ -44,7 +55,7 @@ fn source(body: &XmlElement) -> Option<String> {
 
 impl XgwxDocument {
     /// Read standalone source. Unknown layouts remain visible but cannot be written.
-    pub fn text_programs(&self) -> Vec<TextProgram> {
+    pub(crate) fn text_programs(&self) -> Vec<TextProgram> {
         let configurations = self.configurations();
         let supported = configurations.len() == 1
             && configurations[0]
@@ -65,22 +76,30 @@ impl XgwxDocument {
     }
 }
 
+/// Indexed standalone ST/IL source replacement for native C/WASM adapters.
+/// Identity, language, and old-source checks must all match before writing.
+/// For a selected text editor, use [`crate::TextSourcePatch`].
 #[cfg(feature = "write")]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct TextProgramPatch {
+    /// Zero-based program index in document order.
     pub program_index: usize,
+    /// Previously read program ObjectId that must still identify the selected program.
     pub expected_object_id: String,
+    /// Previously read standalone language, `ST` or `IL`, that must still match.
     pub expected_language: String,
+    /// Exact previously read source, including line endings, used to reject stale edits.
     pub expected_source: String,
+    /// Replacement source text; line endings are part of the stored value.
     pub source: String,
 }
 
 #[cfg(feature = "write")]
 impl XgwxDocument {
     /// Replace only the native source payload, with identity and stale-source checks.
-    pub fn edit_text_program(&mut self, patch: &TextProgramPatch) -> Result<(), XgwxError> {
+    pub(crate) fn edit_text_program(&mut self, patch: &TextProgramPatch) -> Result<(), XgwxError> {
         use base64::Engine;
         use std::io::Write;
         let fail = |reason: &str| XgwxError::TextProgramEdit(reason.into());
@@ -154,7 +173,7 @@ impl XgwxDocument {
 #[cfg(feature = "write")]
 impl XgwxDocument {
     /// Edit regular source-program declarations using the captured IEC PB50 encoder.
-    pub fn edit_text_variable(
+    pub(crate) fn edit_text_variable(
         &mut self,
         expected_object_id: &str,
         patch: &crate::SfcVariablePatch,

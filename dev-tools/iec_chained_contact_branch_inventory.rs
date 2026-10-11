@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .nth(1)
         .ok_or("usage: iec_chained_contact_branch_inventory SOURCE")?;
     let document = XgwxDocument::from_path(source)?;
-    for (program_index, result) in document.ladder_programs().into_iter().enumerate() {
+    for (program_index, result) in document.program().ladder_programs().into_iter().enumerate() {
         let program = result?;
         let rows = program.iec_row_frames().ok_or("invalid IEC rows")?;
         let mut contact_count = 0;
@@ -15,11 +15,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         for row in rows {
             let mut trial = document.clone();
             if trial
-                .delete_iec_ld_chained_contact_branch_row(
-                    program_index,
-                    row.group_index,
-                    row.row_index,
-                )
+                .program_mut()
+                .get(program_index)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_chained_contact_branch_row(row.group_index, row.row_index)
+                })
                 .is_ok()
             {
                 println!(
@@ -30,7 +32,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             let mut trial = document.clone();
             if trial
-                .delete_iec_ld_empty_branch_row(program_index, row.group_index, row.row_index)
+                .program_mut()
+                .get(program_index)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_empty_branch_row(row.group_index, row.row_index)
+                })
                 .is_ok()
             {
                 println!(

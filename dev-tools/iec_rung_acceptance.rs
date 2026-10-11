@@ -36,18 +36,22 @@ fn generate_kind(
     coil: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.insert_iec_ld_rung(
-        program_index,
-        row_index,
-        contact_kind,
-        contact,
-        coil_kind,
-        coil,
-    )?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_rung(
+                row_index,
+                contact_kind,
+                contact,
+                coil_kind,
+                coil,
+            )
+        })?;
     document.write_to(output)?;
 
     let reparsed = XgwxDocument::from_path(output)?;
-    let programs = reparsed.ladder_programs();
+    let programs = reparsed.program().ladder_programs();
     let program = programs[program_index]
         .as_ref()
         .map_err(|error| error.to_string())?;
@@ -91,8 +95,8 @@ fn generate_kind(
 fn verify(generated: &Path, resaved: &Path) -> Result<()> {
     let generated = XgwxDocument::from_path(generated)?;
     let resaved = XgwxDocument::from_path(resaved)?;
-    let generated_programs = generated.ladder_programs();
-    let resaved_programs = resaved.ladder_programs();
+    let generated_programs = generated.program().ladder_programs();
+    let resaved_programs = resaved.program().ladder_programs();
     let program_count = generated_programs.len();
     if generated_programs.len() != resaved_programs.len() {
         return Err("program count changed during Save As".into());
@@ -107,10 +111,12 @@ fn verify(generated: &Path, resaved: &Path) -> Result<()> {
         }
     }
     let generated_symbols = generated
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let resaved_symbols = resaved
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -128,15 +134,14 @@ fn main() -> Result<()> {
     match args.as_slice() {
         [command, source, output] if command == "append-all" => {
             let mut document = XgwxDocument::from_path(source)?;
-            let targets = document.ladder_programs().into_iter().enumerate()
+            let targets = document.program().ladder_programs().into_iter().enumerate()
                 .map(|(index, program)| {
                     let program = program?;
                     let rows = program.iec_row_frames().ok_or("IEC row framing failed")?;
                     Ok((index, rows.last().ok_or("empty IEC program")?.row_index + 1))
                 }).collect::<Result<Vec<_>>>()?;
             for (index, row) in targets {
-                document.insert_iec_ld_rung(index, row, "NO", &format!("%MX{}", 1000 + index * 2),
-                    "OUTPUT", &format!("%MX{}", 1001 + index * 2))?;
+                document.program_mut().get(index).and_then(|mut selected_program| selected_program.iec_ld()?.insert_rung(row, "NO", &format!("%MX{}", 1000 + index * 2), "OUTPUT", &format!("%MX{}", 1001 + index * 2)))?;
                 println!("PASS appended program {index} L{row}");
             }
             document.write_to(output)?;
@@ -179,20 +184,13 @@ fn main() -> Result<()> {
             if command == "delete-row" =>
         {
             let mut document = XgwxDocument::from_path(source)?;
-            document.delete_iec_ld_simple_row(
-                program.parse()?,
-                row.parse()?,
-                contact_kind,
-                contact,
-                coil_kind,
-                coil,
-            )?;
+            document.program_mut().get(program.parse()?)?.iec_ld()?.delete_simple_row(row.parse()?, contact_kind, contact, coil_kind, coil)?;
             document.write_to(output)?;
             Ok(())
         }
         [command, source, output, program, group, row] if command == "delete-branch-top-row" => {
             let mut document = XgwxDocument::from_path(source)?;
-            document.delete_iec_ld_branch_top_row(program.parse()?, group.parse()?, row.parse()?)?;
+            document.program_mut().get(program.parse()?)?.iec_ld()?.delete_branch_top_row(group.parse()?, row.parse()?)?;
             document.write_to(output)?;
             Ok(())
         }

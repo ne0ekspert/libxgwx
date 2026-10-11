@@ -7,9 +7,13 @@ use std::collections::HashSet;
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct CnetFieldEdit {
+    /// Zero-based serial-port index in native configuration order.
     pub port_index: usize,
+    /// Supported native port-setting field name.
     pub field: String,
+    /// Previously read field value that must still match before replacement.
     pub expected_value: String,
+    /// Replacement value for the selected field.
     pub replacement: String,
 }
 
@@ -18,8 +22,11 @@ pub struct CnetFieldEdit {
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct CnetSettingsPatch {
+    /// Current base number of the Cnet network module.
     pub base: u32,
+    /// Current slot number of the Cnet network module.
     pub slot: u32,
+    /// Field changes validated and applied together as one transaction.
     pub changes: Vec<CnetFieldEdit>,
 }
 

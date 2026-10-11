@@ -53,50 +53,64 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
     ] {
         let mut document = source.clone();
-        document.edit_ladder_cell(
-            0,
-            &LadderCellEdit {
-                raw_y,
-                column,
-                expected,
-                replacement,
-            },
-        )?;
+        document
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.ladder()?.edit_cell(&LadderCellEdit {
+                    raw_y,
+                    column,
+                    expected,
+                    replacement,
+                })
+            })?;
         document.write_to(path.join(format!("{name}.XGWX")))?;
     }
     let mut branch = XgwxDocument::from_path("fixtures/ladder-edit/linear.xgwx")?;
-    branch.insert_ladder_row(0, 4)?;
-    branch.edit_ladder_branch(
-        0,
-        &LadderBranchEdit {
-            raw_y: 0,
-            boundary: 1,
-            expected: false,
-            present: true,
-        },
-    )?;
-    branch.edit_ladder_cell(
-        0,
-        &LadderCellEdit {
-            raw_y: 4,
-            column: 0,
-            expected: None,
-            replacement: element(LadderEditKind::NormallyOpen, "M00002"),
-        },
-    )?;
+    branch
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| selected_program.ladder()?.insert_row(4))?;
+    branch
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.ladder()?.edit_branch(&LadderBranchEdit {
+                raw_y: 0,
+                boundary: 1,
+                expected: false,
+                present: true,
+            })
+        })?;
+    branch
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.ladder()?.edit_cell(&LadderCellEdit {
+                raw_y: 4,
+                column: 0,
+                expected: None,
+                replacement: element(LadderEditKind::NormallyOpen, "M00002"),
+            })
+        })?;
     branch.write_to(path.join("E05.XGWX"))?;
     let mut removed = branch.clone();
-    removed.edit_ladder_branch(
-        0,
-        &LadderBranchEdit {
-            raw_y: 0,
-            boundary: 1,
-            expected: true,
-            present: false,
-        },
-    )?;
+    removed
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.ladder()?.edit_branch(&LadderBranchEdit {
+                raw_y: 0,
+                boundary: 1,
+                expected: true,
+                present: false,
+            })
+        })?;
     removed.write_to(path.join("E06.XGWX"))?;
-    branch.insert_ladder_row(0, 4)?;
+    branch
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| selected_program.ladder()?.insert_row(4))?;
     branch.write_to(path.join("E07.XGWX"))?;
     println!("Generated E00 through E08 in {}", path.display());
     Ok(())

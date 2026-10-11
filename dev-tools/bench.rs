@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let doc = XgwxDocument::parse(&fixture.bytes)?;
         let ladder = run_iterations(config.iterations, || {
-            black_box(doc.ladder_programs());
+            black_box(doc.program().ladder_programs());
             Ok(())
         })?;
 
@@ -102,8 +102,8 @@ fn run_iterations(
 fn decode_all(bytes: &[u8]) -> Result<usize, Box<dyn Error>> {
     let doc = XgwxDocument::parse(bytes)?;
     let project = doc.project_info();
-    let variables = doc.variables()?;
-    let ladder = doc.ladder_programs();
+    let variables = doc.variable().variables()?;
+    let ladder = doc.program().ladder_programs();
     let decoded_payloads = doc.decoded_payloads();
     let hsc_parameters = doc.hsc_parameters();
 
@@ -111,10 +111,10 @@ fn decode_all(bytes: &[u8]) -> Result<usize, Box<dyn Error>> {
         + doc.configurations().len()
         + doc.networks().len()
         + doc.network_modules().len()
-        + doc.bases().len()
-        + doc.modules().len()
-        + doc.tasks().len()
-        + doc.programs().len()
+        + doc.base_summaries().len()
+        + doc.module_summaries().len()
+        + doc.program().tasks().len()
+        + doc.program().programs().len()
         + variables.len()
         + ladder.iter().filter(|item| item.is_ok()).count()
         + decoded_payloads.iter().filter(|item| item.is_ok()).count()
@@ -129,8 +129,8 @@ fn decode_all(bytes: &[u8]) -> Result<usize, Box<dyn Error>> {
         + doc.safety_comm().map_or(0, |_| 1)
         + doc.trend_monitoring().map_or(0, |_| 1)
         + doc.xgpd_config_infos().len()
-        + doc.cnet_config_infos().len()
-        + doc.fenet_config_infos().len()
+        + doc.network().cnet_config_infos().len()
+        + doc.network().fenet_config_infos().len()
         + doc.properties().len();
 
     Ok(checksum)

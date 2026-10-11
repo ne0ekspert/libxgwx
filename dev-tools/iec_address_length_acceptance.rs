@@ -9,26 +9,33 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let original = fs::read(source)?;
     let mut document = XgwxDocument::parse(&original)?;
-    document.update_iec_local_symbol_address(0, 5, "ON", "%MX8", "%MX100")?;
+    document
+        .variable_mut()
+        .update_iec_local_symbol_address(0, 5, "ON", "%MX8", "%MX100")?;
     let edited = document.to_bytes()?;
     let mut restored = XgwxDocument::parse(&edited)?;
-    restored.update_iec_local_symbol_address(0, 5, "ON", "%MX100", "%MX8")?;
+    restored
+        .variable_mut()
+        .update_iec_local_symbol_address(0, 5, "ON", "%MX100", "%MX8")?;
     let reparsed = XgwxDocument::parse(&restored.to_bytes()?)?;
     let original_document = XgwxDocument::parse(&original)?;
     for (left, right) in reparsed
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(original_document.ladder_programs())
+        .zip(original_document.program().ladder_programs())
     {
         if left?.data != right?.data {
             return Err("inverse changed a ProgramData payload".into());
         }
     }
     let restored_symbols = reparsed
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     let original_symbols = original_document
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;

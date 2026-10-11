@@ -9,10 +9,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let document = XgwxDocument::from_path(source)?;
     let programs = document
+        .program()
         .ladder_programs()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     let locals = document
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;

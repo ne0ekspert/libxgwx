@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     if args.len() == 3 && args[2] == "operand-suite" {
         let mut doc = XgwxDocument::from_path(&args[0])?;
-        let program = doc.ladder_programs().remove(0)?;
+        let program = doc.program().ladder_programs().remove(0)?;
         let row = u16::from_le_bytes(program.data[4..6].try_into()?);
         for (i, (name, values)) in [
             ("MOV", vec!["65535", "D100"]),
@@ -18,15 +18,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         .enumerate()
         {
             let y = u32::from((row + u16::try_from(i)?) * 4);
-            doc.insert_ladder_instruction(
-                0,
-                y,
-                name,
-                &values.into_iter().map(String::from).collect::<Vec<_>>(),
-            )?;
-            doc.edit_ladder_cell(
-                0,
-                &LadderCellEdit {
+            doc.program_mut().get(0).and_then(|mut selected_program| {
+                selected_program.ladder()?.insert_instruction(
+                    y,
+                    name,
+                    &values.into_iter().map(String::from).collect::<Vec<_>>(),
+                )
+            })?;
+            doc.program_mut().get(0).and_then(|mut selected_program| {
+                selected_program.ladder()?.edit_cell(&LadderCellEdit {
                     raw_y: y,
                     column: 0,
                     expected: None,
@@ -34,27 +34,32 @@ fn main() -> Result<(), Box<dyn Error>> {
                         kind: LadderEditKind::NormallyOpen,
                         operand: "M0000".into(),
                     }),
-                },
-            )?;
+                })
+            })?;
         }
         doc.write_to(&args[1])?;
         return Ok(());
     }
     if args.len() == 3 && args[2] == "element-suite" {
         let mut doc = XgwxDocument::from_path(&args[0])?;
-        let program = doc.ladder_programs().remove(0)?;
+        let program = doc.program().ladder_programs().remove(0)?;
         let row = u16::from_le_bytes(program.data[4..6].try_into()?);
         // Enter from right to left, then fill the gaps, exercising sorted insertion.
-        doc.insert_iec_ld_single_element(0, row, 94, "coil", "OUTPUT", "%MX1300")?;
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_single_element(row, 94, "coil", "OUTPUT", "%MX1300")
+        })?;
         for x in (1..94).step_by(3).rev() {
-            doc.insert_iec_ld_single_element(
-                0,
-                row,
-                x,
-                "contact",
-                "NO",
-                &format!("%MX{}", 1200 + u16::from(x)),
-            )?;
+            doc.program_mut().get(0).and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_single_element(
+                    row,
+                    x,
+                    "contact",
+                    "NO",
+                    &format!("%MX{}", 1200 + u16::from(x)),
+                )
+            })?;
         }
         doc.write_to(&args[1])?;
         return Ok(());
@@ -62,6 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if args.len() == 3 && args[2] == "comparison-suite" {
         let mut doc = XgwxDocument::from_path(&args[0])?;
         let program = doc
+            .program()
             .ladder_programs()
             .into_iter()
             .next()
@@ -78,8 +84,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .checked_add(u16::try_from(index)?)
                 .ok_or("row coordinate overflow")?;
             let y = u32::from(row.checked_mul(4).ok_or("row coordinate overflow")?);
-            doc.insert_ladder_comparison(0, y, 0, spec.mnemonic, &["D100".into(), "D102".into()])?;
-            doc.insert_ladder_instruction(0, y, "MOV", &["0".into(), format!("D{}", 200 + index)])?;
+            doc.program_mut().get(0).and_then(|mut selected_program| {
+                selected_program.ladder()?.insert_comparison(
+                    y,
+                    0,
+                    spec.mnemonic,
+                    &["D100".into(), "D102".into()],
+                )
+            })?;
+            doc.program_mut().get(0).and_then(|mut selected_program| {
+                selected_program.ladder()?.insert_instruction(
+                    y,
+                    "MOV",
+                    &["0".into(), format!("D{}", 200 + index)],
+                )
+            })?;
         }
         doc.write_to(&args[1])?;
         return Ok(());
@@ -87,6 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if args.len() == 3 && args[2] == "xgk-suite" {
         let mut doc = XgwxDocument::from_path(&args[0])?;
         let program = doc
+            .program()
             .ladder_programs()
             .into_iter()
             .next()
@@ -99,12 +119,25 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .try_into()?,
         );
         let y = u32::from(row_count.checked_mul(4).ok_or("row coordinate overflow")?);
-        doc.insert_ladder_comparison(0, y, 0, "=", &["D100".into(), "D102".into()])?;
-        doc.insert_ladder_instruction(0, y, "MOV", &["0".into(), "D104".into()])?;
-        doc.insert_ladder_instruction(0, y + 4, "I2R", &["D100".into(), "D102".into()])?;
-        doc.edit_ladder_cell(
-            0,
-            &LadderCellEdit {
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program
+                .ladder()?
+                .insert_comparison(y, 0, "=", &["D100".into(), "D102".into()])
+        })?;
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program
+                .ladder()?
+                .insert_instruction(y, "MOV", &["0".into(), "D104".into()])
+        })?;
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program.ladder()?.insert_instruction(
+                y + 4,
+                "I2R",
+                &["D100".into(), "D102".into()],
+            )
+        })?;
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program.ladder()?.edit_cell(&LadderCellEdit {
                 raw_y: y + 4,
                 column: 0,
                 expected: None,
@@ -112,16 +145,30 @@ fn main() -> Result<(), Box<dyn Error>> {
                     kind: LadderEditKind::NormallyOpen,
                     operand: "M11".into(),
                 }),
-            },
-        )?;
-        doc.insert_ladder_comparison(0, y + 8, 0, ">=", &["D100".into(), "D102".into()])?;
-        doc.insert_ladder_instruction(0, y + 8, "MOV", &["1".into(), "D106".into()])?;
+            })
+        })?;
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program.ladder()?.insert_comparison(
+                y + 8,
+                0,
+                ">=",
+                &["D100".into(), "D102".into()],
+            )
+        })?;
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program.ladder()?.insert_instruction(
+                y + 8,
+                "MOV",
+                &["1".into(), "D106".into()],
+            )
+        })?;
         doc.write_to(&args[1])?;
         return Ok(());
     }
     if args.len() == 3 && args[2] == "suite" {
         let mut doc = XgwxDocument::from_path(&args[0])?;
         let program = doc
+            .program()
             .ladder_programs()
             .into_iter()
             .next()
@@ -140,13 +187,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             } else {
                 vec!["%MW100", "1", "%MX1000"]
             };
-            doc.insert_iec_ld_function(
-                0,
-                row,
-                4 + (i as u8 % 6) * 3,
-                name,
-                &operands.into_iter().map(String::from).collect::<Vec<_>>(),
-            )?;
+            doc.program_mut().get(0).and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_function(
+                    row,
+                    4 + (i as u8 % 6) * 3,
+                    name,
+                    &operands.into_iter().map(String::from).collect::<Vec<_>>(),
+                )
+            })?;
             row += if *name == "MOVE" { 3 } else { 4 };
         }
         doc.write_to(&args[1])?;
@@ -157,17 +205,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut doc = XgwxDocument::from_path(source)?;
     match kind.as_str() {
-        "iec" => {
-            doc.insert_iec_ld_function(program.parse()?, row.parse()?, x.parse()?, name, operands)?
-        }
-        "xgk" => doc.insert_ladder_instruction(program.parse()?, row.parse()?, name, operands)?,
-        "comparison" => doc.insert_ladder_comparison(
-            program.parse()?,
-            row.parse()?,
-            x.parse()?,
-            name,
-            operands,
-        )?,
+        "iec" => doc
+            .program_mut()
+            .get(program.parse()?)?
+            .iec_ld()?
+            .insert_function(row.parse()?, x.parse()?, name, operands)?,
+        "xgk" => doc
+            .program_mut()
+            .get(program.parse()?)?
+            .ladder()?
+            .insert_instruction(row.parse()?, name, operands)?,
+        "comparison" => doc
+            .program_mut()
+            .get(program.parse()?)?
+            .ladder()?
+            .insert_comparison(row.parse()?, x.parse()?, name, operands)?,
         _ => return Err("unknown placement kind".into()),
     }
     doc.write_to(output)?;

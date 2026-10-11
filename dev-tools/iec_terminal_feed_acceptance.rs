@@ -14,8 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let p: usize = program.parse()?;
     let mut doc = XgwxDocument::from_path(source)?;
-    doc.edit_iec_ld_branch_segment(
-        p,
+    doc.program_mut().get(p)?.iec_ld()?.edit_branch_segment(
         group.parse()?,
         start.parse()?,
         end.parse()?,
@@ -26,8 +25,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     doc.write_to(output)?;
     if let Some(native) = native.first() {
         let native = XgwxDocument::from_path(native)?;
-        let left = doc.ladder_programs();
-        let right = native.ladder_programs();
+        let left = doc.program().ladder_programs();
+        let right = native.program().ladder_programs();
         if left.len() != right.len() {
             return Err("program count mismatch".into());
         }

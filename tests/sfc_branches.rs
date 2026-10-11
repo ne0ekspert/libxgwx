@@ -11,7 +11,7 @@ fn native_balanced_branch_kinds_and_three_paths_are_decoded_with_st() {
     ] {
         let doc =
             XgwxDocument::from_path(format!("fixtures/sfc/branch-{file}-native.xgwx")).unwrap();
-        let program = &doc.sfc_programs()[0];
+        let program = &doc.program().sfc_programs()[0];
         let block = &program.blocks[0];
         let rows = block
             .editable_rows
@@ -38,8 +38,8 @@ fn native_balanced_branch_kinds_and_three_paths_are_decoded_with_st() {
 
 #[cfg(feature = "write")]
 fn apply(doc: &mut XgwxDocument, rows: Vec<xgwx::SfcRow>) -> Result<(), xgwx::XgwxError> {
-    let block = doc.sfc_programs()[0].blocks[0].clone();
-    doc.replace_sfc_sequence(&SfcSequencePatch {
+    let block = doc.program().sfc_programs()[0].blocks[0].clone();
+    doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
         program_index: 0,
         block_index: 0,
         expected_entities: block.entities,
@@ -54,7 +54,7 @@ fn branch_edits_preserve_existing_st_and_declarations_and_roundtrip() {
     for file in ["alternative", "parallel", "parallel-three"] {
         let mut doc =
             XgwxDocument::from_path(format!("fixtures/sfc/branch-{file}-native.xgwx")).unwrap();
-        let original = doc.sfc_programs()[0].clone();
+        let original = doc.program().sfc_programs()[0].clone();
         let mut rows = original.blocks[0].editable_rows.clone().unwrap();
         let index = rows
             .iter()
@@ -72,10 +72,15 @@ fn branch_edits_preserve_existing_st_and_declarations_and_roundtrip() {
         apply(&mut doc, rows.clone()).unwrap();
         let saved = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
         assert_eq!(
-            saved.sfc_programs()[0].blocks[0].editable_rows.as_ref(),
+            saved.program().sfc_programs()[0].blocks[0]
+                .editable_rows
+                .as_ref(),
             Some(&rows)
         );
-        assert_eq!(saved.sfc_programs()[0].variables, original.variables);
+        assert_eq!(
+            saved.program().sfc_programs()[0].variables,
+            original.variables
+        );
         let sources = |rows: &[xgwx::SfcRow]| {
             rows.iter()
                 .filter_map(|r| r.action_code.as_ref().or(r.transition_code.as_ref()))
@@ -93,7 +98,7 @@ fn branch_edits_preserve_existing_st_and_declarations_and_roundtrip() {
 #[test]
 fn malformed_branch_layouts_are_rejected_atomically() {
     let source = XgwxDocument::from_path("fixtures/sfc/branch-alternative-native.xgwx").unwrap();
-    let original = source.sfc_programs()[0].blocks[0]
+    let original = source.program().sfc_programs()[0].blocks[0]
         .editable_rows
         .clone()
         .unwrap();
@@ -130,12 +135,14 @@ fn malformed_branch_layouts_are_rejected_atomically() {
     let mut patch = SfcSequencePatch {
         program_index: 0,
         block_index: 0,
-        expected_entities: source.sfc_programs()[0].blocks[0].entities.clone(),
+        expected_entities: source.program().sfc_programs()[0].blocks[0]
+            .entities
+            .clone(),
         expected_rows: Some(original.clone()),
         rows: original,
     };
     patch.expected_rows.as_mut().unwrap()[0].title = "stale".into();
-    assert!(stale.replace_sfc_sequence(&patch).is_err());
+    assert!(stale.program_mut().replace_sfc_sequence(&patch).is_err());
     assert_eq!(stale.xml, source.xml);
 }
 
@@ -159,7 +166,11 @@ fn unknown_branch_priorities_and_connectors_stay_guarded() {
         let mut seed = source.clone();
         seed.xml = xml;
         let doc = XgwxDocument::parse(&seed.to_bytes().unwrap()).unwrap();
-        assert!(doc.sfc_programs()[0].blocks[0].editable_rows.is_none());
+        assert!(
+            doc.program().sfc_programs()[0].blocks[0]
+                .editable_rows
+                .is_none()
+        );
     }
 }
 
@@ -175,8 +186,8 @@ fn xg5000_resaves_retain_branch_topology_st_sources_and_declarations() {
             XgwxDocument::from_path(format!("fixtures/sfc/branch-{kind}-generated.xgwx")).unwrap();
         let native =
             XgwxDocument::from_path(format!("fixtures/sfc/branch-{kind}-roundtrip.xgwx")).unwrap();
-        let before = &generated.sfc_programs()[0];
-        let after = &native.sfc_programs()[0];
+        let before = &generated.program().sfc_programs()[0];
+        let after = &native.program().sfc_programs()[0];
         assert_eq!(
             before.blocks[0].editable_rows, after.blocks[0].editable_rows,
             "{kind}"
@@ -194,17 +205,19 @@ fn independent_parallel_paths_retain_native_padding_and_reject_invalid_sequences
         XgwxDocument::from_path("fixtures/sfc/branch-independent-parallel-generated.xgwx").unwrap();
     let saved =
         XgwxDocument::from_path("fixtures/sfc/branch-independent-parallel-roundtrip.xgwx").unwrap();
-    let rows = source.sfc_programs()[0].blocks[0]
+    let rows = source.program().sfc_programs()[0].blocks[0]
         .editable_rows
         .clone()
         .unwrap();
     assert_eq!(
-        saved.sfc_programs()[0].blocks[0].editable_rows.as_ref(),
+        saved.program().sfc_programs()[0].blocks[0]
+            .editable_rows
+            .as_ref(),
         Some(&rows)
     );
     assert_eq!(
-        source.sfc_programs()[0].variables,
-        saved.sfc_programs()[0].variables
+        source.program().sfc_programs()[0].variables,
+        saved.program().sfc_programs()[0].variables
     );
     assert_eq!(
         rows.iter()
@@ -237,8 +250,8 @@ fn independent_alternative_paths_survive_native_save_as() {
     let saved =
         XgwxDocument::from_path("fixtures/sfc/branch-independent-alternative-roundtrip.xgwx")
             .unwrap();
-    let a = &source.sfc_programs()[0];
-    let b = &saved.sfc_programs()[0];
+    let a = &source.program().sfc_programs()[0];
+    let b = &saved.program().sfc_programs()[0];
     assert!(a.blocks[0].editable_rows.is_some());
     assert_eq!(a.blocks[0].editable_rows, b.blocks[0].editable_rows);
     assert_eq!(a.variables, b.variables);
@@ -249,7 +262,7 @@ fn independent_alternative_paths_survive_native_save_as() {
 fn native_ordinary_step_limit_is_rejected_atomically() {
     let mut doc = XgwxDocument::from_path("fixtures/sfc/native-loop.xgwx").unwrap();
     let before = doc.to_bytes().unwrap();
-    let step = doc.sfc_programs()[0].blocks[0]
+    let step = doc.program().sfc_programs()[0].blocks[0]
         .editable_rows
         .clone()
         .unwrap()

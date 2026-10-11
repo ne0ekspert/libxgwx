@@ -22,14 +22,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let row_index = row_index.parse::<u16>()?;
     let mut document = XgwxDocument::from_path(source)?;
-    document.delete_iec_ld_nested_contact_branch_row(6, group_index, row_index)?;
+    document
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_nested_contact_branch_row(group_index, row_index)
+        })?;
     fs::write(output, document.to_bytes()?)?;
     let generated = XgwxDocument::from_path(output)?;
     let native = XgwxDocument::from_path(native)?;
     for (index, (generated, native)) in generated
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(native.ladder_programs())
+        .zip(native.program().ladder_programs())
         .enumerate()
     {
         let generated = generated?;

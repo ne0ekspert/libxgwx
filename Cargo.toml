@@ -51,5 +51,10 @@ path = "examples/write_module.rs"
 required-features = ["write"]
 
 [[example]]
+name = "program_handles"
+path = "examples/program_handles.rs"
+required-features = ["write"]
+
+[[example]]
 name = "gui"
 required-features = ["gui"]

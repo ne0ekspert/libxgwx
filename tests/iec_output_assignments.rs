@@ -7,7 +7,7 @@ fn base() -> XgwxDocument {
     .unwrap()
 }
 fn output(d: &XgwxDocument, row: u16) -> (usize, String, usize, String, u8) {
-    let p = d.ladder_programs().remove(0).unwrap();
+    let p = d.program().ladder_programs().remove(0).unwrap();
     let b = p
         .iec_function_blocks()
         .unwrap()
@@ -40,11 +40,17 @@ fn clearing_outputs_keeps_rows_bodies_and_references_and_restores_exactly() {
     let mut d = base();
     let original = d.to_bytes().unwrap();
     for row in [0, 5, 10, 15, 19] {
-        let p = d.ladder_programs().remove(0).unwrap();
+        let p = d.program().ladder_programs().remove(0).unwrap();
         let (offset, value, _, _, ordinal) = output(&d, row);
-        d.delete_iec_ld_function_output_operand(0, offset, &value)
+        d.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_function_output_operand(offset, &value)
+            })
             .unwrap();
-        let after = d.ladder_programs().remove(0).unwrap();
+        let after = d.program().ladder_programs().remove(0).unwrap();
         let old = p
             .iec_function_blocks()
             .unwrap()
@@ -85,7 +91,16 @@ fn clearing_outputs_keeps_rows_bodies_and_references_and_restores_exactly() {
             .into_iter()
             .find(|b| b.row_index == row)
             .unwrap();
-        d.assign_iec_ld_function_output_operand(0, b.record_offset, &b.name.value, ordinal, &value)
+        d.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.assign_function_output_operand(
+                    b.record_offset,
+                    &b.name.value,
+                    ordinal,
+                    &value,
+                )
+            })
             .unwrap();
         assert_eq!(d.to_bytes().unwrap(), original);
     }
@@ -96,10 +111,14 @@ fn input_clear_stale_selection_and_bad_output_assignment_are_atomic() {
     let (offset, value, _, _, ordinal) = output(&d, 0);
     let before = d.to_bytes().unwrap();
     assert!(
-        d.delete_iec_ld_function_output_operand(0, offset, "stale")
+        d.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| selected_program
+                .iec_ld()?
+                .delete_function_output_operand(offset, "stale"))
             .is_err()
     );
-    let p = d.ladder_programs().remove(0).unwrap();
+    let p = d.program().ladder_programs().remove(0).unwrap();
     let input = p
         .iec_function_operand_links()
         .unwrap()
@@ -107,14 +126,29 @@ fn input_clear_stale_selection_and_bad_output_assignment_are_atomic() {
         .find(|l| !l.is_output)
         .unwrap();
     assert!(
-        d.update_iec_ld_function_operand(0, input.record_offset + 15, "%MW0", "")
+        d.program_mut()
+            .get(0)
+            .and_then(
+                |mut selected_program| selected_program.iec_ld()?.update_function_operand(
+                    input.record_offset + 15,
+                    "%MW0",
+                    ""
+                )
+            )
             .is_err()
     );
     assert_eq!(d.to_bytes().unwrap(), before);
-    d.update_iec_ld_function_operand(0, offset, &value, "")
+    d.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .update_function_operand(offset, &value, "")
+        })
         .unwrap();
     let before = d.to_bytes().unwrap();
     let b = d
+        .program()
         .ladder_programs()
         .remove(0)
         .unwrap()
@@ -123,12 +157,25 @@ fn input_clear_stale_selection_and_bad_output_assignment_are_atomic() {
         .remove(0);
     for value in ["1", "%MX0", "", "%IW0"] {
         assert!(
-            d.assign_iec_ld_function_output_operand(0, b.record_offset, "ADD", ordinal, value)
+            d.program_mut()
+                .get(0)
+                .and_then(|mut selected_program| selected_program
+                    .iec_ld()?
+                    .assign_function_output_operand(b.record_offset, "ADD", ordinal, value))
                 .is_err()
         );
         assert_eq!(d.to_bytes().unwrap(), before);
     }
-    d.assign_iec_ld_function_output_operand(0, b.record_offset, "ADD", ordinal, "%MW2")
+    d.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.assign_function_output_operand(
+                b.record_offset,
+                "ADD",
+                ordinal,
+                "%MW2",
+            )
+        })
         .unwrap();
 }
 #[test]
@@ -136,7 +183,13 @@ fn clear_capture() {
     let mut d = base();
     for row in [0, 5, 10, 15, 19] {
         let (offset, value, ..) = output(&d, row);
-        d.delete_iec_ld_function_output_operand(0, offset, &value)
+        d.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_function_output_operand(offset, &value)
+            })
             .unwrap();
     }
     if let Ok(path) = std::env::var("IEC_CLEAR_CAPTURE") {
@@ -147,10 +200,11 @@ fn clear_capture() {
     ))
     .unwrap();
     assert_eq!(
-        d.ladder_programs().remove(0).unwrap().data,
-        native.ladder_programs().remove(0).unwrap().data
+        d.program().ladder_programs().remove(0).unwrap().data,
+        native.program().ladder_programs().remove(0).unwrap().data
     );
     let b = d
+        .program()
         .ladder_programs()
         .remove(0)
         .unwrap()
@@ -159,18 +213,28 @@ fn clear_capture() {
         .into_iter()
         .find(|b| b.row_index == 19)
         .unwrap();
-    d.assign_iec_ld_function_output_operand(0, b.record_offset, "INT_TO_UDINT", 2, "%MD10")
+    d.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.assign_function_output_operand(
+                b.record_offset,
+                "INT_TO_UDINT",
+                2,
+                "%MD10",
+            )
+        })
         .unwrap();
     let native = XgwxDocument::parse(include_bytes!(
         "../fixtures/function-output-wires/conversion-restored-native.xgwx"
     ))
     .unwrap();
     assert_eq!(
-        d.ladder_programs().remove(0).unwrap().data,
-        native.ladder_programs().remove(0).unwrap().data
+        d.program().ladder_programs().remove(0).unwrap().data,
+        native.program().ladder_programs().remove(0).unwrap().data
     );
     assert!(
-        d.ladder_programs()
+        d.program()
+            .ladder_programs()
             .remove(0)
             .unwrap()
             .iec_circuit_graph()
@@ -182,6 +246,7 @@ fn clear_capture() {
 fn project_output_clear_and_restore_coverage() {
     let source = XgwxDocument::from_path(std::env::var("LIBXGWX_IEC_FIXTURE").unwrap()).unwrap();
     let programs = source
+        .program()
         .ladder_programs()
         .into_iter()
         .map(Result::unwrap)
@@ -217,19 +282,28 @@ fn project_output_clear_and_restore_coverage() {
                 continue;
             };
             let mut d = source.clone();
-            d.delete_iec_ld_function_output_operand(index, value.offset, &value.value)
+            d.program_mut()
+                .get(index)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_function_output_operand(value.offset, &value.value)
+                })
                 .unwrap();
             cleared += 1;
-            if d.assign_iec_ld_function_output_operand(
-                index,
-                block.record_offset,
-                &block.name.value,
-                link.ordinal,
-                &value.value,
-            )
-            .is_ok()
+            if d.program_mut()
+                .get(index)
+                .and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.assign_function_output_operand(
+                        block.record_offset,
+                        &block.name.value,
+                        link.ordinal,
+                        &value.value,
+                    )
+                })
+                .is_ok()
             {
-                let after = d.ladder_programs().remove(index).unwrap().data;
+                let after = d.program().ladder_programs().remove(index).unwrap().data;
                 let differences = (0..p.data.len().max(after.len()))
                     .filter(|&i| p.data.get(i) != after.get(i))
                     .take(8)
@@ -255,8 +329,8 @@ fn existing_empty_output_record_can_be_reassigned() {
     use base64::Engine;
     use std::io::Write;
     let mut d = base();
-    let original = d.ladder_programs().remove(0).unwrap().data;
-    let p = d.ladder_programs().remove(0).unwrap();
+    let original = d.program().ladder_programs().remove(0).unwrap().data;
+    let p = d.program().ladder_programs().remove(0).unwrap();
     let (offset, _, block, _, ordinal) = output(&d, 0);
     let string = p.strings.iter().find(|s| s.offset == offset).unwrap();
     let mut data = p.data.clone();
@@ -274,7 +348,16 @@ fn existing_empty_output_record_can_be_reassigned() {
     let encoded = base64::engine::general_purpose::STANDARD.encode(encoder.finish().unwrap());
     d.xml = d.xml.replacen(&old, &encoded, 1);
     d = XgwxDocument::parse(&d.to_bytes().unwrap()).unwrap();
-    d.assign_iec_ld_function_output_operand(0, block, "ADD", ordinal, "%MW2")
+    d.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .assign_function_output_operand(block, "ADD", ordinal, "%MW2")
+        })
         .unwrap();
-    assert_eq!(d.ladder_programs().remove(0).unwrap().data, original);
+    assert_eq!(
+        d.program().ladder_programs().remove(0).unwrap().data,
+        original
+    );
 }

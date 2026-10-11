@@ -19,8 +19,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let left = XgwxDocument::from_path(&left_path)?;
     let right = XgwxDocument::from_path(&right_path)?;
-    let left_programs = left.ladder_programs();
-    let right_programs = right.ladder_programs();
+    let left_programs = left.program().ladder_programs();
+    let right_programs = right.program().ladder_programs();
     if left_programs.len() != right_programs.len() {
         return Err(format!(
             "program count differs: {} versus {}",

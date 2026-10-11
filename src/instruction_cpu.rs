@@ -3,9 +3,13 @@
 #[path = "instruction_cpu_data.rs"]
 mod data;
 
+/// Reviewed XGK CPU model permissions for one instruction.
+/// This table does not validate firmware, attached modules, or native editing behavior.
 #[derive(Debug, Clone, Copy)]
 pub struct LadderInstructionCpuRestriction {
+    /// XGK model names permitted by the reviewed instruction table.
     pub models: &'static [&'static str],
+    /// Source HTML page name in the reviewed local instruction manual.
     pub manual_page: &'static str,
 }
 

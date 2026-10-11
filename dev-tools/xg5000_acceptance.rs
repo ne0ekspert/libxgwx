@@ -113,7 +113,7 @@ fn documents(case: &str) -> Result<(XgwxDocument, XgwxDocument)> {
                 ..ModulePatch::default()
             },
         )?,
-        "program-name" => edited.update_program(
+        "program-name" => edited.program_mut().update_program(
             0,
             &ProgramPatch {
                 name: Some("AcceptanceProgram".into()),
@@ -121,15 +121,17 @@ fn documents(case: &str) -> Result<(XgwxDocument, XgwxDocument)> {
             },
         )?,
         "ladder-operand" => {
-            let program = edited.ladder_programs().remove(0)?;
+            let program = edited.program().ladder_programs().remove(0)?;
             let cell = program
                 .strings
                 .iter()
                 .find(|cell| cell.value == "M00000")
                 .ok_or("baseline operand missing")?;
-            edited.update_ladder_cell_text(0, cell.offset, "M00000", "M00042")?;
+            edited
+                .program_mut()
+                .update_ladder_cell_text(0, cell.offset, "M00000", "M00042")?;
         }
-        "variable-name" => edited.update_variable(
+        "variable-name" => edited.variable_mut().update_variable(
             0,
             &VariablePatch {
                 name: Some("_0000_DI00".into()),
@@ -157,14 +159,15 @@ fn observation(case: &str, doc: &XgwxDocument) -> Result<String> {
         ),
         "program-name" => format!(
             "{:?}",
-            doc.programs()
+            doc.program()
+                .programs()
                 .iter()
                 .map(|p| (&p.name, &p.task, &p.comment))
                 .collect::<Vec<_>>()
         ),
         "ladder-operand" => {
             let mut values = Vec::new();
-            for program in doc.ladder_programs() {
+            for program in doc.program().ladder_programs() {
                 values.push(
                     program?
                         .strings
@@ -177,7 +180,8 @@ fn observation(case: &str, doc: &XgwxDocument) -> Result<String> {
         }
         "variable-name" => format!(
             "{:?}",
-            doc.variables()?
+            doc.variable()
+                .variables()?
                 .iter()
                 .map(|v| (
                     &v.name,
@@ -233,7 +237,7 @@ fn normalize_runtime_name(name: &mut String) {
 }
 
 fn compact_module_values(doc: &XgwxDocument) -> String {
-    let mut modules = doc.modules();
+    let mut modules = doc.module_summaries();
     if let Some(profile) = doc.cpu_hardware_profile() {
         // The unchanged 2026-09-09 native control changes only this built-in
         // SubType from 1 to 0. Never normalize other positions or variants.
@@ -259,7 +263,7 @@ fn compact_module_values(doc: &XgwxDocument) -> String {
 fn module_values(doc: &XgwxDocument) -> String {
     format!(
         "{:?}",
-        doc.modules()
+        doc.module_summaries()
             .iter()
             .map(|m| (
                 m.base, m.slot, m.id, m.sub_type, &m.name, &m.comment, &m.details

@@ -9,10 +9,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut document = XgwxDocument::from_path(source)?;
     match kind.as_str() {
-        "simple" => document.copy_iec_ld_group(0, 4, 6, 5)?,
+        "simple" => document
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| selected_program.iec_ld()?.copy_group(4, 6, 5))?,
         "function" => {
-            document.delete_iec_ld_group(0, 33, 67)?;
-            document.copy_iec_ld_group(0, 14, 20, 67)?;
+            document
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(33, 67))?;
+            document
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.copy_group(14, 20, 67)
+                })?;
         }
         _ => return Err("kind must be simple or function".into()),
     }

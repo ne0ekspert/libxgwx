@@ -11,14 +11,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         ("STOP", "$MOVP,'Room B, off',D000200"),
         ("WDT", "$MOV,'Room A, on',D000100"),
     ] {
-        let program = document.ladder_programs().remove(0)?;
+        let program = document.program().ladder_programs().remove(0)?;
         let offset = program
             .strings
             .iter()
             .find(|s| s.value == original)
             .ok_or("original instruction missing")?
             .offset;
-        document.update_ladder_cell_text(0, offset, original, replacement)?;
+        document
+            .program_mut()
+            .update_ladder_cell_text(0, offset, original, replacement)?;
     }
     OpenOptions::new()
         .write(true)

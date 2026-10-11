@@ -9,9 +9,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let index: usize = index.parse()?;
     let a = XgwxDocument::from_path(before)?
+        .program()
         .ladder_programs()
         .remove(index)?;
     let b = XgwxDocument::from_path(after)?
+        .program()
         .ladder_programs()
         .remove(index)?;
     let ar = a.iec_row_frames().ok_or("invalid before rows")?;

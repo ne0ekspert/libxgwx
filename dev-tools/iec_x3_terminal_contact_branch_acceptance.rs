@@ -8,14 +8,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_x3_terminal_contact_branch_acceptance SOURCE NATIVE OUTPUT".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    document.edit_iec_ld_branch_segment(3, 20, 56, 57, 3, true, false)?;
+    document
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(20, 56, 57, 3, true, false)
+        })?;
     fs::write(output, document.to_bytes()?)?;
     let generated = XgwxDocument::from_path(output)?;
     let native = XgwxDocument::from_path(native)?;
     for (index, (generated, native)) in generated
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(native.ladder_programs())
+        .zip(native.program().ladder_programs())
         .enumerate()
     {
         let generated = generated?;

@@ -15,11 +15,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut doc = XgwxDocument::from_path(&args[0])?;
     let before = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    doc.edit_iec_ld_vertical_wire(0, 33, 69, 70, 12, true, false)?;
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .edit_vertical_wire(33, 69, 70, 12, true, false)
+    })?;
     let after = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
@@ -45,6 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     if let Some(native) = args.get(2) {
         let native = XgwxDocument::from_path(native)?
+            .program()
             .ladder_programs()
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
@@ -57,8 +64,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     doc.write_to(&args[1])?;
-    doc.edit_iec_ld_vertical_wire(0, 33, 69, 70, 12, false, true)?;
-    for (before, restored) in before.iter().zip(doc.ladder_programs()) {
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .edit_vertical_wire(33, 69, 70, 12, false, true)
+    })?;
+    for (before, restored) in before.iter().zip(doc.program().ladder_programs()) {
         assert_eq!(before.data, restored?.data);
     }
     println!("PASS row-preserving vertical deletion, native comparison and exact restoration");

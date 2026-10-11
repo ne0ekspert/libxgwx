@@ -6,6 +6,7 @@
 use crate::{LadderProgramData, LadderString};
 use std::collections::HashMap;
 
+/// Recognized native IEC ladder record category, retaining kind bytes where relevant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IecRecordKind {
     LongWire,
@@ -20,28 +21,50 @@ pub enum IecRecordKind {
     FunctionBlock,
 }
 
+/// Byte range and row ownership of one recognized IEC ladder record.
+/// Offsets refer to the decoded [`LadderProgramData::data`] payload, not the workspace file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IecRecordFrame {
+    /// Zero-based IEC network/group index in the decoded program payload.
     pub group_index: usize,
+    /// Native IEC ladder row index within the program.
     pub row_index: u16,
+    /// Byte offset of this record in the decoded ladder payload.
     pub offset: usize,
+    /// Exclusive end byte offset in the decoded ladder payload.
     pub end: usize,
+    /// Recognized record category and any retained native kind byte.
     pub kind: IecRecordKind,
 }
 
+/// Decoded IEC ladder function body, including control pins and data pins.
+/// Native opcodes, type flags, instance markers, and byte ranges are retained
+/// so inspection and guarded editing can use the same record identities.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IecFunctionBlock {
+    /// Zero-based IEC network/group index in the decoded program payload.
     pub group_index: usize,
+    /// Native IEC ladder row index within the program.
     pub row_index: u16,
+    /// Byte offset of the function block record in the decoded ladder payload.
     pub record_offset: usize,
+    /// Exclusive end byte offset of the function block record.
     pub record_end: usize,
+    /// Native horizontal anchor coordinate of the function block.
     pub raw_x: u8,
+    /// Native opcode-family byte retained without reinterpretation.
     pub opcode_family: u8,
+    /// Native instruction opcode.
     pub opcode: u16,
+    /// Native pin count stored in the function block record.
     pub pin_count: u8,
+    /// Function name string with its byte offset in the decoded payload.
     pub name: LadderString,
+    /// Instance marker string, when the native function is stateful.
     pub instance: Option<LadderString>,
+    /// Decoded control input pin, separate from data pins.
     pub control_input: IecFunctionPin,
+    /// Decoded control output pin, separate from data pins.
     pub control_output: IecFunctionPin,
     /// Data pins in native visual order, from the top row down and left to right.
     pub pins: Vec<IecFunctionPin>,
@@ -49,6 +72,7 @@ pub struct IecFunctionBlock {
     pub field_strings: Vec<LadderString>,
 }
 
+/// Direction of a decoded IEC function control or data pin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IecFunctionPinDirection {
     Input,
@@ -644,6 +668,8 @@ impl LadderProgramData {
         Some(sites)
     }
 
+    /// Find captured contact-fed rows where a terminal function can be inserted.
+    /// Return `None` when the native record layout cannot be decoded.
     pub fn iec_terminal_function_insertion_sites(
         &self,
     ) -> Option<Vec<IecTerminalFunctionInsertionSite>> {
@@ -1693,6 +1719,8 @@ impl LadderProgramData {
         Some(sites)
     }
 
+    /// Find horizontal wire records whose surrounding element layout permits deletion.
+    /// Return `None` when the native record layout cannot be decoded.
     pub fn iec_horizontal_wire_deletion_sites(&self) -> Option<Vec<IecHorizontalWireDeletionSite>> {
         let records = self.iec_record_frames()?;
         let rows = self.iec_row_frames()?;

@@ -8,7 +8,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_group_summary SOURCE PROGRAM GROUP".into());
     };
     let document = XgwxDocument::from_path(source)?;
-    let program = document.ladder_programs().remove(program_index.parse()?)?;
+    let program = document
+        .program()
+        .ladder_programs()
+        .remove(program_index.parse()?)?;
     let group_index = group_index.parse::<usize>()?;
     let rows = program.iec_row_frames().ok_or("invalid IEC rows")?;
     let records = program.iec_record_frames().ok_or("invalid IEC records")?;

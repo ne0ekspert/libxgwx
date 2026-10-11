@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .nth(1)
         .ok_or("usage: iec_heating_x3_repair_probe SOURCE")?;
     let document = XgwxDocument::from_path(source)?;
-    let mut program = document.ladder_programs().remove(6)?;
+    let mut program = document.program().ladder_programs().remove(6)?;
     let rows = program.iec_row_frames().ok_or("invalid rows")?;
     let records = program.iec_record_frames().ok_or("invalid records")?;
     let mut removed = Vec::new();

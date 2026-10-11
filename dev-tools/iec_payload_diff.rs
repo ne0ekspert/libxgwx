@@ -5,9 +5,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let a = XgwxDocument::from_path(env::args().nth(1).ok_or("source")?)?;
     let b = XgwxDocument::from_path(env::args().nth(2).ok_or("native")?)?;
     for (p, (a, b)) in a
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(b.ladder_programs())
+        .zip(b.program().ladder_programs())
         .enumerate()
     {
         let (a, b) = (a?, b?);

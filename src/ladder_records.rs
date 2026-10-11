@@ -1,6 +1,7 @@
 //! Exact native LD record boundaries shared by rendering and structural edits.
 use crate::XgwxError;
 
+/// Supported XGK contact, coil, and operandless logic element kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum LadderEditKind {

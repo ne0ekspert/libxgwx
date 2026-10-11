@@ -17,6 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .transpose()?
         .unwrap_or(0);
     let program = document
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(index)

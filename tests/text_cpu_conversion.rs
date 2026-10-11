@@ -15,7 +15,7 @@ fn text_programs_change_between_all_captured_xgi_models_without_source_or_declar
         include_bytes!("../fixtures/text-programs/native-roundtrip.xgwx").as_slice(),
     ] {
         let original = XgwxDocument::parse(bytes).unwrap();
-        let expected = original.text_programs();
+        let expected = original.program().text_programs();
         for (from, _) in MODELS {
             let mut start = original.clone();
             start.select_cpu(from).unwrap();
@@ -23,16 +23,16 @@ fn text_programs_change_between_all_captured_xgi_models_without_source_or_declar
                 let mut doc = start.clone();
                 doc.select_cpu(to).unwrap();
                 assert_eq!(doc.configurations()[0].type_code, Some(*code));
-                assert_eq!(doc.text_programs(), expected, "{from} -> {to}");
-                assert_eq!(doc.programs(), original.programs());
+                assert_eq!(doc.program().text_programs(), expected, "{from} -> {to}");
+                assert_eq!(doc.program().programs(), original.program().programs());
                 assert_eq!(
                     doc.root.descendants_named("Safety_Comm").count(),
                     usize::from(*code == 111)
                 );
                 let saved = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-                assert_eq!(saved.text_programs(), expected);
+                assert_eq!(saved.program().text_programs(), expected);
                 doc.select_cpu(from).unwrap();
-                assert_eq!(doc.text_programs(), expected);
+                assert_eq!(doc.program().text_programs(), expected);
                 assert_eq!(
                     doc.root.attribute("WksNodeCount"),
                     start.root.attribute("WksNodeCount")
@@ -72,21 +72,34 @@ fn mixed_sfc_st_il_projects_preserve_every_program_through_cpu_conversion() {
     let mut doc =
         XgwxDocument::parse(include_bytes!("../fixtures/sfc/st-programs-generated.xgwx")).unwrap();
     for (n, language) in ["ST", "IL"].iter().enumerate() {
-        doc.create_program(&xgwx::NewProgram {
-            name: format!("Text{language}"),
-            language: (*language).into(),
-            object_id: format!("abcd000{}-1234-4567-89ab-0123456789ab", n * 2 + 1),
-            symbol_id: format!("abcd000{}-1234-4567-89ab-0123456789ab", n * 2 + 2),
-        })
-        .unwrap();
+        doc.program_mut()
+            .create_program(&xgwx::NewProgram {
+                name: format!("Text{language}"),
+                language: (*language).into(),
+                object_id: format!("abcd000{}-1234-4567-89ab-0123456789ab", n * 2 + 1),
+                symbol_id: format!("abcd000{}-1234-4567-89ab-0123456789ab", n * 2 + 2),
+            })
+            .unwrap();
     }
     let before = doc.clone();
     doc.select_cpu("XGI-CPUUN").unwrap();
-    assert_eq!(doc.sfc_programs(), before.sfc_programs());
-    assert_eq!(doc.text_programs(), before.text_programs());
+    assert_eq!(
+        doc.program().sfc_programs(),
+        before.program().sfc_programs()
+    );
+    assert_eq!(
+        doc.program().text_programs(),
+        before.program().text_programs()
+    );
     doc.select_cpu("XGI-CPUE").unwrap();
-    assert_eq!(doc.sfc_programs(), before.sfc_programs());
-    assert_eq!(doc.text_programs(), before.text_programs());
+    assert_eq!(
+        doc.program().sfc_programs(),
+        before.program().sfc_programs()
+    );
+    assert_eq!(
+        doc.program().text_programs(),
+        before.program().text_programs()
+    );
 }
 
 #[test]
@@ -94,19 +107,20 @@ fn freshly_created_text_projects_accept_captured_blank_parameter_defaults() {
     for language in ["ST", "IL"] {
         let mut doc =
             XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgi.xgwx")).unwrap();
-        let identity = doc.programs()[0].object_id.clone().unwrap();
-        doc.delete_program(0, &identity).unwrap();
-        doc.create_program(&xgwx::NewProgram {
-            name: "NewProgram".into(),
-            language: language.into(),
-            object_id: "aaaa0001-1234-4567-89ab-0123456789ab".into(),
-            symbol_id: "aaaa0002-1234-4567-89ab-0123456789ab".into(),
-        })
-        .unwrap();
-        let before = doc.text_programs();
+        let identity = doc.program().programs()[0].object_id.clone().unwrap();
+        doc.program_mut().delete_program(0, &identity).unwrap();
+        doc.program_mut()
+            .create_program(&xgwx::NewProgram {
+                name: "NewProgram".into(),
+                language: language.into(),
+                object_id: "aaaa0001-1234-4567-89ab-0123456789ab".into(),
+                symbol_id: "aaaa0002-1234-4567-89ab-0123456789ab".into(),
+            })
+            .unwrap();
+        let before = doc.program().text_programs();
         for (model, _) in MODELS {
             doc.select_cpu(model).unwrap();
-            assert_eq!(doc.text_programs(), before);
+            assert_eq!(doc.program().text_programs(), before);
         }
     }
 }
@@ -148,10 +162,16 @@ fn text_cpu_conversion_round_trips_through_native_xg5000_save_as() {
         let generated = XgwxDocument::parse(generated).unwrap();
         let saved = XgwxDocument::parse(saved).unwrap();
         assert_eq!(saved.configurations()[0].type_code, Some(code));
-        assert_eq!(saved.text_programs(), generated.text_programs());
+        assert_eq!(
+            saved.program().text_programs(),
+            generated.program().text_programs()
+        );
         let mut reverse = saved.clone();
         reverse.select_cpu("XGI-CPUE").unwrap();
-        assert_eq!(reverse.text_programs(), generated.text_programs());
+        assert_eq!(
+            reverse.program().text_programs(),
+            generated.program().text_programs()
+        );
     }
 }
 
@@ -164,7 +184,8 @@ fn xgk_cpusn_basic_mnemonics_match_the_vendor_instruction_manual() {
     .unwrap();
     assert_eq!(doc.configurations()[0].type_code, Some(17));
     assert_eq!(
-        doc.ladder_programs()
+        doc.program()
+            .ladder_programs()
             .remove(0)
             .unwrap()
             .to_il()

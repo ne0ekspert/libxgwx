@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         project
             .file_version
             .unwrap_or_else(|| "<unknown>".to_owned()),
-        doc.ladder_programs(),
+        doc.program().ladder_programs(),
     );
 
     let options = eframe::NativeOptions {

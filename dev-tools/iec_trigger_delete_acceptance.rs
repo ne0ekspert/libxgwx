@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let row: u16 = row.parse()?;
     let mut doc = XgwxDocument::from_path(source)?;
     let block = doc
+        .program()
         .ladder_programs()
         .remove(p)?
         .iec_function_blocks()
@@ -22,11 +23,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|b| b.name.value == "R_TRIG" && b.row_index == row)
         .ok_or("missing trigger")?;
-    doc.delete_iec_ld_function_cell(p, block.record_offset, "R_TRIG")?;
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .delete_function_cell(block.record_offset, "R_TRIG")
+    })?;
     doc.write_to(deleted)?;
     if let Ok(restored_output) = env::var("LIBXGWX_TRIGGER_RESTORED_OUTPUT") {
         let mut restored = doc.clone();
         let site = restored
+            .program()
             .ladder_programs()
             .remove(p)?
             .iec_function_cell_insertion_sites()
@@ -34,16 +40,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             .into_iter()
             .find(|s| s.function_name == "R_TRIG" && s.row_index == row && s.raw_x == block.raw_x)
             .ok_or("missing restoration site")?;
-        restored.insert_iec_ld_function_cell(
-            p,
-            site.insertion_offset,
-            "R_TRIG",
-            &block.instance.as_ref().ok_or("missing instance")?.value,
-        )?;
+        restored
+            .program_mut()
+            .get(p)?
+            .iec_ld()?
+            .insert_function_cell(
+                site.insertion_offset,
+                "R_TRIG",
+                &block.instance.as_ref().ok_or("missing instance")?.value,
+            )?;
         restored.write_to(restored_output)?;
     }
 
     let gap = doc
+        .program()
         .ladder_programs()
         .remove(p)?
         .iec_horizontal_wire_repair_sites()
@@ -51,13 +61,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|g| g.row_index == row && g.raw_x == block.raw_x)
         .ok_or("missing trigger gap")?;
-    doc.repair_iec_ld_horizontal_wire(p, gap.insertion_offset, gap.raw_x)?;
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .repair_horizontal_wire(gap.insertion_offset, gap.raw_x)
+    })?;
     doc.write_to(repaired)?;
     for (generated, captured) in [deleted, repaired].iter().zip(native) {
         let generated = XgwxDocument::from_path(generated)?;
         let captured = XgwxDocument::from_path(captured)?;
-        let left = generated.ladder_programs();
-        let right = captured.ladder_programs();
+        let left = generated.program().ladder_programs();
+        let right = captured.program().ladder_programs();
         if left.len() != right.len() {
             return Err("program count mismatch".into());
         }

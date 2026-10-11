@@ -342,7 +342,7 @@ impl crate::XgwxDocument {
         if configurations.len() != 1 || configurations[0].type_code != Some(2) {
             return None;
         }
-        let modules = self.modules();
+        let modules = self.module_summaries();
         let mut builtin = modules
             .iter()
             .filter(|m| m.base == Some(0) && m.slot == Some(0));

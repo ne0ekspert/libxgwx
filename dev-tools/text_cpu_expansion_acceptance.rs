@@ -11,12 +11,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut doc =
             XgwxDocument::from_path(format!("fixtures/text-cpus/{stem}-native-blank.xgwx"))?;
         for language in doc
+            .program()
             .program_languages()
             .into_iter()
             .filter(|l| ["ST", "IL"].contains(l))
         {
-            let program_index = doc.programs().len();
-            doc.create_program(&NewProgram {
+            let program_index = doc.program().programs().len();
+            doc.program_mut().create_program(&NewProgram {
                 name: format!("Added{language}"),
                 language: language.into(),
                 object_id: format!(
@@ -29,8 +30,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ),
             })?;
         }
-        for program in doc.text_programs() {
-            doc.edit_text_variable(
+        for program in doc.program().text_programs() {
+            doc.variable_mut().edit_text_variable(
                 &program.object_id,
                 &SfcVariablePatch {
                     program_index: program.program_index,
@@ -43,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     declaration: None,
                 },
             )?;
-            doc.edit_text_program(&TextProgramPatch {
+            doc.program_mut().edit_text_program(&TextProgramPatch {
                 program_index: program.program_index,
                 expected_object_id: program.object_id,
                 expected_language: program.language.clone(),
@@ -58,8 +59,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::fs::write(format!("{out}/TX{index:02}.xgwx"), doc.to_verified_bytes()?)?;
     }
     let mut doc = XgwxDocument::from_path("fixtures/empty-projects/new-xgk.xgwx")?;
-    let p = doc.vendor_il_programs().remove(0);
-    doc.edit_vendor_il(&VendorIlPatch{program_index:0,expected_object_id:p.object_id,expected_source:p.source.unwrap(),source:"LOAD M00000\nAND NOT M00001\nOUT M00002\nLOADP M00003\nOUTP M00004\nLOADN M00005\nRST M00006\nLOAD M00007\nSET M00008\nLOAD M00009\nMOV 1 D00100".into()})?;
+    let p = doc.program().vendor_il_programs().remove(0);
+    doc.program_mut().edit_vendor_il(&VendorIlPatch{program_index:0,expected_object_id:p.object_id,expected_source:p.source.unwrap(),source:"LOAD M00000\nAND NOT M00001\nOUT M00002\nLOADP M00003\nOUTP M00004\nLOADN M00005\nRST M00006\nLOAD M00007\nSET M00008\nLOAD M00009\nMOV 1 D00100".into()})?;
     std::fs::write(format!("{out}/TXGKIL.xgwx"), doc.to_verified_bytes()?)?;
     Ok(())
 }

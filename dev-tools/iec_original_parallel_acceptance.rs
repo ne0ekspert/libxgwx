@@ -11,35 +11,53 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let source_bytes = fs::read(source)?;
     let mut document = XgwxDocument::parse(&source_bytes)?;
-    document.insert_iec_ld_parallel_contact_kind(5, 4, "%MX761", "%MX762", kind, "%MX760")?;
+    document
+        .program_mut()
+        .get(5)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_parallel_contact_kind(4, "%MX761", "%MX762", kind, "%MX760")
+        })?;
     fs::write(output, document.to_bytes()?)?;
 
     let mut restored = XgwxDocument::from_path(output)?;
-    let program = restored.ladder_programs().remove(5)?;
+    let program = restored.program().ladder_programs().remove(5)?;
     let top = program
         .iec_row_frames()
         .ok_or("IEC row framing failed")?
         .into_iter()
         .find(|row| row.row_index == 4)
         .ok_or("L4 missing")?;
-    restored.edit_iec_ld_branch_segment(5, top.group_index, 4, 5, 3, true, false)?;
+    restored
+        .program_mut()
+        .get(5)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(top.group_index, 4, 5, 3, true, false)
+        })?;
     let original = XgwxDocument::parse(&source_bytes)?;
     let original_programs = original
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|program| program.data))
         .collect::<Result<Vec<_>, _>>()?;
     let restored_programs = restored
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|program| program.data))
         .collect::<Result<Vec<_>, _>>()?;
     if restored_programs != original_programs
         || restored
+            .variable()
             .iec_local_symbols()
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?
             != original
+                .variable()
                 .iec_local_symbols()
                 .into_iter()
                 .collect::<Result<Vec<_>, _>>()?

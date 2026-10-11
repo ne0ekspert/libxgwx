@@ -9,6 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let document = XgwxDocument::from_path(source)?;
     let program = document
+        .program()
         .ladder_programs()
         .into_iter()
         .next()

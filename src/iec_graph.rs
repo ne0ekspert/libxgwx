@@ -20,6 +20,7 @@ pub struct IecCircuitPoint {
     pub x: u8,
 }
 
+/// Electrical role of an edge in the decoded IEC ladder circuit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IecCircuitEdgeKind {
     HorizontalWire,
@@ -40,6 +41,7 @@ pub struct IecCircuitEdge {
     pub paired_record_offset: Option<usize>,
 }
 
+/// Visible record category occupying cells in an IEC ladder circuit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IecCircuitAreaKind {
     HorizontalWire,

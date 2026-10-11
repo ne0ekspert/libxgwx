@@ -151,6 +151,7 @@ pub(super) struct WasmHardwareSummary {
     pub(super) cpu_profile: Option<&'static CpuHardwareProfile>,
     pub(super) bases: Vec<WasmBaseSummary>,
     pub(super) modules: Vec<WasmModuleSummary>,
+    pub(super) typed_modules: Vec<WasmTypedModule>,
 }
 
 #[derive(Debug, Serialize)]
@@ -158,13 +159,23 @@ pub(super) struct WasmHardwareSummary {
 pub(super) struct WasmBaseSummary {
     pub(super) base: Option<u32>,
     pub(super) slot_count: Option<u32>,
+    pub(super) base_index: usize,
+    pub(super) configuration_index: Option<usize>,
+    pub(super) modules: Vec<WasmTypedModule>,
 }
 
 impl WasmBaseSummary {
-    pub(super) fn from_base(base: BaseSummary) -> Self {
+    pub(super) fn from_base(base: crate::Base<'_>) -> Self {
         Self {
-            base: base.base,
-            slot_count: base.slot_count,
+            base: base.number(),
+            slot_count: base.slot_count(),
+            base_index: base.index(),
+            configuration_index: base.configuration_index(),
+            modules: base
+                .modules()
+                .into_iter()
+                .map(WasmTypedModule::from_module)
+                .collect(),
         }
     }
 }
@@ -195,6 +206,74 @@ impl WasmModuleSummary {
             details: module.details,
             input_filter_raw: module.input_filter_raw,
             input_filter: module.input_filter.map(|value| value.to_string()),
+        }
+    }
+}
+
+// Keep typed membership separate from installed edit coordinates.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WasmTypedModule {
+    kind: &'static str,
+    io_kind: Option<String>,
+    configuration_index: Option<usize>,
+    hardware: Option<WasmModuleSummary>,
+    network: Option<super::network::WasmNetworkModuleSummary>,
+    configuration: Option<serde_json::Value>,
+}
+impl WasmTypedModule {
+    pub(super) fn from_module(module: crate::Module) -> Self {
+        match module {
+            crate::Module::Io(io) => Self {
+                kind: "io",
+                io_kind: Some(format!("{:?}", io.kind)),
+                configuration_index: io.base.configuration_index,
+                hardware: Some(WasmModuleSummary::from_module(io.base.hardware)),
+                network: None,
+                configuration: None,
+            },
+            crate::Module::Other(hw) => Self {
+                kind: "other",
+                io_kind: None,
+                configuration_index: hw.configuration_index,
+                hardware: Some(WasmModuleSummary::from_module(hw.hardware)),
+                network: None,
+                configuration: None,
+            },
+            crate::Module::Network(net) => Self {
+                kind: "network",
+                io_kind: None,
+                configuration_index: net.configuration_index,
+                hardware: net
+                    .base
+                    .map(|hw| WasmModuleSummary::from_module(hw.hardware)),
+                network: Some(super::network::WasmNetworkModuleSummary::from_module(
+                    net.metadata,
+                )),
+                configuration: Some(match net.configuration {
+                    crate::ConfigurationMatch::Missing => serde_json::json!({"status":"missing"}),
+                    crate::ConfigurationMatch::Matched(config) => {
+                        serde_json::json!({"status":"matched", "settings": network_settings(config)})
+                    }
+                    crate::ConfigurationMatch::Ambiguous(configs) => {
+                        serde_json::json!({"status":"ambiguous", "candidates": configs.into_iter().map(network_settings).collect::<Vec<_>>()})
+                    }
+                }),
+            },
+        }
+    }
+}
+fn network_settings(config: crate::NetworkConfiguration) -> serde_json::Value {
+    use super::network::*;
+    match config {
+        crate::NetworkConfiguration::Cnet(c) => {
+            serde_json::json!({"kind":"cnet", "value": WasmCnetSummary::from_cnet(&c)})
+        }
+        crate::NetworkConfiguration::Fenet(c) => {
+            serde_json::json!({"kind":"fenet", "value": WasmFenetSummary::from_fenet(&c)})
+        }
+        crate::NetworkConfiguration::Other(c) => {
+            serde_json::json!({"kind":"other", "value": WasmXgpdSummary::from_xgpd(c)})
         }
     }
 }

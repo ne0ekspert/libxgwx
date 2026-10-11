@@ -7,11 +7,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ))?;
     // Keep only the captured ST and IL programs; the capture project's SFC was blank.
     for _ in 0..2 {
-        let id = doc.programs()[0].object_id.clone().unwrap();
-        doc.delete_program(0, &id)?;
+        let id = doc.program().programs()[0].object_id.clone().unwrap();
+        doc.program_mut().delete_program(0, &id)?;
     }
     for (i, language) in ["ST", "IL"].iter().enumerate() {
-        doc.create_program(&NewProgram {
+        doc.program_mut().create_program(&NewProgram {
             name: format!("Created{language}"),
             language: (*language).into(),
             object_id: format!("abcd000{}-1234-4567-89ab-0123456789ab", i * 2 + 1),
@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     for index in 0..4 {
         let text = doc
+            .program()
             .text_programs()
             .into_iter()
             .find(|p| p.program_index == index)
@@ -59,11 +60,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         for (name, ty, declaration) in declarations {
             let current = doc
+                .program()
                 .text_programs()
                 .into_iter()
                 .find(|p| p.program_index == index)
                 .unwrap();
-            doc.edit_text_variable(
+            doc.variable_mut().edit_text_variable(
                 &current.object_id,
                 &SfcVariablePatch {
                     program_index: index,
@@ -82,7 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             "LD 2\r\nST Count\r\n"
         };
-        doc.edit_text_program(&TextProgramPatch {
+        doc.program_mut().edit_text_program(&TextProgramPatch {
             program_index: index,
             expected_object_id: text.object_id,
             expected_language: text.language,

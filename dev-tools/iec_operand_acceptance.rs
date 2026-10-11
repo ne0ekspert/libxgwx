@@ -58,6 +58,7 @@ fn target(
     pin: &str,
 ) -> Result<(usize, String)> {
     let program = document
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -80,7 +81,14 @@ fn generate(
     if actual != expected {
         return Err(format!("expected {function}.{pin}={expected}, found {actual}").into());
     }
-    document.update_iec_ld_function_operand(program_index, offset, expected, replacement)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .update_function_operand(offset, expected, replacement)
+        })?;
     document.write_to(output)?;
 
     let reparsed = XgwxDocument::from_path(output)?;
@@ -109,8 +117,8 @@ fn verify(
         return Err(format!("resaved target is {actual}, expected {expected}").into());
     }
 
-    let generated_programs = generated.ladder_programs();
-    let resaved_programs = resaved.ladder_programs();
+    let generated_programs = generated.program().ladder_programs();
+    let resaved_programs = resaved.program().ladder_programs();
     if generated_programs.len() != resaved_programs.len() {
         return Err("resaved program count changed".into());
     }

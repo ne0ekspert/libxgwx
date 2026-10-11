@@ -8,9 +8,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_network_replace_acceptance SOURCE OUTPUT".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    let before = document.ladder_programs();
-    document.replace_iec_ld_group(0, 2, 2, 4, 6)?;
-    let after = document.ladder_programs();
+    let before = document.program().ladder_programs();
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.replace_group(2, 2, 4, 6))?;
+    let after = document.program().ladder_programs();
     for index in 1..before.len() {
         if before[index].as_ref().expect("source program parses").data
             != after[index].as_ref().expect("edited program parses").data
@@ -28,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     document.write_to(output)?;
     let saved = XgwxDocument::from_path(output)?;
-    for (left, right) in saved.ladder_programs().into_iter().zip(after) {
+    for (left, right) in saved.program().ladder_programs().into_iter().zip(after) {
         if left?.data != right?.data {
             return Err("written ProgramData changed on reparse".into());
         }

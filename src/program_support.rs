@@ -18,7 +18,7 @@ impl XgwxDocument {
                 == 1
     }
     /// Languages whose creation layout is validated for this CPU and project mode.
-    pub fn program_languages(&self) -> Vec<&'static str> {
+    pub(crate) fn program_languages(&self) -> Vec<&'static str> {
         let configs = self.configurations();
         if configs.len() != 1 {
             return Vec::new();

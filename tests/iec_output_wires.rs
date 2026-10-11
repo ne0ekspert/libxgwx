@@ -8,6 +8,7 @@ fn base() -> XgwxDocument {
 }
 fn wire(doc: &mut XgwxDocument, row: u16, pin: &str, x: u8) {
     let b = doc
+        .program()
         .ladder_programs()
         .remove(0)
         .unwrap()
@@ -16,12 +17,22 @@ fn wire(doc: &mut XgwxDocument, row: u16, pin: &str, x: u8) {
         .into_iter()
         .find(|b| b.row_index == row)
         .unwrap();
-    doc.insert_iec_ld_function_output_wire(0, b.record_offset, &b.name.value, pin, x)
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_function_output_wire(
+                b.record_offset,
+                &b.name.value,
+                pin,
+                x,
+            )
+        })
         .unwrap();
 }
 fn payload(bytes: &[u8]) -> Vec<u8> {
     XgwxDocument::parse(bytes)
         .unwrap()
+        .program()
         .ladder_programs()
         .remove(0)
         .unwrap()
@@ -32,7 +43,7 @@ fn output_wires_match_native_f5_and_keep_numeric_destinations() {
     let mut d = base();
     wire(&mut d, 0, "ENO", 10);
     assert_eq!(
-        d.ladder_programs().remove(0).unwrap().data,
+        d.program().ladder_programs().remove(0).unwrap().data,
         payload(include_bytes!(
             "../fixtures/function-output-wires/add-eno-native.xgwx"
         ))
@@ -42,13 +53,14 @@ fn output_wires_match_native_f5_and_keep_numeric_destinations() {
     }
     wire(&mut d, 15, "OUT", 10);
     assert_eq!(
-        d.ladder_programs().remove(0).unwrap().data,
+        d.program().ladder_programs().remove(0).unwrap().data,
         payload(include_bytes!(
             "../fixtures/function-output-wires/all-native.xgwx"
         ))
     );
     let p = XgwxDocument::parse(&d.to_verified_bytes().unwrap())
         .unwrap()
+        .program()
         .ladder_programs()
         .remove(0)
         .unwrap();
@@ -66,6 +78,7 @@ fn output_wires_match_native_f5_and_keep_numeric_destinations() {
 fn output_wire_guards_are_atomic() {
     let mut d = base();
     let b = d
+        .program()
         .ladder_programs()
         .remove(0)
         .unwrap()
@@ -81,7 +94,11 @@ fn output_wire_guards_are_atomic() {
     ] {
         let before = d.to_bytes().unwrap();
         assert!(
-            d.insert_iec_ld_function_output_wire(0, b.record_offset, name, pin, x)
+            d.program_mut()
+                .get(0)
+                .and_then(|mut selected_program| selected_program
+                    .iec_ld()?
+                    .insert_function_output_wire(b.record_offset, name, pin, x))
                 .is_err()
         );
         assert_eq!(d.to_bytes().unwrap(), before);
@@ -89,13 +106,18 @@ fn output_wire_guards_are_atomic() {
     wire(&mut d, 0, "ENO", 10);
     let before = d.to_bytes().unwrap();
     assert!(
-        d.insert_iec_ld_function_output_wire(0, b.record_offset, "ADD", "ENO", 10)
+        d.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| selected_program
+                .iec_ld()?
+                .insert_function_output_wire(b.record_offset, "ADD", "ENO", 10))
             .is_err()
     );
     assert_eq!(d.to_bytes().unwrap(), before);
     wire(&mut d, 0, "ENO", 13);
     wire(&mut d, 15, "OUT", 10);
     let b = d
+        .program()
         .ladder_programs()
         .remove(0)
         .unwrap()
@@ -106,7 +128,11 @@ fn output_wire_guards_are_atomic() {
         .unwrap();
     let before = d.to_bytes().unwrap();
     assert!(
-        d.insert_iec_ld_function_output_wire(0, b.record_offset, "EQ", "ENO", 10)
+        d.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| selected_program
+                .iec_ld()?
+                .insert_function_output_wire(b.record_offset, "EQ", "ENO", 10))
             .is_err()
     );
     assert_eq!(d.to_bytes().unwrap(), before);
@@ -122,21 +148,24 @@ fn comparison_without_assignment_retains_out_reference_and_wires_like_native() {
         (15, "EQ", vec!["%MW0", "1"]),
         (19, "INT_TO_UDINT", vec!["%MW0", "%MD10"]),
     ] {
-        d.insert_iec_ld_function(
-            0,
-            r,
-            7,
-            n,
-            &ops.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-        )
-        .unwrap();
+        d.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_function(
+                    r,
+                    7,
+                    n,
+                    &ops.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+                )
+            })
+            .unwrap();
     }
     for r in [0, 5, 10, 19] {
         wire(&mut d, r, "ENO", 10);
     }
     wire(&mut d, 15, "OUT", 10);
     assert_eq!(
-        d.ladder_programs().remove(0).unwrap().data,
+        d.program().ladder_programs().remove(0).unwrap().data,
         payload(include_bytes!(
             "../fixtures/function-output-wires/all-native.xgwx"
         ))
@@ -148,21 +177,24 @@ fn comparison_without_assignment_retains_out_reference_and_wires_like_native() {
         (15, "OUT", 16),
         (19, "ENO", 19),
     ] {
-        d.insert_iec_ld_single_element(
-            0,
-            coil_row,
-            94,
-            "coil",
-            "OUTPUT",
-            &format!("%MX{}", 30 + row),
-        )
-        .unwrap();
+        d.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_single_element(
+                    coil_row,
+                    94,
+                    "coil",
+                    "OUTPUT",
+                    &format!("%MX{}", 30 + row),
+                )
+            })
+            .unwrap();
         for x in (13..=91).step_by(3) {
             wire(&mut d, row, pin, x);
         }
     }
     assert_eq!(
-        d.ladder_programs().remove(0).unwrap().data,
+        d.program().ladder_programs().remove(0).unwrap().data,
         payload(include_bytes!(
             "../fixtures/function-output-wires/full-native.xgwx"
         ))
@@ -171,7 +203,8 @@ fn comparison_without_assignment_retains_out_reference_and_wires_like_native() {
         d.write_to(path).unwrap();
     }
     assert!(
-        d.ladder_programs()
+        d.program()
+            .ladder_programs()
             .remove(0)
             .unwrap()
             .iec_circuit_graph()

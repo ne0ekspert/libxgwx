@@ -10,11 +10,15 @@ fn normalized(program: &LadderProgramData) -> Vec<u8> {
 }
 fn compare(doc: &XgwxDocument, path: &str) -> Result<(), Box<dyn Error>> {
     let native = XgwxDocument::from_path(path)?;
-    assert_eq!(doc.ladder_programs().len(), native.ladder_programs().len());
+    assert_eq!(
+        doc.program().ladder_programs().len(),
+        native.program().ladder_programs().len()
+    );
     for (p, (a, b)) in doc
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(native.ladder_programs())
+        .zip(native.program().ladder_programs())
         .enumerate()
     {
         assert!(
@@ -33,14 +37,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     let mut doc = XgwxDocument::from_path(&args[0])?;
-    doc.extend_iec_ld_vertical_wire(0, 3, 4, 3)?;
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program.iec_ld()?.extend_vertical_wire(3, 4, 3)
+    })?;
     let before = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    doc.insert_iec_ld_single_element(0, 5, 1, "contact", "NO", "ON")?;
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .insert_single_element(5, 1, "contact", "NO", "ON")
+    })?;
     assert!(
-        doc.ladder_programs()
+        doc.program()
+            .ladder_programs()
             .remove(0)?
             .iec_circuit_graph()
             .is_some()
@@ -50,6 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     doc.write_to(&args[1])?;
     let record = doc
+        .program()
         .ladder_programs()
         .remove(0)?
         .iec_record_frames()
@@ -57,10 +70,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|r| r.row_index == 5 && r.kind == IecRecordKind::Contact(6))
         .unwrap();
-    doc.delete_iec_ld_contact(0, record.offset, 1, "NO", "ON")?;
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .delete_contact(record.offset, 1, "NO", "ON")
+    })?;
     for (p, old) in before.iter().enumerate() {
         assert!(
-            doc.ladder_programs().remove(p)?.data == old.data,
+            doc.program().ladder_programs().remove(p)?.data == old.data,
             "program {p} restoration differs"
         );
     }

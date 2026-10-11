@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .attribute("ObjectId")
             .unwrap()
             .to_owned();
-        doc.delete_program(1, &identity)?;
+        doc.program_mut().delete_program(1, &identity)?;
         std::fs::write(format!("{out}/{stem}.xgwx"), doc.to_verified_bytes()?)?;
     }
     Ok(())

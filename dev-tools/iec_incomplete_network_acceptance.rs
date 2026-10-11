@@ -2,14 +2,14 @@
 use std::{env, error::Error, path::Path};
 use xgwx::XgwxDocument;
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    let aa = a.ladder_programs();
-    let bb = b.ladder_programs();
+    let aa = a.program().ladder_programs();
+    let bb = b.program().ladder_programs();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?.data, b?.data, "all native program bytes {i}");
     }
-    let aa = a.iec_local_symbols();
-    let bb = b.iec_local_symbols();
+    let aa = a.variable().iec_local_symbols();
+    let bb = b.variable().iec_local_symbols();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?, b?, "every native local field including offsets {i}");
@@ -33,11 +33,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         (15, 25),
         (14, 20),
     ] {
-        source.delete_iec_ld_group(0, group, row)?;
+        source
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(group, row))?;
     }
     std::fs::create_dir_all(&args[1])?;
     source.write_to(Path::new(&args[1]).join("INPRE.xgwx"))?;
-    let before = source.ladder_programs().remove(0)?;
+    let before = source.program().ladder_programs().remove(0)?;
     let endpoints = before
         .iec_circuit_layout()
         .ok_or("source layout")?
@@ -47,11 +50,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (stem, copy) in [("INC", true), ("INM", false)] {
         let mut edited = source.clone();
         if copy {
-            edited.copy_iec_ld_group(0, 25, 67, 20)?;
+            edited
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.copy_group(25, 67, 20)
+                })?;
         } else {
-            edited.move_iec_ld_group(0, 25, 67, 20)?;
+            edited
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.move_group(25, 67, 20)
+                })?;
         }
-        let after = edited.ladder_programs().remove(0)?;
+        let after = edited.program().ladder_programs().remove(0)?;
         let mut expected = endpoints.clone();
         for p in &mut expected {
             p.group_index = 14;
@@ -77,15 +90,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         let mut restored = edited.clone();
         if copy {
-            restored.delete_iec_ld_group(0, 14, 20)?;
+            restored
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(14, 20))?;
         } else {
-            restored.move_iec_ld_group(0, 14, 20, 67)?;
+            restored
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.move_group(14, 20, 67)
+                })?;
         }
         exact(&restored, &source)?;
         for (i, (a, b)) in original
+            .program()
             .ladder_programs()
             .into_iter()
-            .zip(edited.ladder_programs())
+            .zip(edited.program().ladder_programs())
             .enumerate()
             .skip(1)
         {
@@ -106,18 +128,28 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     let mut cross_source = source.clone();
-    let target = cross_source.ladder_programs().remove(6)?;
+    let target = cross_source.program().ladder_programs().remove(6)?;
     let mut starts = std::collections::BTreeMap::new();
     for row in target.iec_row_frames().ok_or("target rows")? {
         starts.entry(row.group_index).or_insert(row.row_index);
     }
     for (group, row) in starts.into_iter().rev().filter(|(_, row)| *row < 16) {
-        cross_source.delete_iec_ld_group(6, group, row)?;
+        cross_source
+            .program_mut()
+            .get(6)
+            .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(group, row))?;
     }
     cross_source.write_to(Path::new(&args[1]).join("INXPRE.xgwx"))?;
     let mut cross = cross_source.clone();
-    cross.copy_iec_ld_group_to_program_with_locals(0, 25, 67, 6, 0)?;
-    let after = cross.ladder_programs().remove(6)?;
+    cross
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .copy_group_to_program_with_locals(25, 67, 6, 0)
+        })?;
+    let after = cross.program().ladder_programs().remove(6)?;
     let mut expected = endpoints.clone();
     for point in &mut expected {
         point.group_index = 0;
@@ -131,9 +163,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     actual.sort_unstable();
     assert_eq!(expected, actual, "cross-program gap endpoints");
     for (i, (a, b)) in cross_source
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(cross.ladder_programs())
+        .zip(cross.program().ladder_programs())
         .enumerate()
         .filter(|(i, _)| *i != 6)
     {

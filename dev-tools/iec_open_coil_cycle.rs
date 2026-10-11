@@ -3,14 +3,14 @@ use std::{env, error::Error};
 use xgwx::{IecRecordKind, XgwxDocument};
 
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    let aa = a.ladder_programs();
-    let bb = b.ladder_programs();
+    let aa = a.program().ladder_programs();
+    let bb = b.program().ladder_programs();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?.data, b?.data, "native payload {i}");
     }
-    let aa = a.iec_local_symbols();
-    let bb = b.iec_local_symbols();
+    let aa = a.variable().iec_local_symbols();
+    let bb = b.variable().iec_local_symbols();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?, b?, "all local fields including offsets {i}");
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     let source = XgwxDocument::from_path(&a[0])?;
-    let program = source.ladder_programs().remove(0)?;
+    let program = source.program().ladder_programs().remove(0)?;
     let endpoints = program
         .iec_circuit_layout()
         .ok_or("missing layout")?
@@ -57,16 +57,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Coils: {coils:?}");
     let mut edited = source.clone();
     for (row, _, variable) in &coils {
-        let p = edited.ladder_programs().remove(0)?;
+        let p = edited.program().ladder_programs().remove(0)?;
         let record = p
             .iec_record_frames()
             .ok_or("missing records")?
             .into_iter()
             .find(|r| r.row_index == *row && matches!(r.kind, IecRecordKind::Coil(14..=19)))
             .ok_or("missing coil")?;
-        edited.delete_iec_ld_terminal_coil(0, record.offset, variable)?;
+        edited
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_terminal_coil(record.offset, variable)
+            })?;
         assert_eq!(
             edited
+                .program()
                 .ladder_programs()
                 .remove(0)?
                 .iec_circuit_layout()
@@ -78,9 +86,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     edited.write_to(&a[1])?;
     let deleted = edited.clone();
     for (row, kind, variable) in &coils {
-        edited.insert_iec_ld_single_element(0, *row, 94, "coil", kind, variable)?;
+        edited
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .insert_single_element(*row, 94, "coil", kind, variable)
+            })?;
         assert_eq!(
             edited
+                .program()
                 .ladder_programs()
                 .remove(0)?
                 .iec_circuit_layout()

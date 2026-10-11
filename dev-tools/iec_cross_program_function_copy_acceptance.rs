@@ -4,6 +4,7 @@ use xgwx::XgwxDocument;
 
 fn payloads(document: &XgwxDocument) -> Result<Vec<Vec<u8>>, xgwx::XgwxError> {
     document
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|program| program.data))
@@ -20,13 +21,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Program 3 already has an automatic UDINT local named 변환, matching the
     // source WORD_TO_UDINT output. Clearing its L1-L3 network creates room.
     document
-        .delete_iec_ld_group(3, 1, 1)
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(1, 1))
         .map_err(|error| format!("clear destination: {error:?}"))?;
     let cleared = payloads(&document)?;
     document
-        .copy_iec_ld_group_to_program(2, 1, 1, 3, 1)
+        .program_mut()
+        .get(2)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.copy_group_to_program(1, 1, 3, 1)
+        })
         .map_err(|error| format!("copy function group: {error:?}"))?;
-    let copied = document.ladder_programs().remove(3)?;
+    let copied = document.program().ladder_programs().remove(3)?;
     let group = copied
         .iec_row_frames()
         .ok_or("copied row framing failed")?
@@ -52,7 +59,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     document.write_to(output)?;
-    document.delete_iec_ld_group(3, group, 1)?;
+    document
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.delete_group(group, 1))?;
     if payloads(&document)? != cleared {
         return Err("deleting the function copy did not restore the cleared destination".into());
     }

@@ -2,21 +2,26 @@
 use std::{error::Error, path::Path};
 use xgwx::XgwxDocument;
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    assert_eq!(a.ladder_programs().len(), 7);
-    assert_eq!(b.ladder_programs().len(), 7);
+    assert_eq!(a.program().ladder_programs().len(), 7);
+    assert_eq!(b.program().ladder_programs().len(), 7);
     for (i, (a, b)) in a
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(b.ladder_programs())
+        .zip(b.program().ladder_programs())
         .enumerate()
     {
         assert_eq!(a?.data, b?.data, "program payload {i}");
     }
-    assert_eq!(a.iec_local_symbols().len(), b.iec_local_symbols().len());
+    assert_eq!(
+        a.variable().iec_local_symbols().len(),
+        b.variable().iec_local_symbols().len()
+    );
     for (i, (a, b)) in a
+        .variable()
         .iec_local_symbols()
         .into_iter()
-        .zip(b.iec_local_symbols())
+        .zip(b.variable().iec_local_symbols())
         .enumerate()
     {
         assert_eq!(a?, b?, "all local fields including offsets {i}");
@@ -34,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             ("ADDR_REAL", "REAL"),
             ("ADDR_WORD", "WORD"),
         ] {
-            d.insert_iec_local_symbol(0, name, ty, "")?;
+            d.variable_mut().insert_iec_local_symbol(0, name, ty, "")?;
         }
         d.write_to(output.join("ADPRE.xgwx"))?;
         return Ok(());
@@ -47,23 +52,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut base = source.clone();
     for (name, address, _) in cases {
         let index = base
+            .variable()
             .iec_local_symbols()
             .remove(0)?
             .iter()
             .position(|s| s.name == name)
             .ok_or("missing capture symbol")?;
-        base.update_iec_local_symbol_address(0, index, name, address, "")?;
+        base.variable_mut()
+            .update_iec_local_symbol_address(0, index, name, address, "")?;
     }
     base.write_to(output.join("ADBASE.xgwx"))?;
     let mut recreated = base.clone();
     for (name, address, _) in cases {
         let index = recreated
+            .variable()
             .iec_local_symbols()
             .remove(0)?
             .iter()
             .position(|s| s.name == name)
             .unwrap();
-        recreated.update_iec_local_symbol_address(0, index, name, "", address)?;
+        recreated
+            .variable_mut()
+            .update_iec_local_symbol_address(0, index, name, "", address)?;
     }
     exact(&recreated, &source)?;
     recreated.write_to(output.join("ADREGEN.xgwx"))?;
@@ -71,15 +81,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut edited = source.clone();
     for (name, address, replacement) in cases {
         let index = edited
+            .variable()
             .iec_local_symbols()
             .remove(0)?
             .iter()
             .position(|s| s.name == name)
             .unwrap();
-        edited.update_iec_local_symbol_address(0, index, name, address, replacement)?;
+        edited.variable_mut().update_iec_local_symbol_address(
+            0,
+            index,
+            name,
+            address,
+            replacement,
+        )?;
     }
     let bytes = edited.to_bytes()?;
     let word_index = edited
+        .variable()
         .iec_local_symbols()
         .remove(0)?
         .iter()
@@ -88,6 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for rejected in ["%MW2002", "%MD2202", "%MW+2203", "%MW4294967295"] {
         assert!(
             edited
+                .variable_mut()
                 .update_iec_local_symbol_address(0, word_index, "ADDR_WORD", "%MW2202", rejected)
                 .is_err(),
             "must reject {rejected}"

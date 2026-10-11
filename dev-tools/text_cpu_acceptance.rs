@@ -15,7 +15,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ] {
         let mut doc = source.clone();
         doc.select_cpu(model)?;
-        assert_eq!(doc.text_programs(), source.text_programs());
+        assert_eq!(
+            doc.program().text_programs(),
+            source.program().text_programs()
+        );
         std::fs::write(format!("{directory}/{stem}.xgwx"), doc.to_verified_bytes()?)?;
     }
     let mut xgk = XgwxDocument::from_path("fixtures/empty-projects/new-xgk.xgwx")?;
@@ -37,11 +40,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ] {
         let row = row * 4;
         if row > 0 {
-            xgk.insert_ladder_row(0, row)?;
+            xgk.program_mut()
+                .get(0)
+                .and_then(|mut selected_program| selected_program.ladder()?.insert_row(row))?;
         }
-        xgk.edit_ladder_cell(
-            0,
-            &LadderCellEdit {
+        xgk.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program.ladder()?.edit_cell(&LadderCellEdit {
                 raw_y: row,
                 column: 0,
                 expected: None,
@@ -49,12 +53,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     kind: contact,
                     operand: format!("M{base:05}"),
                 }),
-            },
-        )?;
+            })
+        })?;
         if row == 0 {
-            xgk.edit_ladder_cell(
-                0,
-                &LadderCellEdit {
+            xgk.program_mut().get(0).and_then(|mut selected_program| {
+                selected_program.ladder()?.edit_cell(&LadderCellEdit {
                     raw_y: row,
                     column: 1,
                     expected: None,
@@ -62,12 +65,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         kind: LadderEditKind::NormallyClosed,
                         operand: "M00001".into(),
                     }),
-                },
-            )?;
+                })
+            })?;
         }
-        xgk.edit_ladder_cell(
-            0,
-            &LadderCellEdit {
+        xgk.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program.ladder()?.edit_cell(&LadderCellEdit {
                 raw_y: row,
                 column: 9,
                 expected: None,
@@ -75,11 +77,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     kind: output,
                     operand: format!("M{:05}", if row == 0 { 2 } else { base + 1 }),
                 }),
-            },
-        )?;
+            })
+        })?;
     }
     std::fs::write(format!("{directory}/GKIL.xgwx"), xgk.to_verified_bytes()?)?;
-    let il = xgk.ladder_programs().remove(0)?.to_il()?.to_string();
+    let il = xgk
+        .program()
+        .ladder_programs()
+        .remove(0)?
+        .to_il()?
+        .to_string();
     std::fs::write(format!("{directory}/GKIL.txt"), &il)?;
     println!("XGK-CPUSN IL:\n{il}");
     Ok(())

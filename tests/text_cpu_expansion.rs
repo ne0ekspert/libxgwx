@@ -19,37 +19,43 @@ fn compact_and_redundant_projects_create_edit_and_preserve_hardware() {
         assert_eq!(original.configurations()[0].type_code, Some(code));
         for language in ["ST", "IL"] {
             let mut doc = original.clone();
-            let index = doc.programs().len();
-            doc.create_program(&NewProgram {
-                name: "Added".into(),
-                language: language.into(),
-                object_id: "abcd0001-1234-4567-89ab-0123456789ab".into(),
-                symbol_id: "abcd0002-1234-4567-89ab-0123456789ab".into(),
-            })
-            .unwrap();
+            let index = doc.program().programs().len();
+            doc.program_mut()
+                .create_program(&NewProgram {
+                    name: "Added".into(),
+                    language: language.into(),
+                    object_id: "abcd0001-1234-4567-89ab-0123456789ab".into(),
+                    symbol_id: "abcd0002-1234-4567-89ab-0123456789ab".into(),
+                })
+                .unwrap();
             let text = doc
+                .program()
                 .text_programs()
                 .into_iter()
                 .find(|p| p.program_index == index)
                 .unwrap();
             assert!(text.editable);
-            doc.edit_text_program(&TextProgramPatch {
-                program_index: index,
-                expected_object_id: text.object_id,
-                expected_language: language.into(),
-                expected_source: "".into(),
-                source: if language == "ST" {
-                    "%MX0 := TRUE;".into()
-                } else {
-                    "LD 1\nST %MW0".into()
-                },
-            })
-            .unwrap();
-            assert_eq!(doc.modules(), original.modules());
+            doc.program_mut()
+                .edit_text_program(&TextProgramPatch {
+                    program_index: index,
+                    expected_object_id: text.object_id,
+                    expected_language: language.into(),
+                    expected_source: "".into(),
+                    source: if language == "ST" {
+                        "%MX0 := TRUE;".into()
+                    } else {
+                        "LD 1\nST %MW0".into()
+                    },
+                })
+                .unwrap();
+            assert_eq!(doc.module_summaries(), original.module_summaries());
             assert_eq!(doc.network_modules(), original.network_modules());
             assert_eq!(doc.configurations(), original.configurations());
             let saved = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-            assert_eq!(saved.text_programs(), doc.text_programs());
+            assert_eq!(
+                saved.program().text_programs(),
+                doc.program().text_programs()
+            );
         }
     }
 }
@@ -63,42 +69,46 @@ fn cpu_and_mode_guards_fail_atomically() {
         object_id: "abcd0001-1234-4567-89ab-0123456789ab".into(),
         symbol_id: "abcd0002-1234-4567-89ab-0123456789ab".into(),
     };
-    assert!(doc.create_program(&patch).is_err());
+    assert!(doc.program_mut().create_program(&patch).is_err());
     assert_eq!(doc, source);
     let doc = XgwxDocument::from_path("fixtures/text-cpus/xgk-auto-native-blank.xgwx").unwrap();
-    assert!(doc.program_languages().contains(&"ST"));
-    assert!(!doc.program_languages().contains(&"IL"));
+    assert!(doc.program().program_languages().contains(&"ST"));
+    assert!(!doc.program().program_languages().contains(&"IL"));
     for code in [110, 2, 18, 999] {
         let mut doc = source.clone();
         doc.xml = doc.xml.replace("Type=\"17\"", &format!("Type=\"{code}\""));
         let mut doc = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
         let before = doc.clone();
-        assert!(doc.create_program(&patch).is_err());
+        assert!(doc.program_mut().create_program(&patch).is_err());
         assert_eq!(doc, before);
     }
 }
 #[test]
 fn vendor_il_is_native_ladder_and_rejects_stale_or_unsupported_source() {
     let mut doc = XgwxDocument::from_path("fixtures/empty-projects/new-xgk.xgwx").unwrap();
-    let p = doc.vendor_il_programs().remove(0);
+    let p = doc.program().vendor_il_programs().remove(0);
     let patch = VendorIlPatch {
         program_index: 0,
         expected_object_id: p.object_id,
         expected_source: p.source.unwrap(),
         source: "LOAD M00000\nAND NOT M00001\nOUT M00002\nLOADP M00003\nMOV 1 D100".into(),
     };
-    doc.edit_vendor_il(&patch).unwrap();
-    assert_eq!(doc.programs()[0].kind, Some(0));
+    doc.program_mut().edit_vendor_il(&patch).unwrap();
+    assert_eq!(doc.program().programs()[0].kind, Some(0));
     assert_eq!(
-        doc.ladder_program(0).unwrap().unwrap().project_type,
+        doc.program()
+            .ladder_program(0)
+            .unwrap()
+            .unwrap()
+            .project_type,
         Some(1)
     );
     assert_eq!(
-        doc.vendor_il_programs()[0].source.as_deref(),
+        doc.program().vendor_il_programs()[0].source.as_deref(),
         Some(patch.source.as_str())
     );
     let before = doc.clone();
-    assert!(doc.edit_vendor_il(&patch).is_err());
+    assert!(doc.program_mut().edit_vendor_il(&patch).is_err());
     assert_eq!(doc, before);
     for source in [
         "LD TRUE\nST Flag",
@@ -107,13 +117,16 @@ fn vendor_il_is_native_ladder_and_rejects_stale_or_unsupported_source() {
         "LOAD M00000\nNO_SUCH_OPCODE D100",
         "LOAD M00000\nOUT M00001\nOUT M00002",
     ] {
-        let p = doc.vendor_il_programs().remove(0);
+        let p = doc.program().vendor_il_programs().remove(0);
         let patch = VendorIlPatch {
             expected_source: p.source.unwrap(),
             source: source.into(),
             ..patch.clone()
         };
-        assert!(doc.edit_vendor_il(&patch).is_err(), "{source}");
+        assert!(
+            doc.program_mut().edit_vendor_il(&patch).is_err(),
+            "{source}"
+        );
         assert_eq!(doc, before);
     }
 }
@@ -139,22 +152,26 @@ fn native_xgk_scalar_codes_decode_and_write_without_iec_type_confusion() {
     ] {
         let mut doc =
             XgwxDocument::from_path("fixtures/text-cpus/xgk-auto-native-blank.xgwx").unwrap();
-        let p = doc.text_programs().remove(0);
-        doc.edit_text_variable(
-            &p.object_id,
-            &xgwx::SfcVariablePatch {
-                program_index: 0,
-                expected_variables: vec![],
-                name: "Count".into(),
-                data_type: name.into(),
-                description: "".into(),
-                remove: false,
-                update: false,
-                declaration: None,
-            },
-        )
-        .unwrap();
-        assert_eq!(doc.text_programs()[0].variables[0].data_type, name);
+        let p = doc.program().text_programs().remove(0);
+        doc.variable_mut()
+            .edit_text_variable(
+                &p.object_id,
+                &xgwx::SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables: vec![],
+                    name: "Count".into(),
+                    data_type: name.into(),
+                    description: "".into(),
+                    remove: false,
+                    update: false,
+                    declaration: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            doc.program().text_programs()[0].variables[0].data_type,
+            name
+        );
         let table = doc
             .root
             .descendants_named("Symbols")
@@ -195,8 +212,9 @@ fn native_roundtrip_preserves_sources_and_declarations_on_captured_cpus() {
             saved.configurations()[0].type_code,
             "{stem}"
         );
-        for p in generated.text_programs() {
+        for p in generated.program().text_programs() {
             let actual = saved
+                .program()
                 .text_programs()
                 .into_iter()
                 .find(|v| v.object_id == p.object_id)
@@ -213,10 +231,10 @@ fn vendor_il_native_save_as_preserves_instructions() {
     let generated = XgwxDocument::from_path("fixtures/text-cpus/xgk-il-generated.xgwx").unwrap();
     let saved = XgwxDocument::from_path("fixtures/text-cpus/xgk-il-native-roundtrip.xgwx").unwrap();
     assert_eq!(
-        generated.vendor_il_programs()[0].source,
-        saved.vendor_il_programs()[0].source
+        generated.program().vendor_il_programs()[0].source,
+        saved.program().vendor_il_programs()[0].source
     );
-    assert!(saved.vendor_il_programs()[0].editable);
+    assert!(saved.program().vendor_il_programs()[0].editable);
 }
 #[test]
 fn captured_native_xgk_scalar_tables_keep_their_types() {
@@ -250,7 +268,7 @@ fn captured_native_xgk_scalar_tables_keep_their_types() {
         }
         // The native blank has only its local Symbols table.
         assert!(replace(&mut doc.root, &raw, false));
-        let p = doc.text_programs().remove(0);
+        let p = doc.program().text_programs().remove(0);
         assert_eq!(p.variables_error, None, "{ty}");
         assert_eq!(
             p.variables[0].data_type,

@@ -11,6 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let row = a[3].parse::<u16>()?;
     let x = a[4].parse::<u8>()?;
     let b = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(p)
@@ -20,9 +21,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|b| b.row_index == row && b.raw_x == x && b.name.value == a[5])
         .ok_or("missing target")?;
-    doc.delete_iec_ld_branch_function(p, b.record_offset, &a[5])?;
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .delete_branch_function(b.record_offset, &a[5])
+    })?;
     if a.len() > 6 {
-        doc.insert_iec_ld_function(p, row, x, &a[6], &a[7..])?;
+        doc.program_mut().get(p).and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_function(row, x, &a[6], &a[7..])
+        })?;
     }
     std::fs::write(&a[1], doc.to_bytes()?)?;
     Ok(())

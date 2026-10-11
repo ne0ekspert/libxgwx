@@ -9,8 +9,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let document = XgwxDocument::from_path(path)?;
     if let Some(other_path) = std::env::args().nth(2) {
         let other = XgwxDocument::from_path(other_path)?;
-        let a = document.iec_local_symbols();
-        let b = other.iec_local_symbols();
+        let a = document.variable().iec_local_symbols();
+        let b = other.variable().iec_local_symbols();
         if a.len() != b.len() {
             return Err("program counts differ".into());
         }
@@ -31,7 +31,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         return Ok(());
     }
-    for (program_index, symbols) in document.iec_local_symbols().into_iter().enumerate() {
+    for (program_index, symbols) in document
+        .variable()
+        .iec_local_symbols()
+        .into_iter()
+        .enumerate()
+    {
         for (symbol_index, symbol) in symbols?.into_iter().enumerate() {
             println!(
                 "program {program_index} symbol {symbol_index}: {} {:?} type={:?} class={} allocation={:?}/{:?}",

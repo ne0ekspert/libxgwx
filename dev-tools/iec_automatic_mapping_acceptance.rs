@@ -3,22 +3,24 @@ use std::{error::Error, path::Path};
 use xgwx::XgwxDocument;
 
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    assert_eq!(a.ladder_programs().len(), 7);
-    assert_eq!(b.ladder_programs().len(), 7);
+    assert_eq!(a.program().ladder_programs().len(), 7);
+    assert_eq!(b.program().ladder_programs().len(), 7);
     for (index, (a, b)) in a
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(b.ladder_programs())
+        .zip(b.program().ladder_programs())
         .enumerate()
     {
         assert_eq!(a?.data, b?.data, "program payload {index}");
     }
-    assert_eq!(a.iec_local_symbols().len(), 7);
-    assert_eq!(b.iec_local_symbols().len(), 7);
+    assert_eq!(a.variable().iec_local_symbols().len(), 7);
+    assert_eq!(b.variable().iec_local_symbols().len(), 7);
     for (index, (a, b)) in a
+        .variable()
         .iec_local_symbols()
         .into_iter()
-        .zip(b.iec_local_symbols())
+        .zip(b.variable().iec_local_symbols())
         .enumerate()
     {
         assert_eq!(a?, b?, "every local field including offsets {index}");
@@ -30,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let source = XgwxDocument::from_path(&args[0])?;
     let mut edited = source.clone();
-    let symbols = source.iec_local_symbols().remove(4)?;
+    let symbols = source.variable().iec_local_symbols().remove(4)?;
     for (name, allocation, width, address) in [
         ("div_값", 160, 32, "%MD700"),
         ("LNG가스누출", 2, 1, "%MX21000"),
@@ -50,6 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         for rejected in ["%MX0", "%MD+700", "%MW4294967296"] {
             assert!(
                 edited
+                    .variable_mut()
                     .update_iec_local_symbol_address(4, index, name, "", rejected)
                     .is_err()
             );
@@ -59,6 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             for rejected in ["%IX0.5.1", "%QX400"] {
                 assert!(
                     edited
+                        .variable_mut()
                         .update_iec_local_symbol_address(4, index, name, "", rejected)
                         .is_err()
                 );
@@ -69,7 +73,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 );
             }
         }
-        edited.update_iec_local_symbol_address(4, index, name, "", address)?;
+        edited
+            .variable_mut()
+            .update_iec_local_symbol_address(4, index, name, "", address)?;
     }
     let output = Path::new(&args[1]);
     edited.write_to(output.join("ATGEN.xgwx"))?;
@@ -78,9 +84,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         &XgwxDocument::from_path(output.join("ATGEN.xgwx"))?,
     )?;
     for (index, (a, b)) in source
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(edited.ladder_programs())
+        .zip(edited.program().ladder_programs())
         .enumerate()
     {
         assert_eq!(

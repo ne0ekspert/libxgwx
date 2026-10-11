@@ -34,22 +34,35 @@ pub struct IecGeometry {
     pub vertical: Vec<IecVerticalConnection>,
 }
 
+/// One decoded horizontal IEC ladder wire in native grid coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IecHorizontalSegment {
+    /// Zero-based IEC network/group index in the decoded program payload.
     pub group_index: usize,
+    /// Native IEC ladder row index within the program.
     pub row_index: u16,
+    /// Byte offset of this record in the decoded ladder payload.
     pub offset: usize,
+    /// Native horizontal coordinate of the segment start.
     pub start_x: u8,
+    /// Native horizontal coordinate of the segment end.
     pub end_x: u8,
 }
 
+/// One paired vertical IEC ladder branch joining two native rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IecVerticalConnection {
+    /// Zero-based IEC network/group index in the decoded program payload.
     pub group_index: usize,
+    /// Native row index of the upper branch endpoint.
     pub start_row_index: u16,
+    /// Native row index of the lower branch endpoint.
     pub end_row_index: u16,
+    /// Byte offset of the upper branch record in the decoded ladder payload.
     pub start_offset: usize,
+    /// Byte offset of the lower branch record in the decoded ladder payload.
     pub end_offset: usize,
+    /// Native horizontal coordinate shared by the branch endpoints.
     pub x: u8,
 }
 

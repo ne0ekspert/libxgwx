@@ -160,6 +160,11 @@ pub enum XgwxError {
         slot_span: u32,
         conflicting_slot: u32,
     },
+    /// No hardware base exists at the selected document index.
+    BaseIndexNotFound {
+        /// Zero-based base record index in document order.
+        index: usize,
+    },
     ProgramNotFound {
         index: usize,
     },
@@ -381,6 +386,9 @@ impl fmt::Display for XgwxError {
                 f,
                 "module at base {base}, slot {slot} occupies {slot_span} slots and overlaps the module at slot {conflicting_slot}"
             ),
+            Self::BaseIndexNotFound { index } => {
+                write!(f, "base at index {index} was not found")
+            }
             Self::ProgramNotFound { index } => {
                 write!(f, "program at index {index} was not found")
             }

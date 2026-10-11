@@ -15,32 +15,103 @@ fn main() -> Result<(), Box<dyn Error>> {
     let x: u8 = x.parse()?;
     let source = XgwxDocument::from_path(source)?;
     let routes: [(&str, Delete); 10] = [
-        ("head", XgwxDocument::delete_iec_ld_heating_chain_head),
-        ("middle", XgwxDocument::delete_iec_ld_heating_chain_middle),
-        (
-            "x3",
-            XgwxDocument::delete_iec_ld_heating_chain_x3_eq_repaired,
-        ),
-        (
-            "contact",
-            XgwxDocument::delete_iec_ld_heating_chain_contact_eq,
-        ),
-        ("x15", XgwxDocument::delete_iec_ld_heating_chain_x15_eq),
-        ("scalar", XgwxDocument::delete_iec_ld_scalar_chain_function),
-        ("terminal", XgwxDocument::delete_iec_ld_terminal_function),
-        (
-            "standalone",
-            XgwxDocument::delete_iec_ld_standalone_function,
-        ),
-        ("branch", XgwxDocument::delete_iec_ld_branch_function),
-        ("cell", XgwxDocument::delete_iec_ld_function_cell),
+        ("head", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_head(offset, name)
+                })
+        }),
+        ("middle", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_middle(offset, name)
+                })
+        }),
+        ("x3", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_x3_eq_repaired(offset, name)
+                })
+        }),
+        ("contact", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_contact_eq(offset, name)
+                })
+        }),
+        ("x15", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_heating_chain_x15_eq(offset, name)
+                })
+        }),
+        ("scalar", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_scalar_chain_function(offset, name)
+                })
+        }),
+        ("terminal", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_terminal_function(offset, name)
+                })
+        }),
+        ("standalone", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_standalone_function(offset, name)
+                })
+        }),
+        ("branch", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_branch_function(offset, name)
+                })
+        }),
+        ("cell", |doc, program, offset, name| {
+            doc.program_mut()
+                .get(program)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_function_cell(offset, name)
+                })
+        }),
     ];
     for site in sites.split(';') {
         let (r, cx) = site.split_once(',').ok_or("invalid contact site")?;
         let r: u16 = r.parse()?;
         let cx: u8 = cx.parse()?;
         let mut edited = source.clone();
-        let program = edited.ladder_programs().remove(p)?;
+        let program = edited.program().ladder_programs().remove(p)?;
         let contact = program
             .iec_record_frames()
             .ok_or("records")?
@@ -68,8 +139,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .map(|b| u16::from_le_bytes([b[0], b[1]]))
                 .collect::<Vec<_>>(),
         )?;
-        edited.delete_iec_ld_contact(p, contact.offset, cx, kind, &variable)?;
+        edited
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_contact(contact.offset, cx, kind, &variable)
+            })?;
         let block = edited
+            .program()
             .ladder_programs()
             .remove(p)?
             .iec_function_blocks()

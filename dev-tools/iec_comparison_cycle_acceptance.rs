@@ -4,6 +4,7 @@ use xgwx::XgwxDocument;
 
 fn payloads(document: &XgwxDocument) -> Result<Vec<Vec<u8>>, xgwx::XgwxError> {
     document
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|program| program.data))
@@ -17,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut document = XgwxDocument::from_path(source)?;
     let original = payloads(&document)?;
-    let original_programs = document.ladder_programs();
+    let original_programs = document.program().ladder_programs();
     let replacements = [
         ("EQ", "GT"),
         ("GT", "GE"),
@@ -45,21 +46,35 @@ fn main() -> Result<(), Box<dyn Error>> {
                     })
             })
             .ok_or(format!("missing captured {expected} comparison"))?;
-        document.update_iec_ld_comparison_function(site.0, site.1, expected, replacement)?;
+        document
+            .program_mut()
+            .get(site.0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .update_comparison_function(site.1, expected, replacement)
+            })?;
         println!(
             "program {} L{} offset 0x{:X}: {expected} -> {replacement}",
             site.0, site.2, site.1
         );
         sites.push((site.0, site.1, expected, replacement));
     }
-    for program in document.ladder_programs() {
+    for program in document.program().ladder_programs() {
         if program?.iec_circuit_graph().is_none() {
             return Err("edited IEC graph failed validation".into());
         }
     }
     document.write_to(output)?;
     for (index, offset, expected, replacement) in sites {
-        document.update_iec_ld_comparison_function(index, offset, replacement, expected)?;
+        document
+            .program_mut()
+            .get(index)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .update_comparison_function(offset, replacement, expected)
+            })?;
     }
     if payloads(&document)? != original {
         return Err("inverse comparison edits did not restore ProgramData".into());

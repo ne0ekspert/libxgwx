@@ -3,7 +3,7 @@ use std::{env, error::Error, fs};
 use xgwx::XgwxDocument;
 
 fn group_bytes(document: &XgwxDocument) -> Result<Vec<u8>, Box<dyn Error>> {
-    let program = document.ladder_programs().remove(0)?;
+    let program = document.program().ladder_programs().remove(0)?;
     let rows = program.iec_row_frames().ok_or("IEC row framing failed")?;
     let group = rows
         .iter()
@@ -20,15 +20,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_ff_branch_output_row_acceptance SOURCE NATIVE OUTPUT".into());
     };
     let mut generated = XgwxDocument::from_path(source)?;
-    generated.delete_iec_ld_ff_branch_output_row(0, 9, 15)?;
+    generated
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_ff_branch_output_row(9, 15)
+        })?;
     fs::write(output, generated.to_bytes()?)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let native = XgwxDocument::from_path(native)?;
     if group_bytes(&reparsed)? != group_bytes(&native)? {
         return Err("generated group 9 differs from XG5000 Delete Line".into());
     }
-    let ours = reparsed.ladder_programs();
-    let theirs = native.ladder_programs();
+    let ours = reparsed.program().ladder_programs();
+    let theirs = native.program().ladder_programs();
     if ours.len() != theirs.len() {
         return Err("program count changed".into());
     }

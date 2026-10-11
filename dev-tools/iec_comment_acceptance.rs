@@ -15,10 +15,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut document = XgwxDocument::from_path(source)?;
     if program_one {
-        document.insert_iec_ld_blank_row(1, 5)?;
-        document.insert_iec_ld_comment(1, 6, "중간 설명")?;
+        document
+            .program_mut()
+            .get(1)
+            .and_then(|mut selected_program| selected_program.iec_ld()?.insert_blank_row(5))?;
+        document
+            .program_mut()
+            .get(1)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_comment(6, "중간 설명")
+            })?;
     } else {
-        document.insert_iec_ld_comment(0, 5, "새 설명")?;
+        document
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_comment(5, "새 설명")
+            })?;
     }
     fs::write(output, document.to_bytes()?)?;
     Ok(())

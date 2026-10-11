@@ -4,7 +4,7 @@ const NATIVE: &[u8] = include_bytes!("../fixtures/sfc/native-loop.xgwx");
 #[test]
 fn native_blank_sfc_has_one_empty_main_block() {
     let doc = XgwxDocument::parse(include_bytes!("../fixtures/sfc/new-xgi-sfc.xgwx")).unwrap();
-    let programs = doc.sfc_programs();
+    let programs = doc.program().sfc_programs();
     assert_eq!(programs.len(), 1);
     assert_eq!(programs[0].program_index, 0);
     assert_eq!(programs[0].blocks.len(), 1);
@@ -16,7 +16,7 @@ fn native_blank_sfc_has_one_empty_main_block() {
     assert!(block.entities.is_empty());
     let roundtrip =
         XgwxDocument::parse(include_bytes!("../fixtures/sfc/new-xgi-sfc-roundtrip.xgwx")).unwrap();
-    assert_eq!(roundtrip.sfc_programs(), programs);
+    assert_eq!(roundtrip.program().sfc_programs(), programs);
     let original_locals = doc.root.descendants_named("LocalVar").next().unwrap();
     let saved_locals = roundtrip.root.descendants_named("LocalVar").next().unwrap();
     // XG5000 reindents the parent, while preserving the symbol payloads verbatim.
@@ -27,7 +27,7 @@ fn native_blank_sfc_has_one_empty_main_block() {
 #[test]
 fn native_sfc_has_typed_steps_transitions_and_return_loop() {
     let doc = XgwxDocument::parse(NATIVE).unwrap();
-    let programs = doc.sfc_programs();
+    let programs = doc.program().sfc_programs();
     assert_eq!(programs.len(), 1);
     let block = &programs[0].blocks[0];
     assert!(block.main);
@@ -69,20 +69,26 @@ fn condition_patch() -> xgwx::SfcEntityPatch {
 fn transition_updates_native_annotation_and_preserves_unrelated_xml() {
     let mut doc = XgwxDocument::parse(NATIVE).unwrap();
     let old = doc.xml.clone();
-    doc.edit_sfc_entity(&condition_patch()).unwrap();
+    doc.program_mut()
+        .edit_sfc_entity(&condition_patch())
+        .unwrap();
     assert_eq!(doc.xml, old.replace("Title=\"%MX0\"", "Title=\"%MX2\""));
     let bytes = doc.to_verified_bytes().unwrap();
     let reparsed = XgwxDocument::parse(&bytes).unwrap();
     assert_eq!(
-        reparsed.sfc_programs()[0].blocks[0].entities[2].properties["EntityStep"]["Title"],
+        reparsed.program().sfc_programs()[0].blocks[0].entities[2].properties["EntityStep"]["Title"],
         "%MX2"
     );
     assert_eq!(
-        reparsed.sfc_programs()[0].blocks[0].entities[8].properties["EntityStep"]["Title"],
+        reparsed.program().sfc_programs()[0].blocks[0].entities[8].properties["EntityStep"]["Title"],
         "%MX2"
     );
     let after = doc.xml.clone();
-    assert!(doc.edit_sfc_entity(&condition_patch()).is_err());
+    assert!(
+        doc.program_mut()
+            .edit_sfc_entity(&condition_patch())
+            .is_err()
+    );
     assert_eq!(doc.xml, after);
 }
 
@@ -103,7 +109,7 @@ fn stale_position_inconsistent_annotation_and_unknown_fields_are_atomic() {
             }
         }
         let before = doc.xml.clone();
-        assert!(doc.edit_sfc_entity(&p).is_err());
+        assert!(doc.program_mut().edit_sfc_entity(&p).is_err());
         assert_eq!(doc.xml, before);
     }
 }
@@ -119,10 +125,10 @@ fn step_comment_roundtrips_xml_metacharacters_and_newlines() {
     p.field = "comment".into();
     p.expected_value = "Ready for cycle".into();
     p.replacement = "Cycle & <ready> \"OK\"\n다음 단계".into();
-    doc.edit_sfc_entity(&p).unwrap();
+    doc.program_mut().edit_sfc_entity(&p).unwrap();
     let reparsed = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
     assert_eq!(
-        reparsed.sfc_programs()[0].blocks[0].entities[3].properties["EntityStep"]["Comment"],
+        reparsed.program().sfc_programs()[0].blocks[0].entities[3].properties["EntityStep"]["Comment"],
         p.replacement
     );
 }
@@ -134,7 +140,7 @@ fn native_save_as_retains_generated_chart_and_symbol_tables() {
     ))
     .unwrap();
     let doc = XgwxDocument::parse(NATIVE).unwrap();
-    let entities = &roundtrip.sfc_programs()[0].blocks[0].entities;
+    let entities = &roundtrip.program().sfc_programs()[0].blocks[0].entities;
     assert_eq!(entities[2].properties["EntityStep"]["Title"], "%MX2");
     assert_eq!(
         entities[3].properties["EntityStep"]["Comment"],
@@ -142,7 +148,7 @@ fn native_save_as_retains_generated_chart_and_symbol_tables() {
     );
     // SFC locals use a symbol format that the IEC ladder decoder does not support.
     // Compare the native XML tables directly rather than decoding them as LD locals.
-    let mut expected = doc.sfc_programs();
+    let mut expected = doc.program().sfc_programs();
     expected[0].blocks[0].entities[2]
         .properties
         .get_mut("EntityStep")
@@ -161,7 +167,7 @@ fn native_save_as_retains_generated_chart_and_symbol_tables() {
     let rows = expected[0].blocks[0].editable_rows.as_mut().unwrap();
     rows[2].title = "%MX2".into();
     rows[3].comment = "Cycle active & ready".into();
-    assert_eq!(roundtrip.sfc_programs(), expected);
+    assert_eq!(roundtrip.program().sfc_programs(), expected);
     assert_eq!(
         roundtrip
             .root
@@ -243,9 +249,9 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
         expected_entities: vec![],
         rows: rows.clone(),
     };
-    doc.replace_sfc_sequence(&patch).unwrap();
+    doc.program_mut().replace_sfc_sequence(&patch).unwrap();
     let parsed = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-    let block = &parsed.sfc_programs()[0].blocks[0];
+    let block = &parsed.program().sfc_programs()[0].blocks[0];
     assert_eq!(block.editable_rows.as_ref().unwrap(), &rows);
     assert_eq!(block.entities.len(), 8);
     assert_eq!(block.entities[5].type_code, Some(2));
@@ -255,33 +261,39 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
         &original_locals
     );
     let before = doc.xml.clone();
-    assert!(doc.replace_sfc_sequence(&patch).is_err());
+    assert!(doc.program_mut().replace_sfc_sequence(&patch).is_err());
     assert_eq!(doc.xml, before);
     let mut rows = rows;
     rows.swap(1, 2);
-    doc.replace_sfc_sequence(&SfcSequencePatch {
-        expected_rows: None,
-        expected_entities: block.entities.clone(),
-        rows: rows.clone(),
-        ..patch.clone()
-    })
-    .unwrap();
+    doc.program_mut()
+        .replace_sfc_sequence(&SfcSequencePatch {
+            expected_rows: None,
+            expected_entities: block.entities.clone(),
+            rows: rows.clone(),
+            ..patch.clone()
+        })
+        .unwrap();
     assert_eq!(
-        doc.sfc_programs()[0].blocks[0]
+        doc.program().sfc_programs()[0].blocks[0]
             .editable_rows
             .as_ref()
             .unwrap(),
         &rows
     );
-    let expected = doc.sfc_programs()[0].blocks[0].entities.clone();
-    doc.replace_sfc_sequence(&SfcSequencePatch {
-        expected_rows: None,
-        expected_entities: expected,
-        rows: vec![],
-        ..patch
-    })
-    .unwrap();
-    assert!(doc.sfc_programs()[0].blocks[0].entities.is_empty());
+    let expected = doc.program().sfc_programs()[0].blocks[0].entities.clone();
+    doc.program_mut()
+        .replace_sfc_sequence(&SfcSequencePatch {
+            expected_rows: None,
+            expected_entities: expected,
+            rows: vec![],
+            ..patch
+        })
+        .unwrap();
+    assert!(
+        doc.program().sfc_programs()[0].blocks[0]
+            .entities
+            .is_empty()
+    );
     assert_eq!(
         doc.root.descendants_named("LocalVar").next().unwrap(),
         &original_locals
@@ -293,7 +305,7 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
 fn linear_chart_invalid_names_operands_targets_and_initial_steps_are_atomic() {
     use xgwx::SfcSequencePatch;
     let source = XgwxDocument::parse(NATIVE).unwrap();
-    let block = &source.sfc_programs()[0].blocks[0];
+    let block = &source.program().sfc_programs()[0].blocks[0];
     for case in 0..8 {
         let mut doc = source.clone();
         let mut rows = block.editable_rows.clone().unwrap();
@@ -308,14 +320,15 @@ fn linear_chart_invalid_names_operands_targets_and_initial_steps_are_atomic() {
             _ => rows[0].kind = "branch".into(),
         }
         assert!(
-            doc.replace_sfc_sequence(&SfcSequencePatch {
-                expected_rows: None,
-                program_index: 0,
-                block_index: 0,
-                expected_entities: block.entities.clone(),
-                rows
-            })
-            .is_err()
+            doc.program_mut()
+                .replace_sfc_sequence(&SfcSequencePatch {
+                    expected_rows: None,
+                    program_index: 0,
+                    block_index: 0,
+                    expected_entities: block.entities.clone(),
+                    rows
+                })
+                .is_err()
         );
         assert_eq!(doc.xml, source.xml);
     }
@@ -346,17 +359,18 @@ fn branches_program_references_and_unknown_native_data_fail_closed() {
         assert!(source.xml.contains(before));
         source.xml = source.xml.replacen(before, after, 1);
         let mut doc = XgwxDocument::parse(&source.to_bytes().unwrap()).unwrap();
-        let block = &doc.sfc_programs()[0].blocks[0];
+        let block = &doc.program().sfc_programs()[0].blocks[0];
         let original = doc.xml.clone();
         assert!(
-            doc.replace_sfc_sequence(&SfcSequencePatch {
-                expected_rows: None,
-                program_index: 0,
-                block_index: 0,
-                expected_entities: block.entities.clone(),
-                rows: vec![]
-            })
-            .is_err()
+            doc.program_mut()
+                .replace_sfc_sequence(&SfcSequencePatch {
+                    expected_rows: None,
+                    program_index: 0,
+                    block_index: 0,
+                    expected_entities: block.entities.clone(),
+                    rows: vec![]
+                })
+                .is_err()
         );
         assert_eq!(doc.xml, original);
     }
@@ -380,8 +394,8 @@ fn native_structural_save_as_retains_rows_actions_initial_steps_and_symbols() {
     ] {
         let original = XgwxDocument::parse(source).unwrap();
         let roundtrip = XgwxDocument::parse(saved).unwrap();
-        let before = original.sfc_programs();
-        let after = roundtrip.sfc_programs();
+        let before = original.program().sfc_programs();
+        let after = roundtrip.program().sfc_programs();
         assert!(after[0].blocks[0].editable_rows.is_some());
         assert_eq!(
             before[0].blocks[0].editable_rows,
@@ -433,12 +447,12 @@ fn action_qualifiers_times_and_invalid_candidates_are_atomic() {
             expected_rows: None,
             program_index: 0,
             block_index: 0,
-            expected_entities: doc.sfc_programs()[0].blocks[0].entities.clone(),
+            expected_entities: doc.program().sfc_programs()[0].blocks[0].entities.clone(),
             rows: rows.clone(),
         };
-        doc.replace_sfc_sequence(&patch).unwrap();
+        doc.program_mut().replace_sfc_sequence(&patch).unwrap();
         let parsed = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-        let programs = parsed.sfc_programs();
+        let programs = parsed.program().sfc_programs();
         let block = &programs[0].blocks[0];
         assert_eq!(block.editable_rows.as_ref().unwrap(), &rows);
         assert_eq!(
@@ -463,10 +477,10 @@ fn action_qualifiers_times_and_invalid_candidates_are_atomic() {
                 expected_rows: None,
                 program_index: 0,
                 block_index: 0,
-                expected_entities: doc.sfc_programs()[0].blocks[0].entities.clone(),
+                expected_entities: doc.program().sfc_programs()[0].blocks[0].entities.clone(),
                 rows: invalid,
             };
-            assert!(doc.replace_sfc_sequence(&patch).is_err());
+            assert!(doc.program_mut().replace_sfc_sequence(&patch).is_err());
             assert_eq!(doc, before);
         }
     }
@@ -480,8 +494,8 @@ fn native_action_qualifier_save_as_retains_all_nine_types_times_and_symbols() {
         "../fixtures/sfc/action-qualifiers-native-roundtrip.xgwx"
     ))
     .unwrap();
-    let before = original.sfc_programs();
-    let after = saved.sfc_programs();
+    let before = original.program().sfc_programs();
+    let after = saved.program().sfc_programs();
     assert_eq!(
         before[0].blocks[0].editable_rows,
         after[0].blocks[0].editable_rows
@@ -510,7 +524,7 @@ fn native_action_qualifier_save_as_retains_all_nine_types_times_and_symbols() {
 fn native_st_programs_decode_and_generated_sources_roundtrip() {
     use xgwx::SfcSequencePatch;
     let mut doc = XgwxDocument::from_path("fixtures/sfc/native-st-programs.xgwx").unwrap();
-    let program = doc.sfc_programs().remove(0);
+    let program = doc.program().sfc_programs().remove(0);
     assert_eq!(program.blocks.len(), 3);
     assert!(
         program
@@ -545,17 +559,24 @@ fn native_st_programs_decode_and_generated_sources_roundtrip() {
             .contains("TRANS := Count")
     );
     rows[1].action_code = Some("Count := ADD(Count, 2);\r\nDelay(IN := TRUE, PT := T#1s);".into());
-    doc.replace_sfc_sequence(&SfcSequencePatch {
-        expected_rows: block.editable_rows.clone(),
-        program_index: 0,
-        block_index: 0,
-        expected_entities: block.entities.clone(),
-        rows: rows.clone(),
-    })
-    .unwrap();
+    doc.program_mut()
+        .replace_sfc_sequence(&SfcSequencePatch {
+            expected_rows: block.editable_rows.clone(),
+            program_index: 0,
+            block_index: 0,
+            expected_entities: block.entities.clone(),
+            rows: rows.clone(),
+        })
+        .unwrap();
     let result = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-    assert_eq!(result.sfc_programs()[0].blocks[0].editable_rows, Some(rows));
-    assert_eq!(result.sfc_variables(0).unwrap(), program.variables);
+    assert_eq!(
+        result.program().sfc_programs()[0].blocks[0].editable_rows,
+        Some(rows)
+    );
+    assert_eq!(
+        result.variable().sfc_variables(0).unwrap(),
+        program.variables
+    );
 }
 
 #[cfg(feature = "write")]
@@ -587,56 +608,61 @@ fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion
         "SR",
     ] {
         let name = format!("Var_{ty}");
-        let expected = doc.sfc_variables(0).unwrap();
-        doc.edit_sfc_variable(&SfcVariablePatch {
-            program_index: 0,
-            expected_variables: expected,
-            name: name.clone(),
-            data_type: ty.into(),
-            description: "typed declaration".into(),
-            remove: false,
-            declaration: None,
-            update: false,
-        })
-        .unwrap();
+        let expected = doc.variable().sfc_variables(0).unwrap();
+        doc.variable_mut()
+            .edit_sfc_variable(&SfcVariablePatch {
+                program_index: 0,
+                expected_variables: expected,
+                name: name.clone(),
+                data_type: ty.into(),
+                description: "typed declaration".into(),
+                remove: false,
+                declaration: None,
+                update: false,
+            })
+            .unwrap();
         assert!(
-            doc.sfc_variables(0)
+            doc.variable()
+                .sfc_variables(0)
                 .unwrap()
                 .iter()
                 .any(|v| v.name == name && v.data_type == ty)
         );
     }
-    let expected = doc.sfc_variables(0).unwrap();
+    let expected = doc.variable().sfc_variables(0).unwrap();
     let bytes = doc.to_verified_bytes().unwrap();
     for name in ["Count", "Delay", "TRANS", "GOTO_INIT"] {
         assert!(
-            doc.edit_sfc_variable(&SfcVariablePatch {
-                program_index: 0,
-                expected_variables: expected.clone(),
-                name: name.into(),
-                data_type: "DINT".into(),
-                description: "".into(),
-                remove: true,
-                declaration: None,
-                update: false,
-            })
-            .is_err()
+            doc.variable_mut()
+                .edit_sfc_variable(&SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables: expected.clone(),
+                    name: name.into(),
+                    data_type: "DINT".into(),
+                    description: "".into(),
+                    remove: true,
+                    declaration: None,
+                    update: false,
+                })
+                .is_err()
         );
         assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
     }
-    doc.edit_sfc_variable(&SfcVariablePatch {
-        program_index: 0,
-        expected_variables: expected,
-        name: "Var_WORD".into(),
-        data_type: "WORD".into(),
-        description: "".into(),
-        remove: true,
-        declaration: None,
-        update: false,
-    })
-    .unwrap();
+    doc.variable_mut()
+        .edit_sfc_variable(&SfcVariablePatch {
+            program_index: 0,
+            expected_variables: expected,
+            name: "Var_WORD".into(),
+            data_type: "WORD".into(),
+            description: "".into(),
+            remove: true,
+            declaration: None,
+            update: false,
+        })
+        .unwrap();
     assert!(
-        !doc.sfc_variables(0)
+        !doc.variable()
+            .sfc_variables(0)
             .unwrap()
             .iter()
             .any(|v| v.name == "Var_WORD")
@@ -648,8 +674,8 @@ fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion
 fn native_st_save_as_retains_typed_variables_blocks_and_bool_references() {
     let source = XgwxDocument::from_path("fixtures/sfc/st-programs-generated.xgwx").unwrap();
     let native = XgwxDocument::from_path("fixtures/sfc/st-programs-native-roundtrip.xgwx").unwrap();
-    let a = source.sfc_programs().remove(0);
-    let b = native.sfc_programs().remove(0);
+    let a = source.program().sfc_programs().remove(0);
+    let b = native.program().sfc_programs().remove(0);
     assert_eq!(a.variables, b.variables);
     assert_eq!(a.variables_error, None);
     assert_eq!(b.variables_error, None);
@@ -667,10 +693,13 @@ fn native_st_save_as_retains_typed_variables_blocks_and_bool_references() {
         expected_rows: Some(rows.clone()),
         rows: edited.clone(),
     };
-    doc.replace_sfc_sequence(&patch).unwrap();
-    assert_eq!(doc.sfc_programs()[0].blocks[0].editable_rows, Some(edited));
+    doc.program_mut().replace_sfc_sequence(&patch).unwrap();
+    assert_eq!(
+        doc.program().sfc_programs()[0].blocks[0].editable_rows,
+        Some(edited)
+    );
     let bytes = doc.to_verified_bytes().unwrap();
-    assert!(doc.replace_sfc_sequence(&patch).is_err());
+    assert!(doc.program_mut().replace_sfc_sequence(&patch).is_err());
     assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
 }
 
@@ -696,18 +725,19 @@ fn sfc_st_unknown_metadata_and_post_scan_actions_are_guarded() {
         );
         source.xml = source.xml.replacen(before, after, 1);
         let mut doc = XgwxDocument::parse(&source.to_bytes().unwrap()).unwrap();
-        let program = doc.sfc_programs().remove(0);
+        let program = doc.program().sfc_programs().remove(0);
         assert!(program.blocks[0].editable_rows.is_none());
         let bytes = doc.to_verified_bytes().unwrap();
         assert!(
-            doc.replace_sfc_sequence(&xgwx::SfcSequencePatch {
-                program_index: 0,
-                block_index: 0,
-                expected_entities: program.blocks[0].entities.clone(),
-                expected_rows: None,
-                rows: vec![]
-            })
-            .is_err()
+            doc.program_mut()
+                .replace_sfc_sequence(&xgwx::SfcSequencePatch {
+                    program_index: 0,
+                    block_index: 0,
+                    expected_entities: program.blocks[0].entities.clone(),
+                    expected_rows: None,
+                    rows: vec![]
+                })
+                .is_err()
         );
         assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
     }
@@ -741,7 +771,10 @@ fn sfc_cpu_conversion_updates_native_defaults_preserving_programs_and_reserved_d
                 Some(code),
                 "{from} -> {to}"
             );
-            assert_eq!(doc.sfc_programs(), source.sfc_programs());
+            assert_eq!(
+                doc.program().sfc_programs(),
+                source.program().sfc_programs()
+            );
             let native = XgwxDocument::from_path(format!("fixtures/sfc/{fixture}.xgwx")).unwrap();
             assert_eq!(
                 doc.configurations()[0].attribute,
@@ -831,7 +864,7 @@ fn sfc_cpu_conversion_rejects_custom_parameters_hardware_and_unknown_models_atom
 #[test]
 fn native_cpu_save_as_preserves_st_sources_and_declarations_in_all_models() {
     let source = XgwxDocument::from_path("fixtures/sfc/st-programs-generated.xgwx").unwrap();
-    let expected = source.sfc_programs().remove(0);
+    let expected = source.program().sfc_programs().remove(0);
     for (file, code, opposite) in [
         ("cpu-cpus-roundtrip", 104, "XGI-CPUE"),
         ("cpu-cpue-roundtrip", 106, "XGI-CPUS"),
@@ -844,7 +877,7 @@ fn native_cpu_save_as_preserves_st_sources_and_declarations_in_all_models() {
         let mut native = XgwxDocument::from_path(format!("fixtures/sfc/{file}.xgwx")).unwrap();
         assert_eq!(native.configurations()[0].type_code, Some(code));
         assert_ne!(native.configurations()[0].attribute.unwrap() & 0x80000, 0);
-        let actual = native.sfc_programs().remove(0);
+        let actual = native.program().sfc_programs().remove(0);
         assert_eq!(actual.variables, expected.variables);
         assert_eq!(
             actual.blocks[0].editable_rows,
@@ -853,7 +886,7 @@ fn native_cpu_save_as_preserves_st_sources_and_declarations_in_all_models() {
         assert_eq!(actual.variables_error, None);
         native.select_cpu(opposite).unwrap();
         assert_eq!(native.configurations()[0].attribute.unwrap() & 0x80000, 0);
-        assert_eq!(native.sfc_programs().remove(0), actual);
+        assert_eq!(native.program().sfc_programs().remove(0), actual);
         native.to_verified_bytes().unwrap();
     }
 }

@@ -10,13 +10,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     let source = XgwxDocument::from_path(&args[0])?;
-    let before = source.ladder_programs().remove(0)?;
+    let before = source.program().ladder_programs().remove(0)?;
     let layout = before.iec_circuit_layout().ok_or("invalid source layout")?;
     assert!(!layout.open_branch_endpoints.is_empty());
     let row = u16::from_le_bytes(before.data[4..6].try_into()?) + 2;
     let mut generated = source.clone();
-    generated.insert_iec_ld_function(0, row, 4, "MOVE", &["1".into(), "%MW100".into()])?;
-    let after = generated.ladder_programs().remove(0)?;
+    generated
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_function(
+                row,
+                4,
+                "MOVE",
+                &["1".into(), "%MW100".into()],
+            )
+        })?;
+    let after = generated.program().ladder_programs().remove(0)?;
     assert_eq!(&before.data[8..], &after.data[8..before.data.len()]);
     let after_layout = after.iec_circuit_layout().ok_or("invalid result layout")?;
     assert_eq!(
@@ -28,17 +38,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         after_layout.function_bindings[..layout.function_bindings.len()]
     );
     for (i, (a, b)) in source
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(generated.ladder_programs())
+        .zip(generated.program().ladder_programs())
         .enumerate()
     {
         if i != 0 {
             assert_eq!(a?.data, b?.data, "preserved program {i}");
         }
     }
-    let a = source.iec_local_symbols();
-    let b = generated.iec_local_symbols();
+    let a = source.variable().iec_local_symbols();
+    let b = generated.variable().iec_local_symbols();
     assert_eq!(a.len(), b.len());
     for (i, (a, b)) in a.into_iter().zip(b).enumerate() {
         assert_eq!(a?, b?, "preserved locals {i}");
@@ -49,15 +60,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     if let Some(path) = args.get(2) {
         let native = XgwxDocument::from_path(path)?;
-        let a = generated.ladder_programs();
-        let b = native.ladder_programs();
+        let a = generated.program().ladder_programs();
+        let b = native.program().ladder_programs();
         assert_eq!(a.len(), b.len());
         for (i, (a, b)) in a.into_iter().zip(b).enumerate() {
             assert_eq!(a?.data, b?.data, "native Save As payload {i}");
             println!("program {i}: exact");
         }
-        let a = generated.iec_local_symbols();
-        let b = native.iec_local_symbols();
+        let a = generated.variable().iec_local_symbols();
+        let b = native.variable().iec_local_symbols();
         assert_eq!(a.len(), b.len());
         for (i, (a, b)) in a.into_iter().zip(b).enumerate() {
             assert_eq!(a?, b?, "native Save As local fields including offsets {i}");

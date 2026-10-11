@@ -4,15 +4,27 @@ use xgwx::{LadderCellEdit, LadderEditElement, LadderEditKind, XgwxDocument};
 fn native_empty_iec_accepts_first_contact_and_coil() {
     let mut doc =
         XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgi.xgwx")).unwrap();
-    let program = doc.ladder_programs().remove(0).unwrap();
+    let program = doc.program().ladder_programs().remove(0).unwrap();
     assert_eq!(program.data, [0; 8]);
     assert!(program.iec_circuit_graph().is_some());
-    doc.insert_iec_ld_single_element(0, 0, 1, "contact", "NO", "%MX0")
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_single_element(0, 1, "contact", "NO", "%MX0")
+        })
         .unwrap();
-    doc.insert_iec_ld_single_element(0, 0, 94, "coil", "OUTPUT", "%MX1")
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_single_element(0, 94, "coil", "OUTPUT", "%MX1")
+        })
         .unwrap();
     let reparsed = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
-    let program = reparsed.ladder_programs().remove(0).unwrap();
+    let program = reparsed.program().ladder_programs().remove(0).unwrap();
     assert_eq!(program.iec_record_frames().unwrap().len(), 3);
     assert!(program.iec_circuit_graph().is_some());
     let mut malformed = program;
@@ -30,22 +42,23 @@ fn native_empty_xgk_accepts_first_contact_and_coil() {
         (0, LadderEditKind::NormallyOpen, "M00000"),
         (9, LadderEditKind::Output, "M00001"),
     ] {
-        doc.edit_ladder_cell(
-            0,
-            &LadderCellEdit {
-                raw_y: 0,
-                column,
-                expected: None,
-                replacement: Some(LadderEditElement {
-                    kind,
-                    operand: operand.into(),
-                }),
-            },
-        )
-        .unwrap();
+        doc.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.ladder()?.edit_cell(&LadderCellEdit {
+                    raw_y: 0,
+                    column,
+                    expected: None,
+                    replacement: Some(LadderEditElement {
+                        kind,
+                        operand: operand.into(),
+                    }),
+                })
+            })
+            .unwrap();
     }
     let reparsed = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
-    let program = reparsed.ladder_programs().remove(0).unwrap();
+    let program = reparsed.program().ladder_programs().remove(0).unwrap();
     assert!(
         program.structure.rungs[0]
             .cells
@@ -67,16 +80,24 @@ fn native_blank_projects_accept_network_module_in_first_slot() {
         include_bytes!("../fixtures/empty-projects/new-xgi.xgwx").as_slice(),
     ] {
         let mut doc = XgwxDocument::parse(source).unwrap();
-        if doc.ladder_programs()[0].as_ref().unwrap().project_type == Some(2) {
+        if doc.program().ladder_programs()[0]
+            .as_ref()
+            .unwrap()
+            .project_type
+            == Some(2)
+        {
             let original = doc.xml.clone();
             assert!(doc.insert_module(0, 0, "XGL-EFMT(B)").is_err());
             assert_eq!(doc.xml, original);
             continue;
         }
-        let before = doc.ladder_programs().remove(0).unwrap().data;
+        let before = doc.program().ladder_programs().remove(0).unwrap().data;
         doc.insert_module(0, 0, "XGL-EFMT(B)").unwrap();
         let reparsed = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
-        assert_eq!(reparsed.ladder_programs().remove(0).unwrap().data, before);
+        assert_eq!(
+            reparsed.program().ladder_programs().remove(0).unwrap().data,
+            before
+        );
         assert_eq!(
             reparsed
                 .networks()
@@ -86,9 +107,9 @@ fn native_blank_projects_accept_network_module_in_first_slot() {
                 .count(),
             1
         );
-        assert_eq!(reparsed.fenet_config_infos().len(), 1);
+        assert_eq!(reparsed.network().fenet_config_infos().len(), 1);
         doc.delete_module(0, 0).unwrap();
-        assert!(doc.fenet_config_infos().is_empty());
+        assert!(doc.network().fenet_config_infos().is_empty());
         assert!(doc.networks().iter().all(|n| n.modules.is_empty()));
     }
 }
@@ -97,12 +118,24 @@ fn native_blank_projects_accept_network_module_in_first_slot() {
 fn sparse_iec_canvas_contacts_and_coils_preserve_existing_rows() {
     let mut doc =
         XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgi.xgwx")).unwrap();
-    doc.insert_iec_ld_single_element(0, 100, 1, "contact", "NO", "%MX0")
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_single_element(100, 1, "contact", "NO", "%MX0")
+        })
         .unwrap();
-    let first = doc.ladder_programs().remove(0).unwrap();
-    doc.insert_iec_ld_single_element(0, 300, 94, "coil", "OUTPUT", "%MX1")
+    let first = doc.program().ladder_programs().remove(0).unwrap();
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_single_element(300, 94, "coil", "OUTPUT", "%MX1")
+        })
         .unwrap();
-    let program = doc.ladder_programs().remove(0).unwrap();
+    let program = doc.program().ladder_programs().remove(0).unwrap();
     assert_eq!(
         program
             .iec_row_frames()
@@ -120,11 +153,19 @@ fn sparse_iec_canvas_contacts_and_coils_preserve_existing_rows() {
     );
     let saved = doc.to_verified_bytes().unwrap();
     assert!(
-        doc.insert_iec_ld_single_element(0, 100, 1, "contact", "NO", "%MX2")
+        doc.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| selected_program
+                .iec_ld()?
+                .insert_single_element(100, 1, "contact", "NO", "%MX2"))
             .is_err()
     );
     assert!(
-        doc.insert_iec_ld_single_element(0, 16383, 1, "contact", "NO", "%MX2")
+        doc.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| selected_program
+                .iec_ld()?
+                .insert_single_element(16383, 1, "contact", "NO", "%MX2"))
             .is_err()
     );
     assert_eq!(doc.to_verified_bytes().unwrap(), saved);

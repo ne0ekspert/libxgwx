@@ -2,13 +2,13 @@ use xgwx::XgwxDocument;
 #[test]
 fn native_array_initial_value_retention_and_string_are_decoded() {
     let doc = XgwxDocument::from_path("fixtures/sfc/declarations-array-native.xgwx").unwrap();
-    let vars = doc.sfc_variables(0).unwrap();
+    let vars = doc.variable().sfc_variables(0).unwrap();
     let v = vars.iter().find(|v| v.name == "Numbers").unwrap();
     assert_eq!(v.data_type, "BOOL");
     let d = v.declaration.as_ref().unwrap();
     assert_eq!((d.dimensions[0].lower, d.dimensions[0].upper), (0, 1));
     let doc = XgwxDocument::from_path("fixtures/sfc/declarations-string-native.xgwx").unwrap();
-    let vars = doc.sfc_variables(0).unwrap();
+    let vars = doc.variable().sfc_variables(0).unwrap();
     let c = vars
         .iter()
         .find(|v| v.name == "Count")
@@ -21,7 +21,11 @@ fn native_array_initial_value_retention_and_string_are_decoded() {
     let v = vars.iter().find(|v| v.name == "StatusText").unwrap();
     assert_eq!(v.data_type, "STRING");
     assert_eq!(v.declaration.as_ref().unwrap().initial_value, "'Hello'");
-    assert!(doc.sfc_programs()[0].blocks[0].editable_rows.is_some());
+    assert!(
+        doc.program().sfc_programs()[0].blocks[0]
+            .editable_rows
+            .is_some()
+    );
 }
 #[cfg(feature = "write")]
 #[test]
@@ -30,7 +34,7 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
     let source = XgwxDocument::from_path("fixtures/sfc/declarations-string-native.xgwx").unwrap();
     let mut patch = SfcVariablePatch {
         program_index: 0,
-        expected_variables: source.sfc_variables(0).unwrap(),
+        expected_variables: source.variable().sfc_variables(0).unwrap(),
         name: "Samples".into(),
         data_type: "DINT".into(),
         description: "array".into(),
@@ -43,9 +47,10 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
         }),
     };
     let mut doc = source.clone();
-    doc.edit_sfc_variable(&patch).unwrap();
+    doc.variable_mut().edit_sfc_variable(&patch).unwrap();
     assert_eq!(
-        doc.sfc_variables(0)
+        doc.variable()
+            .sfc_variables(0)
             .unwrap()
             .iter()
             .find(|v| v.name == "Samples")
@@ -54,14 +59,15 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
         patch.declaration
     );
     let saved = doc.to_verified_bytes().unwrap();
-    assert!(doc.edit_sfc_variable(&patch).is_err());
+    assert!(doc.variable_mut().edit_sfc_variable(&patch).is_err());
     assert_eq!(doc.to_verified_bytes().unwrap(), saved);
-    patch.expected_variables = doc.sfc_variables(0).unwrap();
+    patch.expected_variables = doc.variable().sfc_variables(0).unwrap();
     patch.update = true;
     patch.description = "updated".into();
-    doc.edit_sfc_variable(&patch).unwrap();
+    doc.variable_mut().edit_sfc_variable(&patch).unwrap();
     assert_eq!(
-        doc.sfc_variables(0)
+        doc.variable()
+            .sfc_variables(0)
             .unwrap()
             .iter()
             .find(|v| v.name == "Samples")
@@ -69,19 +75,19 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
             .description,
         "updated"
     );
-    patch.expected_variables = doc.sfc_variables(0).unwrap();
+    patch.expected_variables = doc.variable().sfc_variables(0).unwrap();
     patch.update = false;
     patch.remove = true;
-    doc.edit_sfc_variable(&patch).unwrap();
+    doc.variable_mut().edit_sfc_variable(&patch).unwrap();
     assert_eq!(
-        doc.sfc_variables(0).unwrap(),
-        source.sfc_variables(0).unwrap()
+        doc.variable().sfc_variables(0).unwrap(),
+        source.variable().sfc_variables(0).unwrap()
     );
     for invalid in 0..7 {
         let mut doc = source.clone();
         let mut p = patch.clone();
         p.remove = false;
-        p.expected_variables = source.sfc_variables(0).unwrap();
+        p.expected_variables = source.variable().sfc_variables(0).unwrap();
         match invalid {
             0 => p.declaration.as_mut().unwrap().dimensions[0].upper = -1,
             1 => p.declaration.as_mut().unwrap().initial_value = "5(2)".into(),
@@ -102,52 +108,61 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
             }
             _ => p.name = "TRANS".into(),
         }
-        assert!(doc.edit_sfc_variable(&p).is_err(), "case {invalid}");
+        assert!(
+            doc.variable_mut().edit_sfc_variable(&p).is_err(),
+            "case {invalid}"
+        );
         assert_eq!(doc.xml, source.xml);
     }
     let mut doc = source.clone();
     patch.name = "Count".into();
     patch.remove = false;
     patch.update = true;
-    patch.expected_variables = doc.sfc_variables(0).unwrap();
+    patch.expected_variables = doc.variable().sfc_variables(0).unwrap();
     patch.description = "retained counter".into();
     patch.declaration = Some(SfcDeclaration {
         initial_value: "12".into(),
         retain: false,
         ..Default::default()
     });
-    doc.edit_sfc_variable(&patch).unwrap();
-    assert!(doc.sfc_programs()[0].blocks[0].editable_rows.is_some());
+    doc.variable_mut().edit_sfc_variable(&patch).unwrap();
+    assert!(
+        doc.program().sfc_programs()[0].blocks[0]
+            .editable_rows
+            .is_some()
+    );
 }
 
 #[test]
 fn uncaptured_member_override_maps_are_guarded() {
     let doc =
         XgwxDocument::from_path("fixtures/sfc/declarations-array-initial-native.xgwx").unwrap();
-    assert!(doc.sfc_variables(0).is_err());
-    assert!(doc.sfc_programs()[0].variables_error.is_some());
+    assert!(doc.variable().sfc_variables(0).is_err());
+    assert!(doc.program().sfc_programs()[0].variables_error.is_some());
 }
 #[cfg(feature = "write")]
 #[test]
 fn original_symbol_offsets_survive_normalizing_array_initializers() {
     use xgwx::{SfcArrayBound, SfcDeclaration, SfcVariablePatch};
     let mut doc = XgwxDocument::from_path("fixtures/sfc/declarations-array-native.xgwx").unwrap();
-    doc.edit_sfc_variable(&SfcVariablePatch {
-        program_index: 0,
-        expected_variables: doc.sfc_variables(0).unwrap(),
-        name: "Numbers".into(),
-        data_type: "BOOL".into(),
-        description: "".into(),
-        remove: false,
-        update: true,
-        declaration: Some(SfcDeclaration {
-            dimensions: vec![SfcArrayBound { lower: 0, upper: 1 }],
-            initial_value: "TRUE,FALSE".into(),
-            retain: false,
-        }),
-    })
-    .unwrap();
-    let before = doc.sfc_variables(0).unwrap();
+    let expected_variables = doc.variable().sfc_variables(0).unwrap();
+    doc.variable_mut()
+        .edit_sfc_variable(&SfcVariablePatch {
+            program_index: 0,
+            expected_variables,
+            name: "Numbers".into(),
+            data_type: "BOOL".into(),
+            description: "".into(),
+            remove: false,
+            update: true,
+            declaration: Some(SfcDeclaration {
+                dimensions: vec![SfcArrayBound { lower: 0, upper: 1 }],
+                initial_value: "TRUE,FALSE".into(),
+                retain: false,
+            }),
+        })
+        .unwrap();
+    let before = doc.variable().sfc_variables(0).unwrap();
     assert_eq!(
         before
             .iter()
@@ -159,35 +174,42 @@ fn original_symbol_offsets_survive_normalizing_array_initializers() {
             .initial_value,
         "TRUE,FALSE"
     );
-    doc.edit_sfc_variable(&SfcVariablePatch {
-        program_index: 0,
-        expected_variables: before.clone(),
-        name: "Value_USINT".into(),
-        data_type: "USINT".into(),
-        description: "".into(),
-        remove: true,
-        update: false,
-        declaration: None,
-    })
-    .unwrap();
+    doc.variable_mut()
+        .edit_sfc_variable(&SfcVariablePatch {
+            program_index: 0,
+            expected_variables: before.clone(),
+            name: "Value_USINT".into(),
+            data_type: "USINT".into(),
+            description: "".into(),
+            remove: true,
+            update: false,
+            declaration: None,
+        })
+        .unwrap();
     assert_eq!(
-        doc.sfc_variables(0).unwrap(),
+        doc.variable().sfc_variables(0).unwrap(),
         before
             .into_iter()
             .filter(|v| v.name != "Value_USINT")
             .collect::<Vec<_>>()
     );
-    assert!(doc.sfc_programs()[0].blocks[0].editable_rows.is_some());
+    assert!(
+        doc.program().sfc_programs()[0].blocks[0]
+            .editable_rows
+            .is_some()
+    );
 }
 
 #[test]
 fn native_strict_check_and_save_as_retain_advanced_declarations_and_st_sources() {
     let before = XgwxDocument::from_path("fixtures/sfc/declarations-generated.xgwx")
         .unwrap()
+        .program()
         .sfc_programs()
         .remove(0);
     let after = XgwxDocument::from_path("fixtures/sfc/declarations-roundtrip.xgwx")
         .unwrap()
+        .program()
         .sfc_programs()
         .remove(0);
     assert_eq!(after.variables_error, None);

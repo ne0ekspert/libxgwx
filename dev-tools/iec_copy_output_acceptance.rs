@@ -10,9 +10,30 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut document = XgwxDocument::from_path(source)?;
     // These are the captured FF46 text offsets in GCI.XGWX. All replacements
     // have equal UTF-16 length; each call guards the expected original text.
-    document.update_iec_ld_function_operand(0, 11232, "%MW700", "%MW701")?; // ADD.OUT
-    document.update_iec_ld_function_operand(0, 11624, "%MW700", "%MW701")?; // MOVE.IN
-    document.update_iec_ld_function_operand(0, 11664, "%MW200", "%MW201")?; // MOVE.OUT
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .update_function_operand(11232, "%MW700", "%MW701")
+        })?; // ADD.OUT
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .update_function_operand(11624, "%MW700", "%MW701")
+        })?; // MOVE.IN
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .update_function_operand(11664, "%MW200", "%MW201")
+        })?; // MOVE.OUT
     fs::write(output, document.to_bytes()?)?;
     Ok(())
 }

@@ -25,7 +25,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         doc.select_cpu(model)?;
         std::fs::write(format!("{directory}/{stem}.xgwx"), doc.to_verified_bytes()?)?;
         doc.select_cpu(source_model)?;
-        assert_eq!(doc.sfc_programs(), source.sfc_programs());
+        assert_eq!(
+            doc.program().sfc_programs(),
+            source.program().sfc_programs()
+        );
         let mut expected_configurations = source.configurations();
         if model != source_model {
             let flags = expected_configurations[0].attribute.unwrap();

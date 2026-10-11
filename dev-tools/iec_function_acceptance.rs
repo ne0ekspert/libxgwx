@@ -19,10 +19,18 @@ fn generate(
     name: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.delete_iec_ld_terminal_function(program_index, block_offset, name)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_terminal_function(block_offset, name)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let program = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -50,10 +58,18 @@ fn generate_standalone(
     name: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.delete_iec_ld_standalone_function(program_index, block_offset, name)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_standalone_function(block_offset, name)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let program = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -85,16 +101,21 @@ fn generate_standalone_insert(
     output_operand: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.insert_iec_ld_standalone_function(
-        program_index,
-        insertion_offset,
-        name,
-        input,
-        output_operand,
-    )?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_standalone_function(
+                insertion_offset,
+                name,
+                input,
+                output_operand,
+            )
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let program = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -123,10 +144,17 @@ fn generate_terminal_move_insert(
     output_operand: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.insert_iec_ld_terminal_move(program_index, contact_offset, input, output_operand)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_terminal_move(contact_offset, input, output_operand)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
-    reparsed.ladder_programs()[program_index]
+    reparsed.program().ladder_programs()[program_index]
         .as_ref()
         .map_err(|error| error.to_string())?
         .iec_circuit_graph()
@@ -144,17 +172,23 @@ fn generate_standalone_insert_with_symbol(
     output_symbol: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.insert_iec_local_symbol(program_index, output_symbol, "UDINT", "")?;
-    document.insert_iec_ld_standalone_function(
-        program_index,
-        insertion_offset,
-        "WORD_TO_UDINT",
-        input,
-        output_symbol,
-    )?;
+    document
+        .variable_mut()
+        .insert_iec_local_symbol(program_index, output_symbol, "UDINT", "")?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_standalone_function(
+                insertion_offset,
+                "WORD_TO_UDINT",
+                input,
+                output_symbol,
+            )
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
-    let symbols = reparsed.iec_local_symbols();
+    let symbols = reparsed.variable().iec_local_symbols();
     let symbol = symbols[program_index]
         .as_ref()
         .map_err(|error| error.to_string())?
@@ -176,10 +210,18 @@ fn generate_cell(
     name: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.delete_iec_ld_function_cell(program_index, block_offset, name)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_function_cell(block_offset, name)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let program = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -209,10 +251,18 @@ fn generate_connected_arithmetic(
     name: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.delete_iec_ld_connected_arithmetic(program_index, block_offset, name)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_connected_arithmetic(block_offset, name)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let program = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -235,10 +285,18 @@ fn generate_cell_insert(
     instance: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.insert_iec_ld_function_cell(program_index, insertion_offset, name, instance)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_function_cell(insertion_offset, name, instance)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let program = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -266,8 +324,8 @@ fn generate_cell_insert(
 fn verify(generated: &Path, resaved: &Path) -> Result<()> {
     let generated = XgwxDocument::from_path(generated)?;
     let resaved = XgwxDocument::from_path(resaved)?;
-    let generated_programs = generated.ladder_programs();
-    let resaved_programs = resaved.ladder_programs();
+    let generated_programs = generated.program().ladder_programs();
+    let resaved_programs = resaved.program().ladder_programs();
     if generated_programs.len() != resaved_programs.len() {
         return Err("resaved program count changed".into());
     }
@@ -281,10 +339,12 @@ fn verify(generated: &Path, resaved: &Path) -> Result<()> {
         }
     }
     let generated_symbols = generated
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let resaved_symbols = resaved
+        .variable()
         .iec_local_symbols()
         .into_iter()
         .collect::<std::result::Result<Vec<_>, _>>()?;

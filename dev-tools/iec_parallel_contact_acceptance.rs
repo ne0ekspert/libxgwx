@@ -8,10 +8,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_parallel_contact_acceptance <source> <output>".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    document.insert_iec_ld_parallel_contact(0, 31, "ON", "OFF", "OFF")?;
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_parallel_contact(31, "ON", "OFF", "OFF")
+        })?;
     fs::write(output, document.to_bytes()?)?;
     let parsed = XgwxDocument::from_path(output)?;
-    let program = parsed.ladder_programs().remove(0)?;
+    let program = parsed.program().ladder_programs().remove(0)?;
     let rows = program.iec_row_frames().ok_or("row framing failed")?;
     let top = rows
         .iter()
@@ -45,7 +52,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     program.iec_circuit_graph().ok_or("invalid circuit graph")?;
     let mut restored = XgwxDocument::from_path(output)?;
-    restored.edit_iec_ld_branch_segment(0, top.group_index, 31, 32, 3, true, false)?;
+    restored
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(top.group_index, 31, 32, 3, true, false)
+        })?;
     if restored.to_bytes()? != fs::read(source)? {
         return Err("removing the generated parallel row did not restore the source".into());
     }

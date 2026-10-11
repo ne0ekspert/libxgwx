@@ -34,8 +34,8 @@ fn native_changes(doc: &XgwxDocument, target: &XgwxDocument) -> Vec<CnetFieldEdi
         ("TerminatingResister", "terminatingResister"),
         ("Repeater", "repeater"),
     ];
-    let a = doc.cnet_config_infos();
-    let b = target.cnet_config_infos();
+    let a = doc.network().cnet_config_infos();
+    let b = target.network().cnet_config_infos();
     let mut result = Vec::new();
     for (index, (before, after)) in a[0].ports.iter().zip(&b[0].ports).enumerate() {
         for (attribute, field) in fields {
@@ -70,12 +70,21 @@ fn edits_match_native_ascii_rtu_smart_and_repeater_records_exactly() {
         let original = doc.clone();
         doc.edit_cnet_settings(&patch(native_changes(&doc, &target)))
             .unwrap();
-        assert_eq!(doc.cnet_config_infos(), target.cnet_config_infos());
-        assert_eq!(doc.fenet_config_infos(), original.fenet_config_infos());
-        assert_eq!(doc.variables().unwrap(), original.variables().unwrap());
         assert_eq!(
-            doc.ladder_programs().remove(0).unwrap().data,
-            original.ladder_programs().remove(0).unwrap().data
+            doc.network().cnet_config_infos(),
+            target.network().cnet_config_infos()
+        );
+        assert_eq!(
+            doc.network().fenet_config_infos(),
+            original.network().fenet_config_infos()
+        );
+        assert_eq!(
+            doc.variable().variables().unwrap(),
+            original.variable().variables().unwrap()
+        );
+        assert_eq!(
+            doc.program().ladder_programs().remove(0).unwrap().data,
+            original.program().ladder_programs().remove(0).unwrap().data
         );
         XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
         doc.edit_cnet_settings(&patch(native_changes(&doc, &original)))
@@ -179,10 +188,10 @@ fn new_cnet_modules_have_native_defaults_and_other_modules_are_preserved() {
         ("XGL-C42A/B", [1, 1]),
     ] {
         let mut doc = base();
-        let existing = doc.cnet_config_infos();
-        let fenet = doc.fenet_config_infos();
+        let existing = doc.network().cnet_config_infos();
+        let fenet = doc.network().fenet_config_infos();
         doc.insert_module(0, 3, model).unwrap();
-        let records = doc.cnet_config_infos();
+        let records = doc.network().cnet_config_infos();
         assert_eq!(records[0], existing[0]);
         assert_eq!(records[1].ports.len(), 2);
         for (port, mode) in records[1].ports.iter().zip(modes) {
@@ -196,8 +205,8 @@ fn new_cnet_modules_have_native_defaults_and_other_modules_are_preserved() {
             changes: vec![change(1, "stationNo", "0", "9")],
         })
         .unwrap();
-        assert_eq!(doc.cnet_config_infos()[0], existing[0]);
-        assert_eq!(doc.fenet_config_infos(), fenet);
+        assert_eq!(doc.network().cnet_config_infos()[0], existing[0]);
+        assert_eq!(doc.network().fenet_config_infos(), fenet);
         if model == "XGL-C22A/B" {
             let original = doc.xml.clone();
             assert!(
@@ -214,7 +223,7 @@ fn new_cnet_modules_have_native_defaults_and_other_modules_are_preserved() {
             assert_eq!(doc.xml, original);
         }
         doc.delete_module(0, 3).unwrap();
-        assert_eq!(doc.cnet_config_infos(), existing);
+        assert_eq!(doc.network().cnet_config_infos(), existing);
     }
 }
 #[test]
@@ -230,14 +239,17 @@ fn native_baud_selectors_decode_without_guessing_or_overflow() {
         ),
     ] {
         let doc = XgwxDocument::parse(bytes).unwrap();
-        for (port, rate) in doc.cnet_config_infos()[0].ports.iter().zip(rates) {
+        for (port, rate) in doc.network().cnet_config_infos()[0].ports.iter().zip(rates) {
             assert_eq!(port.baud_rate, Some(rate));
         }
     }
     let mut doc = base();
     doc.xml = doc.xml.replacen("Bps=\"8\"", "Bps=\"4294967295\"", 1);
     let doc = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
-    assert_eq!(doc.cnet_config_infos()[0].ports[0].baud_rate, None);
+    assert_eq!(
+        doc.network().cnet_config_infos()[0].ports[0].baud_rate,
+        None
+    );
 }
 #[test]
 #[ignore = "set LIBXGWX_CNET_ACCEPTANCE for native XG5000 validation"]
@@ -270,10 +282,21 @@ fn generated_edits_and_new_models_survive_native_save_as() {
         "../fixtures/networks/cnet-round-native.xgwx"
     ))
     .unwrap();
-    assert_eq!(saved.cnet_config_infos(), generated.cnet_config_infos());
     assert_eq!(
-        saved.ladder_programs().remove(0).unwrap().data,
-        generated.ladder_programs().remove(0).unwrap().data
+        saved.network().cnet_config_infos(),
+        generated.network().cnet_config_infos()
     );
-    assert_eq!(saved.fenet_config_infos(), generated.fenet_config_infos());
+    assert_eq!(
+        saved.program().ladder_programs().remove(0).unwrap().data,
+        generated
+            .program()
+            .ladder_programs()
+            .remove(0)
+            .unwrap()
+            .data
+    );
+    assert_eq!(
+        saved.network().fenet_config_infos(),
+        generated.network().fenet_config_infos()
+    );
 }

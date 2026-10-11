@@ -20,13 +20,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             .collect::<Vec<_>>()
     });
     let baseline = source
+        .program()
         .ladder_programs()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     let mut total = 0;
     let mut deleted = 0;
     let mut refilled = 0;
-    for (p, program) in source.ladder_programs().into_iter().enumerate() {
+    for (p, program) in source.program().ladder_programs().into_iter().enumerate() {
         let program = program?;
         for r in program
             .iec_record_frames()
@@ -54,7 +55,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .collect::<Vec<_>>(),
             )?;
             let mut edit = source.clone();
-            if let Err(e) = edit.delete_iec_ld_terminal_coil(p, r.offset, &variable) {
+            if let Err(e) = edit.program_mut().get(p).and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_terminal_coil(r.offset, &variable)
+            }) {
                 println!("DELETE GUARDED p{p} L{} x{x} {e}", r.row_index);
                 continue;
             }
@@ -78,9 +83,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                     )?;
                 }
             }
-            if let Err(e) =
-                edit.insert_iec_ld_single_element(p, r.row_index, x, "coil", kind, &variable)
-            {
+            if let Err(e) = edit.program_mut().get(p).and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_single_element(
+                    r.row_index,
+                    x,
+                    "coil",
+                    kind,
+                    &variable,
+                )
+            }) {
                 println!(
                     "REFILL GUARDED p{p} L{} x{x} operand {variable:?} {e}",
                     r.row_index
@@ -88,6 +99,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             }
             let restored_programs = edit
+                .program()
                 .ladder_programs()
                 .into_iter()
                 .collect::<Result<Vec<_>, _>>()?;

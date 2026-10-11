@@ -8,30 +8,44 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: xgk_indexed_bit_acceptance XGKZEROS.xgwx NEW_OUTPUT.xgwx".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    let program = document.ladder_programs().remove(0)?;
+    let program = document.program().ladder_programs().remove(0)?;
     let stop = program
         .strings
         .iter()
         .find(|s| s.value == "STOP")
         .ok_or("STOP missing")?;
-    document.update_ladder_cell_text(0, stop.offset, "STOP", "FF,M00030")?;
+    document
+        .program_mut()
+        .update_ladder_cell_text(0, stop.offset, "STOP", "FF,M00030")?;
     for (y, operand, mnemonic, values) in [
         (0, "M00000", "B", ["D000100", "4"]),
         (4, "M00001", "BN", ["D000104", "D000108"]),
     ] {
-        document.edit_ladder_cell(
-            0,
-            &LadderCellEdit {
-                raw_y: y,
-                column: 0,
-                expected: Some(LadderEditElement {
-                    kind: LadderEditKind::NormallyOpen,
-                    operand: operand.into(),
-                }),
-                replacement: None,
-            },
-        )?;
-        document.insert_ladder_comparison(0, y, 0, mnemonic, &values.map(String::from))?;
+        document
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.ladder()?.edit_cell(&LadderCellEdit {
+                    raw_y: y,
+                    column: 0,
+                    expected: Some(LadderEditElement {
+                        kind: LadderEditKind::NormallyOpen,
+                        operand: operand.into(),
+                    }),
+                    replacement: None,
+                })
+            })?;
+        document
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.ladder()?.insert_comparison(
+                    y,
+                    0,
+                    mnemonic,
+                    &values.map(String::from),
+                )
+            })?;
     }
     OpenOptions::new()
         .write(true)

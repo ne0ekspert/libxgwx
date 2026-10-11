@@ -3,7 +3,7 @@ use std::{env, error::Error, fs};
 use xgwx::XgwxDocument;
 
 fn group_bytes(document: &XgwxDocument, group_index: usize) -> Result<Vec<u8>, Box<dyn Error>> {
-    let program = document.ladder_programs().remove(3)?;
+    let program = document.program().ladder_programs().remove(3)?;
     let rows = program.iec_row_frames().ok_or("IEC row framing failed")?;
     let group = rows
         .iter()
@@ -22,7 +22,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     };
     let mut edited = XgwxDocument::from_path(source)?;
-    edited.edit_iec_ld_branch_segment(3, 16, 43, 44, 6, true, false)?;
+    edited
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(16, 43, 44, 6, true, false)
+        })?;
     fs::write(generated, edited.to_bytes()?)?;
     let generated = XgwxDocument::from_path(generated)?;
     let native = XgwxDocument::from_path(native)?;
@@ -30,9 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("generated group 16 differs from XG5000 Delete Line".into());
     }
     for (index, (ours, theirs)) in generated
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(native.ladder_programs())
+        .zip(native.program().ladder_programs())
         .enumerate()
     {
         let ours = ours?;
@@ -42,10 +50,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     let mut combined = XgwxDocument::from_path(source)?;
-    combined.edit_iec_ld_branch_segment(3, 17, 47, 48, 6, true, false)?;
-    combined.edit_iec_ld_branch_segment(3, 16, 43, 44, 6, true, false)?;
+    combined
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(17, 47, 48, 6, true, false)
+        })?;
+    combined
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(16, 43, 44, 6, true, false)
+        })?;
     fs::write(combined_output, combined.to_bytes()?)?;
     XgwxDocument::from_path(combined_output)?
+        .program()
         .ladder_programs()
         .remove(3)?
         .iec_circuit_graph()

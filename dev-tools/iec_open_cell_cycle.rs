@@ -3,14 +3,14 @@ use std::{env, error::Error};
 use xgwx::XgwxDocument;
 
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    let aa = a.ladder_programs();
-    let bb = b.ladder_programs();
+    let aa = a.program().ladder_programs();
+    let bb = b.program().ladder_programs();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?.data, b?.data, "native payload {i}");
     }
-    let aa = a.iec_local_symbols();
-    let bb = b.iec_local_symbols();
+    let aa = a.variable().iec_local_symbols();
+    let bb = b.variable().iec_local_symbols();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?, b?, "all local fields including offsets {i}");
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     let source = XgwxDocument::from_path(&args[0])?;
-    let original = source.ladder_programs().remove(0)?;
+    let original = source.program().ladder_programs().remove(0)?;
     let open = original
         .iec_circuit_layout()
         .ok_or("invalid source")?
@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut deleted = source.clone();
     let mut instances = Vec::new();
     for (row, x, name) in [(14, 4, "FF"), (20, 7, "R_TRIG"), (26, 7, "R_TRIG")] {
-        let program = deleted.ladder_programs().remove(0)?;
+        let program = deleted.program().ladder_programs().remove(0)?;
         let block = program
             .iec_function_blocks()
             .ok_or("invalid blocks")?
@@ -49,11 +49,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             name,
             block.instance.ok_or("missing instance")?.value,
         ));
-        deleted.delete_iec_ld_function_cell(0, block.record_offset, name)?;
+        deleted
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_function_cell(block.record_offset, name)
+            })?;
     }
     assert_eq!(
         open,
         deleted
+            .program()
             .ladder_programs()
             .remove(0)?
             .iec_circuit_layout()
@@ -64,6 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut restored = deleted.clone();
     for (row, x, name, instance) in instances {
         let site = restored
+            .program()
             .ladder_programs()
             .remove(0)?
             .iec_function_cell_insertion_sites()
@@ -71,11 +80,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             .into_iter()
             .find(|s| s.row_index == row && s.raw_x == x && s.function_name == name)
             .ok_or("missing refill site")?;
-        restored.insert_iec_ld_function_cell(0, site.insertion_offset, name, &instance)?;
+        restored
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_function_cell(
+                    site.insertion_offset,
+                    name,
+                    &instance,
+                )
+            })?;
     }
     assert_eq!(
         open,
         restored
+            .program()
             .ladder_programs()
             .remove(0)?
             .iec_circuit_layout()

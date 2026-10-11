@@ -40,17 +40,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         [source, output] => {
             let mut doc = XgwxDocument::from_path(source)?;
-            let last = doc.variables()?.len().checked_sub(1).ok_or("no variables")?;
+            let last = doc.variable().variables()?.len().checked_sub(1).ok_or("no variables")?;
             for (index, name, description) in [
                 (0, "VariableNameLongerThanBefore", "Longer comment for variable zero".to_owned()),
                 (1, "V", "".to_owned()),
                 (2, "가변_이름", "길어진 변수 설명 😀".to_owned()),
                 (last, "LastVariableWithLongerName", "x".repeat(255)),
             ] {
-                doc.update_variable(index, &VariablePatch { name: Some(name.to_owned()), description: Some(description), ..VariablePatch::default() })?;
+                doc.variable_mut().update_variable(index, &VariablePatch { name: Some(name.to_owned()), description: Some(description), ..VariablePatch::default() })?;
             }
             std::fs::write(output, doc.to_bytes()?)?;
-            println!("generated {} variables", doc.variables()?.len());
+            println!("generated {} variables", doc.variable().variables()?.len());
         }
         [compare, before, after] if compare == "--compare" => {
             let a = XgwxDocument::from_path(before)?;
@@ -58,10 +58,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             let aa = symbol_payloads(&a)?;
             let bb = symbol_payloads(&b)?;
             if aa != bb { return Err("decoded Symbols payloads differ".into()); }
-            let pa = a.ladder_programs().into_iter().collect::<Result<Vec<_>, _>>()?;
-            let pb = b.ladder_programs().into_iter().collect::<Result<Vec<_>, _>>()?;
+            let pa = a.program().ladder_programs().into_iter().collect::<Result<Vec<_>, _>>()?;
+            let pb = b.program().ladder_programs().into_iter().collect::<Result<Vec<_>, _>>()?;
             if pa.len() != pb.len() || pa.iter().zip(&pb).any(|(a,b)| a.data != b.data) { return Err("ProgramData payloads differ".into()); }
-            println!("{} symbol tables match exactly; {} ProgramData payloads match exactly; {} globals", aa.len(), pa.len(), a.variables()?.len());
+            println!("{} symbol tables match exactly; {} ProgramData payloads match exactly; {} globals", aa.len(), pa.len(), a.variable().variables()?.len());
         }
         _ => return Err("usage: variable_text_acceptance SOURCE OUTPUT | --compare GENERATED NATIVE_SAVED | --symbols SOURCE OUTPUT".into()),
     }

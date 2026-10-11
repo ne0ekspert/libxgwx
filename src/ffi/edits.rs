@@ -128,7 +128,7 @@ enum Edit {
 
 fn check_module(doc: &XgwxDocument, base: u32, slot: u32, expected: &str) -> Result<()> {
     let matches = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .filter(|m| m.base == Some(base) && m.slot == Some(slot))
         .collect::<Vec<_>>();
@@ -235,7 +235,7 @@ fn apply_one(doc: &mut XgwxDocument, edit: Edit) -> Result<()> {
             value,
         } => {
             check_module(doc, base, slot, &expected_name)?;
-            if !doc.modules().iter().any(|m| {
+            if !doc.module_summaries().iter().any(|m| {
                 m.base == Some(base)
                     && m.slot == Some(slot)
                     && m.input_filter_raw == Some(expected_value)

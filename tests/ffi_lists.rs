@@ -61,7 +61,7 @@ fn dedicated_lists_match_native_readers_and_reject_invalid_selectors() {
     for (selector, expected) in [
         (
             XGWX_LIST_MODULES,
-            serde_json::to_value(native.modules()).unwrap(),
+            serde_json::to_value(native.module_summaries()).unwrap(),
         ),
         (
             XGWX_LIST_NETWORKS,
@@ -69,11 +69,11 @@ fn dedicated_lists_match_native_readers_and_reject_invalid_selectors() {
         ),
         (
             XGWX_LIST_PROGRAMS,
-            serde_json::to_value(native.programs()).unwrap(),
+            serde_json::to_value(native.program().programs()).unwrap(),
         ),
         (
             XGWX_LIST_VARIABLES,
-            serde_json::to_value(native.variables().unwrap()).unwrap(),
+            serde_json::to_value(native.variable().variables().unwrap()).unwrap(),
         ),
         (
             XGWX_LIST_NETWORK_MODULES,
@@ -119,7 +119,8 @@ fn edits_all_four_lists_without_touching_program_payloads() {
     let original = xgwx::XgwxDocument::parse(input).unwrap();
     let edited = xgwx::XgwxDocument::parse(&doc.bytes()).unwrap();
     let payloads = |d: &xgwx::XgwxDocument| {
-        d.ladder_programs()
+        d.program()
+            .ladder_programs()
             .into_iter()
             .map(|p| p.unwrap().data)
             .collect::<Vec<_>>()
@@ -226,7 +227,10 @@ fn linked_network_module_edits_keep_protocol_configuration_intact() {
         "C device alias"
     );
     let after = xgwx::XgwxDocument::parse(&doc.bytes()).unwrap();
-    assert_eq!(before.fenet_config_infos(), after.fenet_config_infos());
+    assert_eq!(
+        before.network().fenet_config_infos(),
+        after.network().fenet_config_infos()
+    );
     let current = doc.bytes();
     assert_eq!(doc.apply(json!([{"operation":"update_network_module","base":0,"slot":0,"expected_config_name":"stale","patch":{"alias":"no"}}])),XGWX_OPERATION_ERROR);
     assert_eq!(doc.bytes(), current);

@@ -11,10 +11,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let program = program.parse::<usize>()?;
     let after_row = after_row.parse::<u16>()?;
     let mut document = XgwxDocument::from_path(source)?;
-    let before = document.ladder_programs();
-    let locals = document.iec_local_symbols();
-    document.insert_iec_ld_blank_row(program, after_row)?;
-    let after = document.ladder_programs();
+    let before = document.program().ladder_programs();
+    let locals = document.variable().iec_local_symbols();
+    document
+        .program_mut()
+        .get(program)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.insert_blank_row(after_row))?;
+    let after = document.program().ladder_programs();
     assert_eq!(before.len(), after.len());
     for (p, (a, b)) in before.into_iter().zip(after).enumerate() {
         let a = a?;
@@ -39,7 +42,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             );
         }
     }
-    for (a, b) in locals.into_iter().zip(document.iec_local_symbols()) {
+    for (a, b) in locals
+        .into_iter()
+        .zip(document.variable().iec_local_symbols())
+    {
         assert_eq!(a?, b?);
     }
     document.write_to(output)?;

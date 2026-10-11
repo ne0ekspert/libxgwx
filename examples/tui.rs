@@ -80,8 +80,8 @@ impl App {
             file_version: project
                 .file_version
                 .unwrap_or_else(|| "<unknown>".to_owned()),
-            ladder_programs: doc.ladder_programs(),
-            variables: doc.variables(),
+            ladder_programs: doc.program().ladder_programs(),
+            variables: doc.variable().variables(),
             decoded_payloads: doc.decoded_payloads(),
             doc,
             view: View::Programs,
@@ -95,7 +95,7 @@ impl App {
     }
 
     fn programs(&self) -> Vec<ProgramSummary> {
-        self.doc.programs()
+        self.doc.program().programs()
     }
 
     fn networks(&self) -> Vec<NetworkSummary> {
@@ -785,7 +785,7 @@ fn parameter_details(app: &App, parameter: Option<&ParameterSummary>) -> Vec<Lin
     }
 
     if parameter.parameter_type.as_deref() == Some("IO PARAMETER") {
-        let cnet_configs = app.doc.cnet_config_infos();
+        let cnet_configs = app.doc.network().cnet_config_infos();
         if !cnet_configs.is_empty() {
             lines.push(Line::from(""));
             lines.push(heading("Cnet Modules"));
@@ -794,7 +794,7 @@ fn parameter_details(app: &App, parameter: Option<&ParameterSummary>) -> Vec<Lin
             }
         }
 
-        let fenet_configs = app.doc.fenet_config_infos();
+        let fenet_configs = app.doc.network().fenet_config_infos();
         if !fenet_configs.is_empty() {
             lines.push(Line::from(""));
             lines.push(heading("FEnet Modules"));
@@ -1713,8 +1713,8 @@ fn network_details(app: &App, network: Option<&NetworkSummary>) -> Vec<Line<'sta
         return vec![Line::from("No networks found.")];
     };
 
-    let fenet_configs = app.doc.fenet_config_infos();
-    let cnet_configs = app.doc.cnet_config_infos();
+    let fenet_configs = app.doc.network().fenet_config_infos();
+    let cnet_configs = app.doc.network().cnet_config_infos();
     let mut lines = vec![
         field("Name", network.name.clone()),
         field("Type", network.type_name.clone()),

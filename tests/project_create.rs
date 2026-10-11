@@ -69,9 +69,12 @@ fn all_editor_cpu_language_choices_generate_editable_blank_programs() {
                 continue;
             }
             let doc = create_project(cpu, language).unwrap();
-            assert_eq!(doc.programs().len(), 1, "{cpu} {language}");
-            assert_eq!(doc.programs()[0].name.as_deref(), Some("NewProgram"));
-            let texts = doc.text_programs();
+            assert_eq!(doc.program().programs().len(), 1, "{cpu} {language}");
+            assert_eq!(
+                doc.program().programs()[0].name.as_deref(),
+                Some("NewProgram")
+            );
+            let texts = doc.program().text_programs();
             assert_eq!(texts.len(), 1, "{cpu} {language}");
             let program = &texts[0];
             assert_eq!(program.language, language);

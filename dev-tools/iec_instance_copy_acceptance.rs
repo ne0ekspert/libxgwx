@@ -9,6 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut document = XgwxDocument::from_path(source)?;
     let program = document
+        .program()
         .ladder_programs()
         .into_iter()
         .next()
@@ -20,12 +21,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .find(|block| block.group_index == 33 && block.name.value == "R_TRIG")
         .ok_or("copied R_TRIG missing")?;
     let original = block.instance.as_ref().ok_or("R_TRIG instance missing")?;
-    document.duplicate_iec_ld_function_instance(
-        0,
-        block.record_offset,
-        &original.value,
-        "INST4",
-    )?;
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.duplicate_function_instance(
+                block.record_offset,
+                &original.value,
+                "INST4",
+            )
+        })?;
     fs::write(output, document.to_bytes()?)?;
     Ok(())
 }

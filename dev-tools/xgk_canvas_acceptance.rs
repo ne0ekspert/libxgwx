@@ -13,9 +13,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (0, LadderEditKind::NormallyOpen, input),
                 (9, LadderEditKind::Output, output),
             ] {
-                doc.edit_ladder_cell(
-                    0,
-                    &LadderCellEdit {
+                doc.program_mut().get(0).and_then(|mut selected_program| {
+                    selected_program.ladder()?.edit_cell(&LadderCellEdit {
                         raw_y: row * 4,
                         column,
                         expected: None,
@@ -23,8 +22,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             kind,
                             operand: operand.into(),
                         }),
-                    },
-                )?;
+                    })
+                })?;
             }
         }
         std::fs::write(

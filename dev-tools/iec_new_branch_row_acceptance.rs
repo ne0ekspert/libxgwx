@@ -17,11 +17,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut doc = XgwxDocument::from_path(&args[0])?;
     let original = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    doc.extend_iec_ld_vertical_wire(0, 3, 4, 3)?;
-    let changed = doc.ladder_programs().remove(0)?;
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program.iec_ld()?.extend_vertical_wire(3, 4, 3)
+    })?;
+    let changed = doc.program().ladder_programs().remove(0)?;
     assert_eq!(changed.data.len(), original[0].data.len() + 71);
     assert_eq!(
         changed.iec_row_frames().unwrap().len(),
@@ -32,14 +35,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         original[0].iec_record_frames().unwrap().len() + 2
     );
     for (p, old) in original.iter().enumerate().skip(1) {
-        assert!(doc.ladder_programs().remove(p)?.data == old.data);
+        assert!(doc.program().ladder_programs().remove(p)?.data == old.data);
     }
     if let Some(path) = args.get(2) {
         let native = XgwxDocument::from_path(path)?;
         for (p, (a, b)) in doc
+            .program()
             .ladder_programs()
             .into_iter()
-            .zip(native.ladder_programs())
+            .zip(native.program().ladder_programs())
             .enumerate()
         {
             assert!(
@@ -49,19 +53,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     doc.write_to(&args[1])?;
-    doc.edit_iec_ld_branch_segment(0, 3, 4, 5, 3, true, false)?;
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .edit_branch_segment(3, 4, 5, 3, true, false)
+    })?;
     for (p, old) in original.iter().enumerate() {
         assert!(
-            doc.ladder_programs().remove(p)?.data == old.data,
+            doc.program().ladder_programs().remove(p)?.data == old.data,
             "program {p} restoration differs"
         );
     }
     if let Some(path) = args.get(3) {
         let native = XgwxDocument::from_path(path)?;
         for (p, (a, b)) in doc
+            .program()
             .ladder_programs()
             .into_iter()
-            .zip(native.ladder_programs())
+            .zip(native.program().ladder_programs())
             .enumerate()
         {
             assert!(

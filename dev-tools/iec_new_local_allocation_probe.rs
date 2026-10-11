@@ -9,17 +9,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let source = XgwxDocument::from_path(&args[0])?;
     let mut edited = source.clone();
-    let program = source.ladder_programs().remove(6)?;
+    let program = source.program().ladder_programs().remove(6)?;
     let row = u16::from_le_bytes(program.data[4..6].try_into()?);
     println!(
         "new BOOL rung L{row}; INT MOVE L{}",
         row.checked_add(4).ok_or("row overflow")?
     );
-    edited.insert_iec_local_symbol(6, "ZZZ_NEW_BOOL", "BOOL", "")?;
-    edited.insert_iec_local_symbol(6, "ZZZ_NEW_INT", "INT", "")?;
-    edited.insert_iec_ld_linear_rung(6, row, "%MX900", "ZZZ_NEW_BOOL")?;
-    edited.insert_iec_ld_function(
-        6,
+    edited
+        .variable_mut()
+        .insert_iec_local_symbol(6, "ZZZ_NEW_BOOL", "BOOL", "")?;
+    edited
+        .variable_mut()
+        .insert_iec_local_symbol(6, "ZZZ_NEW_INT", "INT", "")?;
+    edited
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_linear_rung(row, "%MX900", "ZZZ_NEW_BOOL")
+        })?;
+    edited.program_mut().get(6)?.iec_ld()?.insert_function(
         row.checked_add(4).ok_or("row overflow")?,
         4,
         "MOVE",
@@ -27,9 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
     edited.write_to(Path::new(&args[1]))?;
     for (index, (before, after)) in source
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(edited.ladder_programs())
+        .zip(edited.program().ladder_programs())
         .enumerate()
     {
         let (before, after) = (before?, after?);
@@ -38,9 +49,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     for (index, (before, after)) in source
+        .variable()
         .iec_local_symbols()
         .into_iter()
-        .zip(edited.iec_local_symbols())
+        .zip(edited.variable().iec_local_symbols())
         .enumerate()
     {
         let (before, after) = (before?, after?);
@@ -74,22 +86,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     if let Some(native) = args.get(2) {
         let native = XgwxDocument::from_path(native)?;
-        assert_eq!(edited.ladder_programs().len(), 7);
-        assert_eq!(native.ladder_programs().len(), 7);
-        assert_eq!(edited.iec_local_symbols().len(), 7);
-        assert_eq!(native.iec_local_symbols().len(), 7);
+        assert_eq!(edited.program().ladder_programs().len(), 7);
+        assert_eq!(native.program().ladder_programs().len(), 7);
+        assert_eq!(edited.variable().iec_local_symbols().len(), 7);
+        assert_eq!(native.variable().iec_local_symbols().len(), 7);
         for (index, (a, b)) in edited
+            .program()
             .ladder_programs()
             .into_iter()
-            .zip(native.ladder_programs())
+            .zip(native.program().ladder_programs())
             .enumerate()
         {
             assert_eq!(a?.data, b?.data, "native program payload {index}");
         }
         for (index, (a, b)) in edited
+            .variable()
             .iec_local_symbols()
             .into_iter()
-            .zip(native.iec_local_symbols())
+            .zip(native.variable().iec_local_symbols())
             .enumerate()
         {
             let (a, b) = (a?, b?);

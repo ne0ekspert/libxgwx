@@ -2,7 +2,7 @@
 use xgwx::{LadderCellEdit, LadderEditElement, LadderEditKind, XgwxDocument};
 
 fn payload(doc: &XgwxDocument) -> Vec<u8> {
-    doc.ladder_programs().remove(0).unwrap().data
+    doc.program().ladder_programs().remove(0).unwrap().data
 }
 
 #[test]
@@ -20,15 +20,28 @@ fn sparse_iec_canvas_placements_survive_native_save_as_exactly() {
         let mut doc =
             XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgi.xgwx")).unwrap();
         for row in rows {
-            doc.insert_iec_ld_single_element(0, row, 1, "contact", "NO", "%MX0")
+            doc.program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .insert_single_element(row, 1, "contact", "NO", "%MX0")
+                })
                 .unwrap();
-            doc.insert_iec_ld_single_element(0, row, 94, "coil", "OUTPUT", "%MX1")
+            doc.program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .insert_single_element(row, 94, "coil", "OUTPUT", "%MX1")
+                })
                 .unwrap();
         }
         let saved = XgwxDocument::parse(native).unwrap();
         assert_eq!(payload(&doc), payload(&saved));
         assert_eq!(
             saved
+                .program()
                 .ladder_programs()
                 .remove(0)
                 .unwrap()
@@ -41,6 +54,7 @@ fn sparse_iec_canvas_placements_survive_native_save_as_exactly() {
         );
         assert!(
             saved
+                .program()
                 .ladder_programs()
                 .remove(0)
                 .unwrap()
@@ -55,7 +69,10 @@ fn growing_xgk_canvas_placements_survive_native_save_as_exactly() {
     let mut doc =
         XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgk.xgwx")).unwrap();
     for row in 0..=60 {
-        doc.insert_ladder_row(0, row * 4).unwrap();
+        doc.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| selected_program.ladder()?.insert_row(row * 4))
+            .unwrap();
         if ![0, 60].contains(&row) {
             continue;
         }
@@ -63,19 +80,20 @@ fn growing_xgk_canvas_placements_survive_native_save_as_exactly() {
             (0, LadderEditKind::NormallyOpen, "M00000"),
             (9, LadderEditKind::Output, "M00001"),
         ] {
-            doc.edit_ladder_cell(
-                0,
-                &LadderCellEdit {
-                    raw_y: row * 4,
-                    column,
-                    expected: None,
-                    replacement: Some(LadderEditElement {
-                        kind,
-                        operand: operand.into(),
-                    }),
-                },
-            )
-            .unwrap();
+            doc.program_mut()
+                .get(0)
+                .and_then(|mut selected_program| {
+                    selected_program.ladder()?.edit_cell(&LadderCellEdit {
+                        raw_y: row * 4,
+                        column,
+                        expected: None,
+                        replacement: Some(LadderEditElement {
+                            kind,
+                            operand: operand.into(),
+                        }),
+                    })
+                })
+                .unwrap();
         }
     }
     let native = XgwxDocument::parse(include_bytes!(
@@ -94,7 +112,11 @@ fn wider_iec_coordinates_reject_structural_edits_without_changing_bytes() {
         let mut doc = XgwxDocument::parse(native).unwrap();
         let before = doc.to_verified_bytes().unwrap();
         assert!(
-            doc.insert_iec_ld_single_element(0, 10, 1, "contact", "NO", "%MX8")
+            doc.program_mut()
+                .get(0)
+                .and_then(|mut selected_program| selected_program
+                    .iec_ld()?
+                    .insert_single_element(10, 1, "contact", "NO", "%MX8"))
                 .is_err()
         );
         assert_eq!(doc.to_verified_bytes().unwrap(), before);
@@ -108,7 +130,7 @@ fn xgk_native_row65_is_decoded_and_editable() {
     ))
     .unwrap();
     assert!(
-        doc.ladder_programs()[0]
+        doc.program().ladder_programs()[0]
             .as_ref()
             .unwrap()
             .structure
@@ -117,17 +139,26 @@ fn xgk_native_row65_is_decoded_and_editable() {
             .any(|r| r.raw_y == 260 && r.cells.iter().any(|c| c.value == "M00002"))
     );
     let before = payload(&doc);
-    doc.edit_ladder_comment(
-        0,
-        &xgwx::LadderCommentEdit {
-            kind: xgwx::LadderCommentKind::Rung,
-            raw_y: 256,
-            expected: None,
-            replacement: "Wide comment".into(),
-        },
-    )
-    .unwrap();
-    doc.delete_ladder_rung_comment(0, 256, "Wide comment")
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .ladder()?
+                .edit_comment(&xgwx::LadderCommentEdit {
+                    kind: xgwx::LadderCommentKind::Rung,
+                    raw_y: 256,
+                    expected: None,
+                    replacement: "Wide comment".into(),
+                })
+        })
+        .unwrap();
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .ladder()?
+                .delete_rung_comment(256, "Wide comment")
+        })
         .unwrap();
     assert_eq!(payload(&doc), before);
 }
@@ -142,19 +173,20 @@ fn sparse_xgk_row65_matches_native_records() {
         (0, LadderEditKind::NormallyOpen, "M00002"),
         (9, LadderEditKind::Output, "M00003"),
     ] {
-        doc.edit_ladder_cell(
-            0,
-            &LadderCellEdit {
-                raw_y: 260,
-                column,
-                expected: None,
-                replacement: Some(LadderEditElement {
-                    kind,
-                    operand: operand.into(),
-                }),
-            },
-        )
-        .unwrap();
+        doc.program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.ladder()?.edit_cell(&LadderCellEdit {
+                    raw_y: 260,
+                    column,
+                    expected: None,
+                    replacement: Some(LadderEditElement {
+                        kind,
+                        operand: operand.into(),
+                    }),
+                })
+            })
+            .unwrap();
     }
     let native = XgwxDocument::parse(include_bytes!(
         "../fixtures/canvas-rows/xgk-row65-native.xgwx"
@@ -182,25 +214,26 @@ fn wide_xgk_sparse_projects_survive_native_save_as_exactly() {
                 (0, LadderEditKind::NormallyOpen, input),
                 (9, LadderEditKind::Output, output),
             ] {
-                doc.edit_ladder_cell(
-                    0,
-                    &LadderCellEdit {
-                        raw_y: row * 4,
-                        column,
-                        expected: None,
-                        replacement: Some(LadderEditElement {
-                            kind,
-                            operand: operand.into(),
-                        }),
-                    },
-                )
-                .unwrap();
+                doc.program_mut()
+                    .get(0)
+                    .and_then(|mut selected_program| {
+                        selected_program.ladder()?.edit_cell(&LadderCellEdit {
+                            raw_y: row * 4,
+                            column,
+                            expected: None,
+                            replacement: Some(LadderEditElement {
+                                kind,
+                                operand: operand.into(),
+                            }),
+                        })
+                    })
+                    .unwrap();
             }
         }
         let saved = XgwxDocument::parse(native).unwrap();
         assert_eq!(payload(&doc), payload(&saved));
         assert!(
-            saved.ladder_programs()[0]
+            saved.program().ladder_programs()[0]
                 .as_ref()
                 .unwrap()
                 .structure

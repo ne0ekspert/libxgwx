@@ -23,17 +23,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     let original = XgwxDocument::from_path(source)?;
     let mut edited = XgwxDocument::from_path(source)?;
     edited
-        .delete_iec_ld_horizontal_wire(program_index, wire_offset, raw_x)
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_horizontal_wire(wire_offset, raw_x)
+        })
         .map_err(|error| format!("delete failed: {error}"))?;
     let deleted = XgwxDocument::parse(&edited.to_bytes()?)?;
     if let Some(native_path) = rest.first() {
         let native = XgwxDocument::from_path(native_path)?;
         let generated_programs = deleted
+            .program()
             .ladder_programs()
             .into_iter()
             .map(|program| program.map(|value| value.data))
             .collect::<Result<Vec<_>, _>>()?;
         let native_programs = native
+            .program()
             .ladder_programs()
             .into_iter()
             .map(|program| program.map(|value| value.data))
@@ -42,10 +50,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err("native Save As changed ProgramData".into());
         }
         let generated_symbols = deleted
+            .variable()
             .iec_local_symbols()
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
         let native_symbols = native
+            .variable()
             .iec_local_symbols()
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
@@ -55,15 +65,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut restored = deleted.clone();
     restored
-        .repair_iec_ld_horizontal_wire(program_index, wire_offset, raw_x)
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .repair_horizontal_wire(wire_offset, raw_x)
+        })
         .map_err(|error| format!("repair failed: {error}"))?;
     let restored = XgwxDocument::parse(&restored.to_bytes()?)?;
     let original_programs = original
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|value| value.data))
         .collect::<Result<Vec<_>, _>>()?;
     let restored_programs = restored
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|value| value.data))

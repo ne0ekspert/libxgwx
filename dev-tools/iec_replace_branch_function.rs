@@ -12,6 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let row = args[3].parse::<u16>()?;
     let x = args[4].parse::<u8>()?;
     let program = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -22,13 +23,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|block| block.row_index == row && block.raw_x == x)
         .ok_or("missing function at selected coordinates")?;
-    doc.replace_iec_ld_branch_function(
-        program_index,
-        block.record_offset,
-        &args[5],
-        &args[6],
-        &args[7..],
-    )?;
+    doc.program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.replace_branch_function(
+                block.record_offset,
+                &args[5],
+                &args[6],
+                &args[7..],
+            )
+        })?;
     std::fs::write(&args[1], doc.to_bytes()?)?;
     Ok(())
 }

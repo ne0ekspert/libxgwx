@@ -11,9 +11,10 @@ fn normalized(program: &LadderProgramData) -> Vec<u8> {
 fn compare(doc: &XgwxDocument, path: &str) -> Result<(), Box<dyn Error>> {
     let native = XgwxDocument::from_path(path)?;
     for (p, (a, b)) in doc
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(native.ladder_programs())
+        .zip(native.program().ladder_programs())
         .enumerate()
     {
         assert!(
@@ -32,11 +33,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut doc = XgwxDocument::from_path(&args[0])?;
     let originals = doc
+        .program()
         .ladder_programs()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
-    doc.connect_iec_ld_groups(0, 2, 2, 3, 3, 3)?;
-    let changed = doc.ladder_programs().remove(0)?;
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program.iec_ld()?.connect_groups(2, 2, 3, 3, 3)
+    })?;
+    let changed = doc.program().ladder_programs().remove(0)?;
     assert_eq!(changed.data.len(), originals[0].data.len() + 26);
     assert_eq!(
         changed.iec_row_frames().unwrap().len(),
@@ -47,22 +51,34 @@ fn main() -> Result<(), Box<dyn Error>> {
         originals[0].iec_circuit_graph().unwrap().edges.len() + 1
     );
     for (p, original) in originals.iter().enumerate().skip(1) {
-        assert_eq!(doc.ladder_programs().remove(p)?.data, original.data);
+        assert_eq!(
+            doc.program().ladder_programs().remove(p)?.data,
+            original.data
+        );
     }
     if let Some(path) = args.get(2) {
         compare(&doc, path)?;
     }
     doc.write_to(&args[1])?;
-    doc.edit_iec_ld_vertical_wire(0, 2, 2, 3, 3, true, false)?;
-    doc.split_iec_ld_group(0, 2, 2, 3)?;
+    doc.program_mut().get(0).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .edit_vertical_wire(2, 2, 3, 3, true, false)
+    })?;
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.split_group(2, 2, 3))?;
     for (p, original) in originals.iter().enumerate() {
-        assert_eq!(doc.ladder_programs().remove(p)?.data, original.data);
+        assert_eq!(
+            doc.program().ladder_programs().remove(p)?.data,
+            original.data
+        );
     }
     doc.write_to(format!("{}.split.xgwx", &args[1]))?;
     if let Some(path) = args.get(3) {
         // The native range Delete capture removes the lower contact as well
         // as the incoming wire, then separates the groups.
-        let program = doc.ladder_programs().remove(0)?;
+        let program = doc.program().ladder_programs().remove(0)?;
         let record = program
             .iec_record_frames()
             .unwrap()
@@ -74,20 +90,43 @@ fn main() -> Result<(), Box<dyn Error>> {
             .map(|b| u16::from_le_bytes([b[0], b[1]]))
             .collect::<Vec<_>>();
         let operand = String::from_utf16(&units)?;
-        doc.delete_iec_ld_contact(0, record.offset, 1, "NO", &operand)?;
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_contact(record.offset, 1, "NO", &operand)
+        })?;
         compare(&doc, path)?;
     }
     let mut suite = XgwxDocument::from_path(&args[0])?;
     for (p, upper, start, lower, end, x) in [(0, 2, 2, 3, 3, 3), (3, 7, 18, 8, 19, 3)] {
-        suite.connect_iec_ld_groups(p, upper, start, lower, end, x)?;
+        suite
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .connect_groups(upper, start, lower, end, x)
+            })?;
     }
     suite.write_to(format!("{}.multi.xgwx", &args[1]))?;
     if let Some(path) = args.get(4) {
         compare(&suite, path)?;
     }
-    suite.insert_iec_ld_single_element(0, 66, 1, "contact", "NO", "ON")?;
+    suite
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_single_element(66, 1, "contact", "NO", "ON")
+        })?;
     suite.write_to(format!("{}.function-base.xgwx", &args[1]))?;
-    suite.connect_iec_ld_groups(0, 32, 66, 33, 67, 3)?;
+    suite
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.connect_groups(32, 66, 33, 67, 3)
+        })?;
     suite.write_to(format!("{}.suite.xgwx", &args[1]))?;
     if let Some(path) = args.get(5) {
         compare(&suite, path)?;

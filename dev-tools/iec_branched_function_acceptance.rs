@@ -12,6 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let row: u16 = row.parse()?;
     let mut doc = XgwxDocument::from_path(source)?;
     let block = doc
+        .program()
         .ladder_programs()
         .remove(p)?
         .iec_function_blocks()
@@ -19,7 +20,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|b| b.row_index == row)
         .ok_or("missing block")?;
-    doc.delete_iec_ld_branched_arithmetic(p, block.record_offset, &block.name.value)?;
+    doc.program_mut().get(p).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .delete_branched_arithmetic(block.record_offset, &block.name.value)
+    })?;
     doc.write_to(output)?;
     Ok(())
 }

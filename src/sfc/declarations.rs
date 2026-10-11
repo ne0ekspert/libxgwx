@@ -5,7 +5,9 @@ use super::*;
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct SfcArrayBound {
+    /// Inclusive lower bound of this array dimension.
     pub lower: i32,
+    /// Inclusive upper bound of this array dimension.
     pub upper: i32,
 }
 
@@ -14,10 +16,13 @@ pub struct SfcArrayBound {
 #[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct SfcDeclaration {
+    /// Array dimensions in declaration order; empty for a scalar.
     #[cfg_attr(feature = "wasm", serde(default))]
     pub dimensions: Vec<SfcArrayBound>,
+    /// Native initial-value expression; empty when no initializer is stored.
     #[cfg_attr(feature = "wasm", serde(default))]
     pub initial_value: String,
+    /// Whether the declaration is marked for retention.
     #[cfg_attr(feature = "wasm", serde(default))]
     pub retain: bool,
 }

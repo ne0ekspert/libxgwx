@@ -8,7 +8,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_eq_chain_head_acceptance SOURCE OUTPUT".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    let program = document.ladder_programs().remove(0)?;
+    let program = document.program().ladder_programs().remove(0)?;
     let block = program
         .iec_function_blocks()
         .ok_or("invalid blocks")?
@@ -16,7 +16,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .find(|block| block.record_offset == 0x2a5c)
         .ok_or("expected EQ block missing")?;
     println!("block at 0x{:X}: {}", block.record_offset, block.name.value);
-    document.delete_iec_ld_eq_chain_head(0, block.record_offset, "EQ")?;
+    document
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_eq_chain_head(block.record_offset, "EQ")
+        })?;
     fs::write(output, document.to_bytes()?)?;
     Ok(())
 }

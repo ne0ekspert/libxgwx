@@ -42,17 +42,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
     ] {
         let mut doc = source.clone();
-        doc.edit_ladder_cell(
-            0,
-            &LadderCellEdit {
+        doc.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program.ladder()?.edit_cell(&LadderCellEdit {
                 raw_y: 0,
                 column,
                 expected,
                 replacement,
-            },
-        )?;
+            })
+        })?;
         doc.write_to(path.join(format!("{name}.XGWX")))?;
-        println!("{name}: {}", doc.ladder_programs().remove(0)?.decoded_len);
+        println!(
+            "{name}: {}",
+            doc.program().ladder_programs().remove(0)?.decoded_len
+        );
     }
     Ok(())
 }

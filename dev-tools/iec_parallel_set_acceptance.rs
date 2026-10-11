@@ -8,10 +8,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_parallel_set_acceptance SOURCE OUTPUT".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    document.update_iec_ld_coil_kind(5, 555, "OUTPUT", "SET")?;
+    document
+        .program_mut()
+        .get(5)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .update_coil_kind(555, "OUTPUT", "SET")
+        })?;
     let set_only = document.to_bytes()?;
-    document.insert_iec_ld_parallel_contact_kind(5, 4, "%MX761", "%MX762", "NC", "%MX760")?;
-    let program = document.ladder_programs().remove(5)?;
+    document
+        .program_mut()
+        .get(5)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_parallel_contact_kind(4, "%MX761", "%MX762", "NC", "%MX760")
+        })?;
+    let program = document.program().ladder_programs().remove(5)?;
     let records = program
         .iec_record_frames()
         .ok_or("record framing failed")?
@@ -33,7 +47,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err(format!("SET parallel network did not validate: {records:?}").into());
     }
     let mut restored = document.clone();
-    restored.edit_iec_ld_branch_segment(5, 4, 4, 5, 3, true, false)?;
+    restored
+        .program_mut()
+        .get(5)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(4, 4, 5, 3, true, false)
+        })?;
     if restored.to_bytes()? != set_only {
         return Err("removing the new branch did not restore the SET-coil rung".into());
     }

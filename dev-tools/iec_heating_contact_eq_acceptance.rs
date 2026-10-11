@@ -9,6 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut document = XgwxDocument::from_path(source)?;
     let block = document
+        .program()
         .ladder_programs()
         .remove(6)?
         .iec_function_blocks()
@@ -16,7 +17,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|block| block.group_index == 13 && block.row_index == 62)
         .ok_or("L62 EQ missing")?;
-    document.delete_iec_ld_heating_chain_contact_eq(6, block.record_offset, &block.name.value)?;
+    document
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_heating_chain_contact_eq(block.record_offset, &block.name.value)
+        })?;
     fs::write(output, document.to_bytes()?)?;
     Ok(())
 }

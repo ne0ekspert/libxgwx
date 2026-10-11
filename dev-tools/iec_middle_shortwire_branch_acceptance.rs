@@ -3,7 +3,7 @@ use std::{env, error::Error, fs};
 use xgwx::XgwxDocument;
 
 fn group_bytes(document: &XgwxDocument, group_index: usize) -> Result<Vec<u8>, Box<dyn Error>> {
-    let program = document.ladder_programs().remove(3)?;
+    let program = document.program().ladder_programs().remove(3)?;
     let rows = program.iec_row_frames().ok_or("IEC row framing failed")?;
     let group = rows
         .iter()
@@ -20,7 +20,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_middle_shortwire_branch_acceptance SOURCE NATIVE OUTPUT".into());
     };
     let mut generated = XgwxDocument::from_path(source)?;
-    generated.edit_iec_ld_branch_segment(3, 15, 38, 39, 6, true, false)?;
+    generated
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(15, 38, 39, 6, true, false)
+        })?;
     fs::write(output, generated.to_bytes()?)?;
     let generated = XgwxDocument::from_path(output)?;
     let native = XgwxDocument::from_path(native)?;
@@ -28,9 +35,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("generated group 15 differs from XG5000 Delete Line".into());
     }
     for (index, (ours, theirs)) in generated
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(native.ladder_programs())
+        .zip(native.program().ladder_programs())
         .enumerate()
     {
         let ours = ours?;
@@ -40,6 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     generated
+        .program()
         .ladder_programs()
         .remove(3)?
         .iec_circuit_graph()

@@ -8,12 +8,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("usage: iec_x6_branch_delete_acceptance SOURCE P4_OUTPUT BOTH_OUTPUT".into());
     };
     let mut document = XgwxDocument::from_path(source)?;
-    document.edit_iec_ld_branch_segment(4, 6, 7, 8, 6, true, false)?;
+    document
+        .program_mut()
+        .get(4)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(6, 7, 8, 6, true, false)
+        })?;
     fs::write(p4_output, document.to_bytes()?)?;
-    document.edit_iec_ld_branch_segment(5, 5, 5, 6, 6, true, false)?;
+    document
+        .program_mut()
+        .get(5)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(5, 5, 6, 6, true, false)
+        })?;
     fs::write(both_output, document.to_bytes()?)?;
     for index in [4, 5] {
         document
+            .program()
             .ladder_programs()
             .remove(index)?
             .iec_circuit_graph()

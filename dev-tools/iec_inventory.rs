@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let row_detail = std::env::args().any(|arg| arg == "--rows");
     let site_detail = std::env::args().any(|arg| arg == "--sites");
     let mut seen_functions = std::collections::BTreeSet::new();
-    for (index, program) in document.ladder_programs().into_iter().enumerate() {
+    for (index, program) in document.program().ladder_programs().into_iter().enumerate() {
         let program = program?;
         if program.project_type != Some(2) {
             continue;

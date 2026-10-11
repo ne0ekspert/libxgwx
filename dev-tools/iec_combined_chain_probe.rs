@@ -8,7 +8,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let original = XgwxDocument::from_path(source)?;
     for x in [7, 10, 13] {
         let mut doc = original.clone();
-        let program = doc.ladder_programs().remove(6)?;
+        let program = doc.program().ladder_programs().remove(6)?;
         let r = program
             .iec_record_frames()
             .ok_or("records")?
@@ -36,18 +36,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .map(|b| u16::from_le_bytes([b[0], b[1]]))
                 .collect::<Vec<_>>(),
         )?;
-        doc.delete_iec_ld_contact(6, r.offset, x, kind, &variable)?;
+        doc.program_mut().get(6).and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_contact(r.offset, x, kind, &variable)
+        })?;
         doc.write_to(out.join(format!("C62D{x}.xgwx")))?;
-        match doc.insert_iec_ld_function(
-            6,
-            62,
-            19,
-            "EQ",
-            &["%MW129".into(), "1".into(), "%MX732".into()],
-        ) {
+        match doc.program_mut().get(6).and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_function(
+                62,
+                19,
+                "EQ",
+                &["%MW129".into(), "1".into(), "%MX732".into()],
+            )
+        }) {
             Ok(()) => {
                 doc.write_to(out.join(format!("C62R{x}.xgwx")))?;
                 let block = doc
+                    .program()
                     .ladder_programs()
                     .remove(6)?
                     .iec_function_blocks()
@@ -55,16 +61,25 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .into_iter()
                     .find(|b| b.row_index == 62 && b.raw_x == 19)
                     .ok_or("block")?;
-                doc.delete_iec_ld_scalar_chain_function(6, block.record_offset, "EQ")?;
+                doc.program_mut().get(6).and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .delete_scalar_chain_function(block.record_offset, "EQ")
+                })?;
                 doc.write_to(out.join(format!("C62G{x}.xgwx")))?;
-                doc.insert_iec_ld_function(
-                    6,
-                    62,
-                    19,
-                    "EQ",
-                    &["%MW129".into(), "1".into(), "%MX732".into()],
-                )?;
-                doc.insert_iec_ld_single_element(6, 62, x, "contact", kind, &variable)?;
+                doc.program_mut().get(6).and_then(|mut selected_program| {
+                    selected_program.iec_ld()?.insert_function(
+                        62,
+                        19,
+                        "EQ",
+                        &["%MW129".into(), "1".into(), "%MX732".into()],
+                    )
+                })?;
+                doc.program_mut().get(6).and_then(|mut selected_program| {
+                    selected_program
+                        .iec_ld()?
+                        .insert_single_element(62, x, "contact", kind, &variable)
+                })?;
                 doc.write_to(out.join(format!("C62F{x}.xgwx")))?;
                 println!("x{x}: contact Delete then EQ refill accepted");
             }

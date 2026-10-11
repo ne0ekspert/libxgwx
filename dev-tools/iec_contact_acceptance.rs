@@ -60,18 +60,23 @@ fn generate(
     variable: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.insert_iec_ld_contact(
-        program_index,
-        wire_offset,
-        raw_x,
-        start_x,
-        end_x,
-        kind,
-        variable,
-    )?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_contact(
+                wire_offset,
+                raw_x,
+                start_x,
+                end_x,
+                kind,
+                variable,
+            )
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let program = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -96,6 +101,7 @@ fn verify(
     let generated = XgwxDocument::from_path(generated)?;
     let resaved = XgwxDocument::from_path(resaved)?;
     let program = resaved
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -104,8 +110,8 @@ fn verify(
     if actual != variable {
         return Err(format!("resaved contact is {actual}, expected {variable}").into());
     }
-    let generated_programs = generated.ladder_programs();
-    let resaved_programs = resaved.ladder_programs();
+    let generated_programs = generated.program().ladder_programs();
+    let resaved_programs = resaved.program().ladder_programs();
     if generated_programs.len() != resaved_programs.len() {
         return Err("resaved program count changed".into());
     }
@@ -137,20 +143,32 @@ fn generate_cell_delete(
     variable: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.insert_iec_ld_contact(
-        program_index,
-        wire_offset,
-        raw_x,
-        start_x,
-        end_x,
-        kind,
-        variable,
-    )?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program.iec_ld()?.insert_contact(
+                wire_offset,
+                raw_x,
+                start_x,
+                end_x,
+                kind,
+                variable,
+            )
+        })?;
     let contact_offset = wire_offset + 19;
-    document.delete_iec_ld_contact_cell(program_index, contact_offset, raw_x, kind, variable)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_contact_cell(contact_offset, raw_x, kind, variable)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     let program = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -179,14 +197,15 @@ fn verify_cell_delete(generated: &Path, resaved: &Path, program_index: usize) ->
     let generated = XgwxDocument::from_path(generated)?;
     let resaved = XgwxDocument::from_path(resaved)?;
     resaved
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
         .ok_or("program index is out of range")??
         .iec_circuit_graph()
         .ok_or("native-resaved deletion has an invalid circuit graph")?;
-    let generated_programs = generated.ladder_programs();
-    let resaved_programs = resaved.ladder_programs();
+    let generated_programs = generated.program().ladder_programs();
+    let resaved_programs = resaved.program().ladder_programs();
     if generated_programs.len() != resaved_programs.len() {
         return Err("resaved program count changed".into());
     }
@@ -215,10 +234,18 @@ fn generate_delete(
     variable: &str,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.delete_iec_ld_contact(program_index, contact_offset, raw_x, kind, variable)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_contact(contact_offset, raw_x, kind, variable)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -239,10 +266,18 @@ fn generate_repair(
     raw_x: u8,
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.repair_iec_ld_horizontal_wire(program_index, insertion_offset, raw_x)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .repair_horizontal_wire(insertion_offset, raw_x)
+        })?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
     reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -309,9 +344,7 @@ fn main() -> Result<()> {
             if mode == "generate-leading-insert" =>
         {
             let mut document = XgwxDocument::from_path(source)?;
-            document.insert_iec_ld_leading_contact(
-                number(program)?, number(offset)?, kind, variable,
-            )?;
+            document.program_mut().get(number(program)?)?.iec_ld()?.insert_leading_contact(number(offset)?, kind, variable)?;
             document.write_to(output)?;
             Ok(())
         }
@@ -319,9 +352,7 @@ fn main() -> Result<()> {
             if mode == "generate-short-wire-insert" =>
         {
             let mut document = XgwxDocument::from_path(source)?;
-            document.insert_iec_ld_short_wire_contact(
-                number(program)?, number(wire)?, number(x)?, kind, variable,
-            )?;
+            document.program_mut().get(number(program)?)?.iec_ld()?.insert_short_wire_contact(number(wire)?, number(x)?, kind, variable)?;
             document.write_to(output)?;
             Ok(())
         }
@@ -329,9 +360,7 @@ fn main() -> Result<()> {
             if mode == "generate-cell-delete-direct" =>
         {
             let mut document = XgwxDocument::from_path(source)?;
-            document.delete_iec_ld_contact_cell(
-                number(program)?, number(record)?, number(x)?, kind, variable,
-            )?;
+            document.program_mut().get(number(program)?)?.iec_ld()?.delete_contact_cell(number(record)?, number(x)?, kind, variable)?;
             document.write_to(output)?;
             Ok(())
         }

@@ -26,6 +26,8 @@ pub const IEC_PRIMITIVE_TYPES: &[(&str, u32)] = &[
     ("STRING", 20),
 ];
 
+/// Resolve a captured native IEC primitive type ID; return `None` for unknown IDs.
+/// Resolve a captured native IEC primitive type ID; return `None` for unknown IDs.
 pub fn iec_primitive_type_name(code: u32) -> Option<&'static str> {
     IEC_PRIMITIVE_TYPES
         .iter()

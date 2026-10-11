@@ -75,9 +75,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     for (index, (left, right)) in left_document
+        .variable()
         .iec_local_symbols()
         .into_iter()
-        .zip(right_document.iec_local_symbols())
+        .zip(right_document.variable().iec_local_symbols())
         .enumerate()
     {
         let mut left = left?;

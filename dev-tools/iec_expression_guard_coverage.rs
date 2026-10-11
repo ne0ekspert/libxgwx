@@ -2,7 +2,7 @@
 use std::{env, error::Error};
 use xgwx::XgwxDocument;
 fn set(doc: &mut XgwxDocument, row: u16, output: bool, value: &str) -> Result<(), Box<dyn Error>> {
-    let program = doc.ladder_programs().remove(3)?;
+    let program = doc.program().ladder_programs().remove(3)?;
     let block = program
         .iec_function_blocks()
         .ok_or("invalid blocks")?
@@ -26,7 +26,11 @@ fn set(doc: &mut XgwxDocument, row: u16, output: bool, value: &str) -> Result<()
         .iter()
         .find(|s| s.offset >= record.offset && s.end_offset <= record.end)
         .ok_or("missing expression text")?;
-    doc.update_iec_ld_function_operand(3, text.offset, &text.value, value)?;
+    doc.program_mut().get(3).and_then(|mut selected_program| {
+        selected_program
+            .iec_ld()?
+            .update_function_operand(text.offset, &text.value, value)
+    })?;
     Ok(())
 }
 fn main() -> Result<(), Box<dyn Error>> {

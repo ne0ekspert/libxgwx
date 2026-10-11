@@ -3,14 +3,14 @@ use std::{env, error::Error};
 use xgwx::XgwxDocument;
 
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    let aa = a.ladder_programs();
-    let bb = b.ladder_programs();
+    let aa = a.program().ladder_programs();
+    let bb = b.program().ladder_programs();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?.data, b?.data, "native payload {i}");
     }
-    let aa = a.iec_local_symbols();
-    let bb = b.iec_local_symbols();
+    let aa = a.variable().iec_local_symbols();
+    let bb = b.variable().iec_local_symbols();
     assert_eq!(aa.len(), bb.len());
     for (i, (a, b)) in aa.into_iter().zip(bb).enumerate() {
         assert_eq!(a?, b?, "all local fields including offsets {i}");
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     let source = XgwxDocument::from_path(&args[0])?;
-    let original = source.ladder_programs().remove(0)?;
+    let original = source.program().ladder_programs().remove(0)?;
     let open = original
         .iec_circuit_layout()
         .ok_or("invalid source")?
@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut deleted = source.clone();
     let mut instances = Vec::new();
     for (row, x, name) in [(20, 16, "ADD"), (26, 16, "SUB")] {
-        let program = deleted.ladder_programs().remove(0)?;
+        let program = deleted.program().ladder_programs().remove(0)?;
         let block = program
             .iec_function_blocks()
             .ok_or("invalid blocks")?
@@ -44,7 +44,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             .find(|b| b.row_index == row && b.raw_x == x && b.name.value == name)
             .ok_or("missing target")?;
         instances.push((row, x, name));
-        deleted.delete_iec_ld_connected_arithmetic(0, block.record_offset, name)?;
+        deleted
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_connected_arithmetic(block.record_offset, name)
+            })?;
     }
     let mut moved_open = open.clone();
     for point in &mut moved_open {
@@ -53,6 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(
         moved_open,
         deleted
+            .program()
             .ladder_programs()
             .remove(0)?
             .iec_circuit_layout()
@@ -62,17 +70,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     deleted.write_to(&args[1])?;
     let mut restored = deleted.clone();
     for (row, x, name) in instances {
-        restored.insert_iec_ld_function(
-            0,
-            row,
-            x,
-            name,
-            &["%MW700".into(), "1".into(), "%MW700".into()],
-        )?;
+        restored
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.insert_function(
+                    row,
+                    x,
+                    name,
+                    &["%MW700".into(), "1".into(), "%MW700".into()],
+                )
+            })?;
     }
     assert_eq!(
         open,
         restored
+            .program()
             .ladder_programs()
             .remove(0)?
             .iec_circuit_layout()

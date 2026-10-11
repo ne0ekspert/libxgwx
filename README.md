@@ -27,7 +27,7 @@ println!("header label: {:?}", doc.header.label);
 println!("project name: {:?}", project.name);
 println!("file version: {:?}", project.file_version);
 
-for module in doc.modules() {
+for module in doc.module_summaries() {
     println!(
         "module base={:?} slot={:?} id={:?} name={:?}",
         module.base,
@@ -37,7 +37,7 @@ for module in doc.modules() {
     );
 }
 
-for program in doc.programs() {
+for program in doc.program().programs() {
     println!("program: {:?}", program.name);
 }
 
@@ -59,6 +59,213 @@ Generate and open the reference locally:
 cargo doc --open --lib --no-deps --features write,il,wasm,ffi
 ```
 
+## Program and Variable Namespaces
+
+Program and variable methods are grouped behind borrowed namespaces. The old
+flat methods are no longer public. Shared views require no optional features;
+exclusive editors require `write`.
+
+```rust,no_run
+use xgwx::XgwxDocument;
+let doc = XgwxDocument::from_path("project.xgwx")?;
+let programs = doc.program().list();
+let languages = doc.program().languages();
+let text = doc.program().text_programs();
+let globals = doc.variable().globals()?;
+let locals = doc.variable().locals();
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+| Namespace | Contents |
+| --- | --- |
+| `program()` | Program/task summaries, languages, LD bodies, SFC charts, ST/IL source |
+| `variable()` | Global symbols, IEC locals, source/SFC declarations, I/O generation preview |
+| `program_mut()` | Select program handles, create programs, read collection metadata |
+| `variable_mut()` | Global symbol edits and I/O variable generation |
+
+Global operation names are retained, for example
+`doc.variable_mut().update_variable(index, &patch)`. Program body and local
+declaration edits use the selected handles described below. Read methods are also
+available on editors. An editor borrows the document exclusively: collect the
+expected source/identity/declaration values first, then open the editor.
+The views do not clone the document and use the existing decoding and guarded
+writer implementations.
+
+Migration examples: `doc.programs()` becomes `doc.program().list()`;
+`doc.ladder_program(index)` becomes `doc.program().ladder_program(index)`;
+`doc.variables()` becomes `doc.variable().globals()`;
+SFC declaration edits use `program.variable_mut().edit_declaration(&patch)`.
+Container, hardware, and network
+methods remain on the document. WASM exports and native C entry points retain
+their existing names and data shapes.
+
+Run `cargo run --example namespaces -- project.xgwx` for a complete read example.
+
+### Selected programs
+
+`ProgramSummary` remains detached metadata. Select a document-bound handle to
+inspect or edit a particular program:
+
+```rust,no_run
+use xgwx::{create_project, TextSourcePatch};
+let mut doc = create_project("XGI-CPUE", "ST")?;
+let mut program = doc.program_mut().get(0)?;
+program.rename("Controller")?;
+let mut text = program.text()?;
+text.update(&TextSourcePatch {
+    expected_source: text.source()?.unwrap(),
+    source: "(* Controller source *)\r\n".into(),
+})?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The selected `Program` supplies its index and identity to the existing writers.
+Use `update(&ProgramPatch)` for metadata, `move_to(index)` to reorder it, and
+`delete()` to remove it. Deletion consumes the handle; `move_to()` updates the
+handle's index so subsequent edits still target the same program. Creation stays
+on the collection as `doc.program_mut().create(&NewProgram)`.
+
+| Selected editor | Operations |
+| --- | --- |
+| `program.iec_ld()?` | All IEC ladder edits, with `iec_ld_` removed from method names |
+| `program.ladder()?` | Native XGK ladder edits, with `ladder_` removed from method names |
+| `program.sfc()?` | `edit_entity(&SfcEntityEdit)`, `replace_sequence(&SfcSequenceEdit)` |
+| `program.text()?` | Standalone ST/IL `update(&TextSourcePatch)` and source inspection |
+| `program.vendor_il()?` | XGK IL projection `update(&VendorIlSourcePatch)`; requires `il` |
+| `program.variable_mut()` | Local symbol edits and `edit_declaration(&ProgramVariablePatch)` |
+
+```rust,no_run
+use xgwx::create_project;
+let mut doc = create_project("XGI-CPUE", "LD")?;
+let mut program = doc.program_mut().get(0)?;
+let mut ladder = program.iec_ld()?;
+ladder.insert_single_element(0, 1, "contact", "NO", "%MX0")?;
+ladder.insert_single_element(0, 94, "coil", "OUTPUT", "%MX1")?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Each language editor checks the selected program's body type before use. Its
+methods omit the bound program index; source/chart/declaration patches also omit
+it. Cross-program copies retain the other program's index. In
+`replace_group_from_program()`, the selected program is the destination.
+Expected values and layout guards remain unchanged. Shared selection is available
+without `write`, for example `doc.program().get(index)?.text()?`.
+
+Indexed collection dispatch methods remain available but are hidden from Rustdoc
+for migration of wire adapters. Native C and WASM patch schemas retain their
+indices and export names. Global symbols remain under `doc.variable_mut()`.
+
+Run `cargo run --example program_handles --features write` for a complete example
+that creates programs, edits ST and local declarations, deletes a program, and
+builds an IEC ladder rung. Pass an output directory to save both generated files.
+
+## Module Views
+
+### Bases and their modules
+
+`bases()` returns borrowed `Base` handles. Each handle exposes the modules
+belonging to that base, including their I/O classification and network settings:
+
+```rust,no_run
+let doc = xgwx::XgwxDocument::from_path("project.xgwx")?;
+for base in doc.bases() {
+    println!("Base {:?}: {:?} slots", base.number(), base.slot_count());
+    for module in base.modules() {
+        println!("{module:#?}");
+    }
+}
+let base = doc.base().get(0)?; // document index, not the native base number
+let modules = base.modules();
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`base.configuration_index()` identifies the owning PLC in configuration order.
+Repeated base numbers stay separate. XML ancestry determines ownership first;
+otherwise the configuration and base number must resolve to one base record.
+Ambiguous or unplaced records remain visible through `doc.modules()`. Empty
+bases remain in the list, and module-list length is not a physical slot count.
+
+Use `base.summary()` for a detached native record. The former raw `doc.bases()`
+getter is now `doc.base_summaries()`; native C/WASM and MCP base listings keep
+their existing fields, indices, and ordering. The views require no optional features.
+
+### Network configuration records
+
+Protocol configuration lists are under the network namespace:
+
+```rust,no_run
+let doc = xgwx::XgwxDocument::from_path("project.xgwx")?;
+let cnet = doc.network().cnet_config_infos();
+let fenet = doc.network().fenet_config_infos();
+for module in doc.network().modules() {
+    if let Some(settings) = module.fenet_config_info() {
+        println!("{:?}", settings.ip_address);
+    }
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The old `doc.cnet_config_infos()` and `doc.fenet_config_infos()` methods are no
+longer public. The namespace retains every settings record, including unmatched
+ones, in document order. On a `NetworkModule`, `cnet_config_info()` and
+`fenet_config_info()` borrow only uniquely resolved settings. Missing, ambiguous,
+or other protocol configurations return `None`; `module.configuration` retains
+the association details. `doc.network().list()` lists raw network summaries.
+
+The crate version remains `0.1.0` while these APIs are unpublished.
+
+The default-feature API provides `HardwareModule` for common installed hardware
+metadata, `IOModule` for confirmed numeric I/O identities, and `NetworkModule`
+for network memberships with their protocol settings. `modules()` returns the unified `Vec<Module>` view; `module_summaries()`
+returns raw installed hardware records. `network_modules()` still returns
+network membership summaries.
+
+```rust,no_run
+use xgwx::{ConfigurationMatch, Module, XgwxDocument};
+
+let doc = XgwxDocument::from_path("project.xgwx")?;
+for module in doc.modules() {
+    match module {
+        Module::Io(io) => println!("{:?}: {:?}", io.kind, io.base.hardware.name),
+        Module::Network(network) => {
+            println!("Network: {:?}", network.metadata.name);
+            match network.configuration {
+                ConfigurationMatch::Matched(settings) => println!("{settings:#?}"),
+                ConfigurationMatch::Missing => println!("No matching configuration"),
+                ConfigurationMatch::Ambiguous(candidates) => println!("Ambiguous: {candidates:#?}"),
+            }
+        }
+        Module::Other(hardware) => println!("Other: {:?}", hardware.hardware.name),
+    }
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Use `hardware_modules()`, `io_modules()`, or `resolved_network_modules()` for
+individual views. Hardware carries its owning configuration index. Network
+settings are associated within their XML owner or the configuration named by
+`ConfigName`, using current numeric identity, base, slot and available subtype.
+Missing and ambiguous associations remain explicit, including built-in interfaces
+with no separate installed hardware record. Location values are file-local,
+not persistent module identifiers. The I/O classification covers native catalog
+identities; unknown IDs/subtypes remain `Module::Other`, regardless of their names.
+Unknown protocol layouts remain accessible through the original summaries/XML.
+These owned views do not mutate the document.
+
+Run `cargo run --example modules -- project.xgwx` for complete settings output.
+
+### Breaking API migration
+
+`XgwxDocument::modules()` now returns `Vec<Module>` instead of
+`Vec<ModuleSummary>`. Match `Module::Io`, `Module::Network`, and `Module::Other`
+when enumerating all modules. Code needing the previous installed hardware list
+must call `module_summaries()` instead. The earlier `typed_modules()` getter has
+been replaced by `modules()`.
+
+WASM `hardware.modules`, native C JSON module lists, and hardware writer targets
+continue to use installed hardware summaries; their counts and coordinates do
+not include additional network memberships.
+
 ## LD to IL Conversion
 
 Enable the optional `il` feature to convert decoded ladder programs. Literal
@@ -68,7 +275,7 @@ device addresses are retained by default:
 use xgwx::XgwxDocument;
 
 let doc = XgwxDocument::from_path("fixtures/elements.xgwx")?;
-for program in doc.ladder_programs() {
+for program in doc.program().ladder_programs() {
     let il = program?.to_il()?;
     println!("{il}");
 }
@@ -79,7 +286,7 @@ for program in doc.ladder_programs() {
 Run that code with `--features il`. Each `IlStep` is either a rung comment or
 an instruction, and `IlProgram` renders the steps separated by newlines;
 embedded comment newlines are escaped. For symbolic operands, decode
-`doc.variables()` and pass them to
+`doc.variable().variables()` and pass them to
 `to_il_with_variable_names(...)`; addresses without one unique exact match are
 left unchanged, as are symbols whose address or name is duplicated. Conversion
 fails when the partial ladder decoder encounters an unknown record or

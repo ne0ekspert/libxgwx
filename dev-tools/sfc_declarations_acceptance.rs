@@ -25,9 +25,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("Setpoint", "REAL", "1.5", false, vec![], false),
         ("Interval", "TIME", "T#2s", false, vec![], false),
     ] {
-        doc.edit_sfc_variable(&SfcVariablePatch {
+        let expected_variables = doc.variable().sfc_variables(0)?;
+        doc.variable_mut().edit_sfc_variable(&SfcVariablePatch {
             program_index: 0,
-            expected_variables: doc.sfc_variables(0)?,
+            expected_variables,
             name: name.into(),
             data_type: ty.into(),
             description: "Advanced declaration".into(),
@@ -43,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         })?;
     }
-    let block = doc.sfc_programs().remove(0).blocks.remove(0);
+    let block = doc.program().sfc_programs().remove(0).blocks.remove(0);
     let mut rows = block.editable_rows.clone().ok_or("editable")?;
     for row in &mut rows {
         if row.action.as_deref() == Some("UpdateValues") {
@@ -53,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             row.transition_code = Some("TRANS := Samples[0] > 0;".into());
         }
     }
-    doc.replace_sfc_sequence(&SfcSequencePatch {
+    doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
         program_index: 0,
         block_index: 0,
         expected_entities: block.entities,

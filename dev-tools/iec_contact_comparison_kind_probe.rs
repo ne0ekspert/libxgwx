@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let row = row.parse::<u16>()?;
     let x = x.parse::<u8>()?;
     let source = XgwxDocument::from_path(source)?;
-    let program = source.ladder_programs().remove(p)?;
+    let program = source.program().ladder_programs().remove(p)?;
     let record = program
         .iec_record_frames()
         .ok_or("record decode failed")?
@@ -44,17 +44,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (index, kind) in kinds.into_iter().enumerate() {
         let code = index + 6;
         let mut candidate = source.clone();
-        candidate.update_iec_ld_contact_kind(
-            p,
-            record.offset + 15,
-            kinds[usize::from(original_code - 6)],
-            kind,
-        )?;
+        candidate
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program.iec_ld()?.update_contact_kind(
+                    record.offset + 15,
+                    kinds[usize::from(original_code - 6)],
+                    kind,
+                )
+            })?;
         let before = candidate.to_bytes()?;
         if let Some(output) = &output {
             candidate.write_to(output.join(format!("K{code}C.xgwx")))?;
         }
         let block = candidate
+            .program()
             .ladder_programs()
             .remove(p)?
             .iec_function_blocks()
@@ -62,11 +67,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             .into_iter()
             .find(|b| b.row_index == row && b.raw_x == 19)
             .ok_or("comparison not found")?;
-        let result = candidate.delete_iec_ld_heating_chain_contact_eq(
-            p,
-            block.record_offset,
-            &block.name.value,
-        );
+        let result = candidate
+            .program_mut()
+            .get(p)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .delete_heating_chain_contact_eq(block.record_offset, &block.name.value)
+            });
         if result.is_err() {
             assert_eq!(candidate.to_bytes()?, before, "atomic rejection for {kind}");
         }
@@ -74,7 +82,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         if result.is_ok() {
             if let Some(output) = &output {
                 candidate.write_to(output.join(format!("K{code}D.xgwx")))?;
-                candidate.insert_iec_ld_function(p, row, 19, &block.name.value, &args[5..8])?;
+                candidate
+                    .program_mut()
+                    .get(p)
+                    .and_then(|mut selected_program| {
+                        selected_program.iec_ld()?.insert_function(
+                            row,
+                            19,
+                            &block.name.value,
+                            &args[5..8],
+                        )
+                    })?;
                 candidate.write_to(output.join(format!("K{code}R.xgwx")))?;
                 println!("{kind}: comparison refill accepted");
             }

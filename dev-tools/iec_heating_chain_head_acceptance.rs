@@ -9,6 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut document = XgwxDocument::from_path(source)?;
     let block = document
+        .program()
         .ladder_programs()
         .remove(6)?
         .iec_function_blocks()
@@ -16,7 +17,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|block| block.group_index == 13 && block.row_index == 46)
         .ok_or("first group-13 block missing")?;
-    document.delete_iec_ld_heating_chain_head(6, block.record_offset, &block.name.value)?;
+    document
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_heating_chain_head(block.record_offset, &block.name.value)
+        })?;
     fs::write(output, document.to_bytes()?)?;
     Ok(())
 }

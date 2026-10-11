@@ -3,22 +3,24 @@ use std::{error::Error, path::Path};
 use xgwx::XgwxDocument;
 
 fn exact(a: &XgwxDocument, b: &XgwxDocument) -> Result<(), Box<dyn Error>> {
-    assert_eq!(a.ladder_programs().len(), 7);
-    assert_eq!(b.ladder_programs().len(), 7);
+    assert_eq!(a.program().ladder_programs().len(), 7);
+    assert_eq!(b.program().ladder_programs().len(), 7);
     for (index, (a, b)) in a
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(b.ladder_programs())
+        .zip(b.program().ladder_programs())
         .enumerate()
     {
         assert_eq!(a?.data, b?.data, "program payload {index}");
     }
-    assert_eq!(a.iec_local_symbols().len(), 7);
-    assert_eq!(b.iec_local_symbols().len(), 7);
+    assert_eq!(a.variable().iec_local_symbols().len(), 7);
+    assert_eq!(b.variable().iec_local_symbols().len(), 7);
     for (index, (a, b)) in a
+        .variable()
         .iec_local_symbols()
         .into_iter()
-        .zip(b.iec_local_symbols())
+        .zip(b.variable().iec_local_symbols())
         .enumerate()
     {
         assert_eq!(a?, b?, "every local field including offsets {index}");
@@ -54,7 +56,7 @@ fn generate(
         ("USINT", "%MB", 8),
         ("WORD", "%MW", 16),
     ];
-    let symbols = source.iec_local_symbols().remove(0)?;
+    let symbols = source.variable().iec_local_symbols().remove(0)?;
     assert_eq!(
         symbols
             .iter()
@@ -78,8 +80,14 @@ fn generate(
         assert_eq!(symbol.storage_class, "M");
         assert_eq!(symbol.allocation_number, Some(bit));
         assert_eq!(symbol.allocation_width, Some(*width));
-        base.update_iec_local_symbol_address(0, symbol_index, &name, &address, "")?;
-        edited.update_iec_local_symbol_address(
+        base.variable_mut().update_iec_local_symbol_address(
+            0,
+            symbol_index,
+            &name,
+            &address,
+            "",
+        )?;
+        edited.variable_mut().update_iec_local_symbol_address(
             0,
             symbol_index,
             &name,
@@ -95,7 +103,7 @@ fn generate(
             .iter()
             .position(|symbol| symbol.name == name)
             .unwrap();
-        recreated.update_iec_local_symbol_address(
+        recreated.variable_mut().update_iec_local_symbol_address(
             0,
             symbol_index,
             &name,
@@ -123,6 +131,7 @@ fn generate(
         ] {
             assert!(
                 edited
+                    .variable_mut()
                     .update_iec_local_symbol_address(0, symbol_index, &name, &current, &rejected)
                     .is_err(),
                 "{name} must reject {rejected}"
@@ -141,6 +150,7 @@ fn generate(
             .unwrap();
         assert!(
             edited
+                .variable_mut()
                 .update_iec_local_symbol_address(0, index, name, current, overlap)
                 .is_err()
         );
@@ -168,6 +178,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return generate(document, Path::new(&args[1]), args.get(3));
     }
     let before = document
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|program| program.data))
@@ -195,7 +206,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     ];
     types.sort();
     for (index, name) in types.iter().enumerate() {
-        document.insert_iec_local_symbol(0, &format!("AAA_{name}"), name, "")?;
+        document
+            .variable_mut()
+            .insert_iec_local_symbol(0, &format!("AAA_{name}"), name, "")?;
         println!(
             "{} AAA_{name} proposed bit {}",
             index + 1,
@@ -203,6 +216,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     let after = document
+        .program()
         .ladder_programs()
         .into_iter()
         .map(|program| program.map(|program| program.data))

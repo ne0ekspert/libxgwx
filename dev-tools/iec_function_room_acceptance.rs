@@ -19,10 +19,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         _ => return Err("unsupported acceptance instruction".into()),
     };
     let mut generated = XgwxDocument::from_path(source)?;
-    generated.insert_iec_ld_function(0, 5, 7, name, &operands)?;
+    generated
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_function(5, 7, name, &operands)
+        })?;
     std::fs::write(output, generated.to_bytes()?)?;
     let mut deleted = generated.clone();
     let block = deleted
+        .program()
         .ladder_programs()
         .remove(0)?
         .iec_function_blocks()
@@ -30,9 +38,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .find(|block| block.row_index == 5 && block.raw_x == 7)
         .ok_or("missing block")?;
-    deleted.delete_iec_ld_branch_function(0, block.record_offset, name)?;
+    deleted
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_branch_function(block.record_offset, name)
+        })?;
     std::fs::write(format!("{output}.deleted.xgwx"), deleted.to_bytes()?)?;
-    deleted.insert_iec_ld_function(0, 5, 7, name, &operands)?;
+    deleted
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_function(5, 7, name, &operands)
+        })?;
     assert_eq!(
         generated.to_bytes()?,
         deleted.to_bytes()?,
@@ -43,9 +65,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let native = XgwxDocument::from_path(native)?;
     for (index, (generated, native)) in generated
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(native.ladder_programs())
+        .zip(native.program().ladder_programs())
         .enumerate()
     {
         let (mut generated, mut native) = (generated?, native?);

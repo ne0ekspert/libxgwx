@@ -1,13 +1,20 @@
 //! New scan programs built from captured native blank program records.
 use crate::{XgwxDocument, XgwxError};
 
+/// Request to append an empty scan program using a captured native template.
+/// The language must be supported by the document CPU. Object and symbol IDs
+/// must be distinct, unused GUIDs; existing program bodies are not copied.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct NewProgram {
+    /// New program name, validated against the document naming rules.
     pub name: String,
+    /// Requested language (`LD`, `SFC`, `ST`, or `IL`), subject to CPU support.
     pub language: String,
+    /// Unused GUID for the new native Program ObjectId.
     pub object_id: String,
+    /// Unused GUID for its local Symbols ObjectId, distinct from the program ID.
     pub symbol_id: String,
 }
 
@@ -24,7 +31,7 @@ fn valid_guid(value: &str) -> bool {
 
 impl XgwxDocument {
     /// Move a program to a final list index without changing its task or contents.
-    pub fn move_program(
+    pub(crate) fn move_program(
         &mut self,
         from: usize,
         to: usize,
@@ -79,7 +86,7 @@ impl XgwxDocument {
     }
 
     /// Remove the selected program, checking its identity before changing XML.
-    pub fn delete_program(
+    pub(crate) fn delete_program(
         &mut self,
         program_index: usize,
         expected_object_id: &str,
@@ -124,7 +131,7 @@ impl XgwxDocument {
     }
 
     /// Append an empty scan program without copying existing application code.
-    pub fn create_program(&mut self, patch: &NewProgram) -> Result<(), XgwxError> {
+    pub(crate) fn create_program(&mut self, patch: &NewProgram) -> Result<(), XgwxError> {
         let fail = |reason: &str| XgwxError::ProgramCreation(reason.into());
         let name = &patch.name;
         if name.is_empty()

@@ -21,14 +21,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         ),
     ] {
         let mut doc = source.clone();
-        let data = doc.ladder_programs().remove(0)?;
+        let data = doc.program().ladder_programs().remove(0)?;
         let offset = data
             .strings
             .iter()
             .find(|s| s.value == original)
             .ok_or("missing instruction")?
             .offset;
-        doc.update_ladder_cell_text(0, offset, original, replacement)?;
+        doc.program_mut()
+            .update_ladder_cell_text(0, offset, original, replacement)?;
         doc.write_to(path.join(format!("{name}.XGWX")))?;
     }
     println!("Generated F01 through F06 in {}", path.display());

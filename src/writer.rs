@@ -976,7 +976,7 @@ impl XgwxDocument {
                 to: entry.model.into(),
             });
         }
-        for base in self.bases() {
+        for base in self.base_summaries() {
             let number = base.base.ok_or(XgwxError::UnsupportedCpuHardware {
                 type_code: current.type_code,
             })?;
@@ -991,7 +991,7 @@ impl XgwxDocument {
                 });
             }
         }
-        for module in self.modules() {
+        for module in self.module_summaries() {
             let base = module.base.ok_or(XgwxError::UnsupportedCpuHardware {
                 type_code: current.type_code,
             })?;
@@ -1059,7 +1059,7 @@ impl XgwxDocument {
                 "the workspace must contain only supported SFC, ST or IEC IL programs in one configuration",
             ));
         }
-        if !self.modules().is_empty() || !self.network_modules().is_empty() {
+        if !self.module_summaries().is_empty() || !self.network_modules().is_empty() {
             return Err(unsupported(
                 "configured I/O and network modules require a hardware migration",
             ));
@@ -1298,7 +1298,11 @@ impl XgwxDocument {
             .attributes()
             .find(|a| a.name() == "SlotCount")
             .ok_or(XgwxError::MissingBaseSlotCount { base })?;
-        for module in self.modules().into_iter().filter(|m| m.base == Some(base)) {
+        for module in self
+            .module_summaries()
+            .into_iter()
+            .filter(|m| m.base == Some(base))
+        {
             let slot = module.slot.ok_or(XgwxError::UnsupportedCpuHardware {
                 type_code: cpu.type_code,
             })?;
@@ -1549,7 +1553,7 @@ impl XgwxDocument {
         slot_span: u32,
     ) -> Result<(), XgwxError> {
         match self
-            .modules()
+            .module_summaries()
             .into_iter()
             .filter(|module| module.base == Some(base) && module.slot == Some(slot))
             .count()
@@ -1567,7 +1571,7 @@ impl XgwxDocument {
                 slot_count: 0,
             })?;
         if let Some(slot_count) = self
-            .bases()
+            .base_summaries()
             .into_iter()
             .find(|item| item.base == Some(base))
             .and_then(|item| item.slot_count)
@@ -1581,7 +1585,7 @@ impl XgwxDocument {
             });
         }
         if let Some(conflicting_slot) = self
-            .modules()
+            .module_summaries()
             .into_iter()
             .filter(|module| module.base == Some(base))
             .filter_map(|module| module.slot)
@@ -1605,7 +1609,7 @@ impl XgwxDocument {
         slot_span: u32,
     ) -> Result<(), XgwxError> {
         let slot_count = self
-            .bases()
+            .base_summaries()
             .into_iter()
             .find(|item| item.base == Some(base))
             .ok_or(XgwxError::BaseNotFound { base })?
@@ -1634,7 +1638,7 @@ impl XgwxDocument {
         }
 
         if let Some(conflicting_slot) = self
-            .modules()
+            .module_summaries()
             .into_iter()
             .filter(|module| module.base == Some(base))
             .filter_map(|module| {
@@ -1735,7 +1739,7 @@ impl XgwxDocument {
     ) -> Result<(&'static ModuleCatalogEntry, String), XgwxError> {
         self.require_xgk_hardware()?;
         let matches = self
-            .modules()
+            .module_summaries()
             .into_iter()
             .filter(|module| module.base == Some(base) && module.slot == Some(slot))
             .collect::<Vec<_>>();
@@ -1870,7 +1874,7 @@ impl XgwxDocument {
     ) -> Result<(), XgwxError> {
         self.require_xgk_hardware()?;
         let matches = self
-            .modules()
+            .module_summaries()
             .into_iter()
             .filter(|module| module.base == Some(base) && module.slot == Some(slot))
             .collect::<Vec<_>>();
@@ -1916,7 +1920,7 @@ impl XgwxDocument {
     /// Bounded browser edit: one existing IEC kind byte or one operand string.
     /// All XML outside the selected ProgramData and all other payload bytes
     /// are verified unchanged before the candidate is committed.
-    pub fn edit_browser_iec(
+    pub(crate) fn edit_browser_iec(
         &mut self,
         index: usize,
         patch: &BrowserIecPatch,
@@ -2122,7 +2126,7 @@ impl XgwxDocument {
     }
 
     /// Update editable XML metadata for one program selected by document order.
-    pub fn update_program(
+    pub(crate) fn update_program(
         &mut self,
         program_index: usize,
         patch: &ProgramPatch,
@@ -2275,13 +2279,13 @@ impl XgwxDocument {
     }
 
     /// Preview native-style digital I/O variables for the current XGK modules.
-    pub fn preview_io_variables(&self) -> Result<Vec<IoVariableGenerationRow>, XgwxError> {
+    pub(crate) fn preview_io_variables(&self) -> Result<Vec<IoVariableGenerationRow>, XgwxError> {
         crate::io_variables::plan(self)
     }
 
     /// Generate digital I/O variables, replacing duplicate names or addresses.
     /// Unrelated symbol records and every program payload remain untouched.
-    pub fn generate_io_variables(&mut self) -> Result<(), XgwxError> {
+    pub(crate) fn generate_io_variables(&mut self) -> Result<(), XgwxError> {
         let rows = self.preview_io_variables()?;
         if rows.iter().all(|r| r.action == "unchanged") {
             return Ok(());
@@ -2387,7 +2391,7 @@ impl XgwxDocument {
     }
 
     /// Update one global variable, rebuilding bounded name/comment strings.
-    pub fn update_variable(
+    pub(crate) fn update_variable(
         &mut self,
         variable_index: usize,
         patch: &VariablePatch,
@@ -2493,7 +2497,7 @@ impl XgwxDocument {
     /// PB50 stores the address text, bit offset, and allocation width.
     /// Existing mappings keep their address area. Clearing or assigning a mapping
     /// also updates its storage class and allocation metadata.
-    pub fn update_iec_local_symbol_address(
+    pub(crate) fn update_iec_local_symbol_address(
         &mut self,
         program_index: usize,
         symbol_index: usize,
@@ -2734,7 +2738,7 @@ impl XgwxDocument {
     /// Rename one IEC program-local symbol and every captured LD operand or
     /// matching function-instance marker. Reject unknown reference records so
     /// the edit stays atomic.
-    pub fn rename_iec_local_symbol(
+    pub(crate) fn rename_iec_local_symbol(
         &mut self,
         program_index: usize,
         symbol_index: usize,
@@ -2905,7 +2909,7 @@ impl XgwxDocument {
     /// PB50 instance declaration, assigning a new automatic-memory range, and changing only that block's
     /// instance marker. This is useful after copying a network containing a
     /// stateful function such as R_TRIG.
-    pub fn duplicate_iec_ld_function_instance(
+    pub(crate) fn duplicate_iec_ld_function_instance(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -3136,7 +3140,7 @@ impl XgwxDocument {
     /// Clone one captured IEC function-instance declaration into another
     /// program, assigning an unused automatic-memory range in that program.
     /// The source must contain a block using the declaration's function type.
-    pub fn copy_iec_instance_declaration_to_program(
+    pub(crate) fn copy_iec_instance_declaration_to_program(
         &mut self,
         source_program_index: usize,
         source_instance: &str,
@@ -3386,7 +3390,7 @@ impl XgwxDocument {
     /// Edit one captured IEC program-local symbol description. The PB50
     /// description is a length-prefixed UTF-16 field, independent of program
     /// operands and allocation metadata.
-    pub fn update_iec_local_symbol_description(
+    pub(crate) fn update_iec_local_symbol_description(
         &mut self,
         program_index: usize,
         symbol_index: usize,
@@ -3489,7 +3493,7 @@ impl XgwxDocument {
 
     /// Insert an unallocated primitive variable in a captured IEC program's
     /// local PB50 table. XG5000 sorts this table by case-insensitive name.
-    pub fn insert_iec_local_symbol(
+    pub(crate) fn insert_iec_local_symbol(
         &mut self,
         program_index: usize,
         name: &str,
@@ -3758,7 +3762,7 @@ impl XgwxDocument {
 
     /// Remove an IEC program-local PB50 record when the program does not
     /// contain a marker string referring to that symbol.
-    pub fn delete_iec_local_symbol(
+    pub(crate) fn delete_iec_local_symbol(
         &mut self,
         program_index: usize,
         symbol_index: usize,
@@ -3860,7 +3864,7 @@ impl XgwxDocument {
     /// Change a program-local automatic variable's primitive IEC type.
     /// XG5000 clears its allocation on a type change, even when the new
     /// type has the same storage width. Program references are retained.
-    pub fn update_iec_local_symbol_type(
+    pub(crate) fn update_iec_local_symbol_type(
         &mut self,
         program_index: usize,
         symbol_index: usize,
@@ -3985,7 +3989,7 @@ impl XgwxDocument {
     /// variable-length operands and catalog-backed mnemonic changes, synchronizing
     /// opcodes, decomposed strings, occupied cells and wires. Other records retain the
     /// same-length restriction to preserve their undecoded binary layout.
-    pub fn update_ladder_cell_text(
+    pub(crate) fn update_ladder_cell_text(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -4092,7 +4096,7 @@ impl XgwxDocument {
     /// Replace the text of a captured IEC LD comment. XG5000 stores its UTF-16
     /// length in the marker byte; the surrounding record has no length field.
     /// Symbol and operand strings are deliberately excluded from this operation.
-    pub fn update_iec_ld_comment(
+    pub(crate) fn update_iec_ld_comment(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -4130,7 +4134,7 @@ impl XgwxDocument {
 
     /// Replace the variable reference of a captured IEC LD rising-edge
     /// contact (`FF 08`).
-    pub fn update_iec_ld_rising_contact_operand(
+    pub(crate) fn update_iec_ld_rising_contact_operand(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -4170,7 +4174,7 @@ impl XgwxDocument {
     /// This accepts only the record codes identified by `iec_ld::element_operands`.
     /// Classified replacements must be BOOL; coil destinations must be writable.
     /// XG5000 must still validate unclassified expressions.
-    pub fn update_iec_ld_element_operand(
+    pub(crate) fn update_iec_ld_element_operand(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -4231,7 +4235,7 @@ impl XgwxDocument {
     }
 
     /// Change a captured IEC contact among the six addressed contact kinds.
-    pub fn update_iec_ld_contact_kind(
+    pub(crate) fn update_iec_ld_contact_kind(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -4274,7 +4278,7 @@ impl XgwxDocument {
 
     /// Change a captured IEC coil among output, inverse, set, reset, rising,
     /// and falling kinds while preserving its operand and position.
-    pub fn update_iec_ld_coil_kind(
+    pub(crate) fn update_iec_ld_coil_kind(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -4326,7 +4330,7 @@ impl XgwxDocument {
     /// Addition is limited to rows without comments or function records and
     /// preserves the group's existing row envelope.
     #[allow(clippy::too_many_arguments)]
-    pub fn edit_iec_ld_branch_segment(
+    pub(crate) fn edit_iec_ld_branch_segment(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -4401,7 +4405,7 @@ impl XgwxDocument {
     /// layouts; typed function bindings must remain intact. Addition joins two
     /// existing electrical points in the same group, including a deleted gap.
     #[allow(clippy::too_many_arguments)]
-    pub fn edit_iec_ld_vertical_wire(
+    pub(crate) fn edit_iec_ld_vertical_wire(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -4441,7 +4445,7 @@ impl XgwxDocument {
     /// their adjacent boundary rows. Existing row and function records remain
     /// unchanged; the group envelopes are rebuilt and subsequent groups renumbered.
     /// The joined network is disabled if either source group is disabled.
-    pub fn connect_iec_ld_groups(
+    pub(crate) fn connect_iec_ld_groups(
         &mut self,
         program_index: usize,
         upper_group_index: usize,
@@ -4560,7 +4564,7 @@ impl XgwxDocument {
     /// Extend a stored group's final row into the adjacent implicit blank row.
     /// The new row contains the vertical endpoint only; subsequent element
     /// placement can complete the circuit. Existing rows are not shifted.
-    pub fn extend_iec_ld_vertical_wire(
+    pub(crate) fn extend_iec_ld_vertical_wire(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -4588,7 +4592,7 @@ impl XgwxDocument {
     /// crossing wire, function body or function reference. Coordinates and
     /// all row-local records are preserved. Both groups inherit the current
     /// network execution setting.
-    pub fn split_iec_ld_group(
+    pub(crate) fn split_iec_ld_group(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -4621,7 +4625,7 @@ impl XgwxDocument {
     /// XG5000 Ctrl+L on a blank row boundary. The payload does not gain a row
     /// record; later row envelopes and every decoded Y coordinate move down by
     /// one four-unit grid row.
-    pub fn insert_iec_ld_blank_row(
+    pub(crate) fn insert_iec_ld_blank_row(
         &mut self,
         program_index: usize,
         after_row_index: u16,
@@ -4650,7 +4654,7 @@ impl XgwxDocument {
     }
 
     /// Compatibility wrapper for a normally open parallel contact.
-    pub fn insert_iec_ld_parallel_contact(
+    pub(crate) fn insert_iec_ld_parallel_contact(
         &mut self,
         program_index: usize,
         row_index: u16,
@@ -4673,7 +4677,7 @@ impl XgwxDocument {
     /// a second row, connects it at the contact's right edge, and shifts later
     /// rows down. The complete two-row network is validated before writing.
     #[allow(clippy::too_many_arguments)]
-    pub fn insert_iec_ld_parallel_contact_kind(
+    pub(crate) fn insert_iec_ld_parallel_contact_kind(
         &mut self,
         program_index: usize,
         row_index: u16,
@@ -4730,7 +4734,7 @@ impl XgwxDocument {
 
     /// Delete one implicit IEC LD blank row and move every later decoded Y
     /// coordinate up by one row, matching XG5000 Ctrl+D on an empty line.
-    pub fn delete_iec_ld_blank_row(
+    pub(crate) fn delete_iec_ld_blank_row(
         &mut self,
         program_index: usize,
         blank_row_index: u16,
@@ -4760,7 +4764,7 @@ impl XgwxDocument {
 
     /// Create the compatibility normally-open-contact to output-coil IEC LD
     /// rung. See [`Self::insert_iec_ld_rung`] for the other decoded kinds.
-    pub fn insert_iec_ld_linear_rung(
+    pub(crate) fn insert_iec_ld_linear_rung(
         &mut self,
         program_index: usize,
         blank_row_index: u16,
@@ -4783,7 +4787,7 @@ impl XgwxDocument {
     /// inserted without moving any existing row, including after the last
     /// stored network, extending the stored row range across sparse gaps when necessary.
     #[allow(clippy::too_many_arguments)]
-    pub fn insert_iec_ld_rung(
+    pub(crate) fn insert_iec_ld_rung(
         &mut self,
         program_index: usize,
         blank_row_index: u16,
@@ -4845,7 +4849,7 @@ impl XgwxDocument {
 
     /// Insert one addressed contact or coil into an unoccupied IEC grid cell.
     /// No other element or wire is created. The resulting row may be incomplete.
-    pub fn insert_iec_ld_single_element(
+    pub(crate) fn insert_iec_ld_single_element(
         &mut self,
         program_index: usize,
         row_index: u16,
@@ -4986,7 +4990,7 @@ impl XgwxDocument {
 
     /// Delete the compatibility normally-open-contact to output-coil rung.
     /// See [`Self::delete_iec_ld_rung`] for the other decoded kinds.
-    pub fn delete_iec_ld_linear_rung(
+    pub(crate) fn delete_iec_ld_linear_rung(
         &mut self,
         program_index: usize,
         row_index: u16,
@@ -5006,7 +5010,7 @@ impl XgwxDocument {
     /// Delete one exact addressed-contact, wire, and coil single-row group,
     /// restoring its row to an implicit blank gap without moving other rows.
     #[allow(clippy::too_many_arguments)]
-    pub fn delete_iec_ld_rung(
+    pub(crate) fn delete_iec_ld_rung(
         &mut self,
         program_index: usize,
         row_index: u16,
@@ -5043,7 +5047,7 @@ impl XgwxDocument {
 
     /// Delete the terminal wire and coil from a captured IEC row.
     /// Keep its leading contact or incoming branch endpoint as the sole record.
-    pub fn delete_iec_ld_terminal_coil(
+    pub(crate) fn delete_iec_ld_terminal_coil(
         &mut self,
         program_index: usize,
         coil_record_offset: usize,
@@ -5223,7 +5227,7 @@ impl XgwxDocument {
 
     /// Finish a contact-only one-row IEC rung with a native long wire and coil.
     /// The row must have the exact shape left by terminal-coil deletion.
-    pub fn insert_iec_ld_terminal_coil(
+    pub(crate) fn insert_iec_ld_terminal_coil(
         &mut self,
         program_index: usize,
         contact_record_offset: usize,
@@ -5383,7 +5387,7 @@ impl XgwxDocument {
     /// XG5000 Ctrl+D on an occupied line. Both edits are checked before the
     /// document is changed.
     #[allow(clippy::too_many_arguments)]
-    pub fn delete_iec_ld_simple_row(
+    pub(crate) fn delete_iec_ld_simple_row(
         &mut self,
         program_index: usize,
         row_index: u16,
@@ -5425,7 +5429,7 @@ impl XgwxDocument {
     /// Delete the upper line of a captured two-row IEC branch. The lower
     /// contact-only line remains and all later rows move up, as in XG5000
     /// Ctrl+D on the upper branch line.
-    pub fn delete_iec_ld_branch_top_row(
+    pub(crate) fn delete_iec_ld_branch_top_row(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -5450,7 +5454,7 @@ impl XgwxDocument {
 
     /// Delete a contact-only middle line from a nested IEC branch, reconnecting
     /// the outer x3 branch and removing the two branches local to that line.
-    pub fn delete_iec_ld_nested_contact_branch_row(
+    pub(crate) fn delete_iec_ld_nested_contact_branch_row(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -5506,7 +5510,7 @@ impl XgwxDocument {
 
     /// Delete a contact-only middle line in a chain of x3 branches. The
     /// adjacent vertical segments become one segment across the removed line.
-    pub fn delete_iec_ld_chained_contact_branch_row(
+    pub(crate) fn delete_iec_ld_chained_contact_branch_row(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -5532,7 +5536,7 @@ impl XgwxDocument {
 
     /// Delete a middle IEC row that only carries an incoming and outgoing
     /// vertical branch. The two segments are joined across the row gap.
-    pub fn delete_iec_ld_empty_branch_row(
+    pub(crate) fn delete_iec_ld_empty_branch_row(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -5559,7 +5563,7 @@ impl XgwxDocument {
     /// Reproduce XG5000 Delete Line on the lower output row of the captured
     /// two-row FF branch. Native deletion also removes the connected FF block
     /// and its output reference from the upper row.
-    pub fn delete_iec_ld_ff_branch_output_row(
+    pub(crate) fn delete_iec_ld_ff_branch_output_row(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -5589,7 +5593,7 @@ impl XgwxDocument {
 
     /// Insert a normally open contact into a captured linear IEC LD wire.
     /// This compatibility wrapper delegates to [`Self::insert_iec_ld_contact`].
-    pub fn insert_iec_ld_no_contact(
+    pub(crate) fn insert_iec_ld_no_contact(
         &mut self,
         program_index: usize,
         wire_offset: usize,
@@ -5611,7 +5615,7 @@ impl XgwxDocument {
 
     /// Insert an addressed contact into the empty x1 cell of a captured
     /// two-row IEC branch upper line, matching XG5000 F3/F4 insertion.
-    pub fn insert_iec_ld_leading_contact(
+    pub(crate) fn insert_iec_ld_leading_contact(
         &mut self,
         program_index: usize,
         insertion_offset: usize,
@@ -5742,7 +5746,7 @@ impl XgwxDocument {
     /// wire. The record shape follows native XG5000 insertion and contact-kind
     /// captures. The operand must resolve to a BOOL symbol or device address.
     #[allow(clippy::too_many_arguments)]
-    pub fn insert_iec_ld_contact(
+    pub(crate) fn insert_iec_ld_contact(
         &mut self,
         program_index: usize,
         wire_offset: usize,
@@ -5900,7 +5904,7 @@ impl XgwxDocument {
 
     /// Replace one framed IEC short wire with an addressed contact. XG5000 F3
     /// preserves the row count and surrounding records for this cell edit.
-    pub fn insert_iec_ld_short_wire_contact(
+    pub(crate) fn insert_iec_ld_short_wire_contact(
         &mut self,
         program_index: usize,
         wire_offset: usize,
@@ -6008,7 +6012,7 @@ impl XgwxDocument {
 
     /// Delete any decoded contact between two captured wire fragments, checking
     /// its expected kind before applying native XG5000 Delete semantics.
-    pub fn delete_iec_ld_contact(
+    pub(crate) fn delete_iec_ld_contact(
         &mut self,
         program_index: usize,
         contact_offset: usize,
@@ -6033,7 +6037,7 @@ impl XgwxDocument {
     /// Delete a decoded contact between two captured wire fragments.
     /// Native XG5000 Delete leaves both fragments in place and decrements the
     /// row record count. Retained for compatibility with the original NO/NC API.
-    pub fn delete_iec_ld_no_contact(
+    pub(crate) fn delete_iec_ld_no_contact(
         &mut self,
         program_index: usize,
         contact_offset: usize,
@@ -6192,7 +6196,7 @@ impl XgwxDocument {
 
     /// Delete any decoded contact with native XG5000 Cell Delete semantics,
     /// checking its expected kind before applying the edit.
-    pub fn delete_iec_ld_contact_cell(
+    pub(crate) fn delete_iec_ld_contact_cell(
         &mut self,
         program_index: usize,
         contact_offset: usize,
@@ -6218,7 +6222,7 @@ impl XgwxDocument {
     /// A leading branch contact moves the next contact to x1 and puts a short
     /// wire at x4. Contacts between long wires shift later cells left while
     /// the output coil stays fixed. Retained for API compatibility.
-    pub fn delete_iec_ld_no_contact_cell(
+    pub(crate) fn delete_iec_ld_no_contact_cell(
         &mut self,
         program_index: usize,
         contact_offset: usize,
@@ -6437,7 +6441,7 @@ impl XgwxDocument {
 
     /// Remove a captured one-cell `FF 01` wire between two long wires.
     /// The resulting gap must be recognized by the guarded wire repair path.
-    pub fn delete_iec_ld_horizontal_wire(
+    pub(crate) fn delete_iec_ld_horizontal_wire(
         &mut self,
         program_index: usize,
         wire_offset: usize,
@@ -6543,7 +6547,7 @@ impl XgwxDocument {
     }
 
     /// Delete an exact horizontal XGK wire without removing its row or elements.
-    pub fn delete_ladder_horizontal_wire(
+    pub(crate) fn delete_ladder_horizontal_wire(
         &mut self,
         program_index: usize,
         raw_y: u32,
@@ -6556,7 +6560,7 @@ impl XgwxDocument {
     }
 
     /// Delete an exact vertical XGK branch reference pair, preserving shared rows.
-    pub fn delete_ladder_vertical_wire(
+    pub(crate) fn delete_ladder_vertical_wire(
         &mut self,
         program_index: usize,
         raw_x: u8,
@@ -6569,7 +6573,7 @@ impl XgwxDocument {
     }
 
     /// Delete one framed IEC horizontal wire, retaining row headers and operands.
-    pub fn delete_iec_ld_horizontal_wire_record(
+    pub(crate) fn delete_iec_ld_horizontal_wire_record(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -6640,7 +6644,7 @@ impl XgwxDocument {
     }
 
     /// Remove an isolated contact or coil, leaving its physical row empty.
-    pub fn delete_iec_ld_isolated_element(
+    pub(crate) fn delete_iec_ld_isolated_element(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -6706,7 +6710,7 @@ impl XgwxDocument {
     /// Draw one native F5 cell from a scalar function BOOL output or extend
     /// its contiguous short-wire feed. A comparison OUT assignment is replaced
     /// by the wire; numeric destinations are preserved and cannot be wired.
-    pub fn insert_iec_ld_function_output_wire(
+    pub(crate) fn insert_iec_ld_function_output_wire(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -6740,7 +6744,7 @@ impl XgwxDocument {
     /// Reconnect a one-cell gap left by a captured IEC contact or trigger deletion.
     /// Native XG5000 F5 inserts an `FF 01` short-wire record, increments the
     /// row count, and resets the row header coordinate to the first contact.
-    pub fn repair_iec_ld_horizontal_wire(
+    pub(crate) fn repair_iec_ld_horizontal_wire(
         &mut self,
         program_index: usize,
         insertion_offset: usize,
@@ -6845,7 +6849,7 @@ impl XgwxDocument {
 
     /// Remove an output assignment without removing the pin, reference, body,
     /// or physical row. Inputs cannot be cleared through this API.
-    pub fn delete_iec_ld_function_output_operand(
+    pub(crate) fn delete_iec_ld_function_output_operand(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -6953,7 +6957,7 @@ impl XgwxDocument {
 
     /// Assign a previously empty OUT pin. Reuse the existing operand validator
     /// on a private candidate so a bad type or constant never changes the document.
-    pub fn assign_iec_ld_function_output_operand(
+    pub(crate) fn assign_iec_ld_function_output_operand(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -7104,7 +7108,7 @@ impl XgwxDocument {
     /// Replace a captured IEC LD function input/output expression (`FF 46`).
     /// Classified symbols and literals are checked against the decoded pin type;
     /// output pins also require a writable destination.
-    pub fn update_iec_ld_function_operand(
+    pub(crate) fn update_iec_ld_function_operand(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -7268,7 +7272,7 @@ impl XgwxDocument {
 
     /// Delete a scalar from a horizontal chain or a captured staggered MOVE layout,
     /// preserving neighboring bodies and pin rows.
-    pub fn delete_iec_ld_scalar_chain_function(
+    pub(crate) fn delete_iec_ld_scalar_chain_function(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -7332,7 +7336,7 @@ impl XgwxDocument {
     }
 
     /// Replace a supported scalar chain body atomically while preserving its neighbors.
-    pub fn replace_iec_ld_scalar_chain_function(
+    pub(crate) fn replace_iec_ld_scalar_chain_function(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -7371,7 +7375,7 @@ impl XgwxDocument {
     /// Delete a terminal IEC function block using the captured XG5000 Delete
     /// shape. This removes its preceding wire and its otherwise empty pin rows,
     /// while retaining the leading contact as the only record in the group.
-    pub fn delete_iec_ld_terminal_function(
+    pub(crate) fn delete_iec_ld_terminal_function(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -7492,7 +7496,7 @@ impl XgwxDocument {
     }
 
     /// Insert a terminal TON using an existing local instance declaration.
-    pub fn insert_iec_ld_terminal_timer(
+    pub(crate) fn insert_iec_ld_terminal_timer(
         &mut self,
         program_index: usize,
         contact_offset: usize,
@@ -7662,7 +7666,7 @@ impl XgwxDocument {
 
     /// Restore a native two-pin MOVE after a retained terminal contact.
     /// Operand edits run on a clone, so the operation is atomic.
-    pub fn insert_iec_ld_terminal_move(
+    pub(crate) fn insert_iec_ld_terminal_move(
         &mut self,
         program_index: usize,
         contact_offset: usize,
@@ -7887,7 +7891,7 @@ impl XgwxDocument {
     /// Delete shape. The group's stored rows become an implicit blank gap and
     /// all later group ordinals are decremented without changing row indices.
     /// A contiguous final group trims the total row count at its first row.
-    pub fn delete_iec_ld_standalone_function(
+    pub(crate) fn delete_iec_ld_standalone_function(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -8071,7 +8075,7 @@ impl XgwxDocument {
     /// Remove one complete decoded IEC LD network while leaving its row range
     /// as an implicit blank gap. Later network ordinals are renumbered; their
     /// rows, records, and coordinates remain unchanged.
-    pub fn delete_iec_ld_group(
+    pub(crate) fn delete_iec_ld_group(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -8231,7 +8235,7 @@ impl XgwxDocument {
     /// Replace an occupied IEC LD network with a copy of another network in
     /// the same program. Both edits are checked on a private document, so a
     /// failed copy never leaves the destination deleted.
-    pub fn replace_iec_ld_group(
+    pub(crate) fn replace_iec_ld_group(
         &mut self,
         program_index: usize,
         source_group_index: usize,
@@ -8266,7 +8270,7 @@ impl XgwxDocument {
     /// Missing source locals and captured function instances can be copied in
     /// the same atomic edit when requested.
     #[allow(clippy::too_many_arguments)]
-    pub fn replace_iec_ld_group_from_program(
+    pub(crate) fn replace_iec_ld_group_from_program(
         &mut self,
         source_program_index: usize,
         source_group_index: usize,
@@ -8310,7 +8314,7 @@ impl XgwxDocument {
 
     /// Move a complete decoded IEC LD network into an empty row range.
     /// Its internal branches, function pins, and operand links move together.
-    pub fn move_iec_ld_group(
+    pub(crate) fn move_iec_ld_group(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -8329,7 +8333,7 @@ impl XgwxDocument {
     /// Copy a complete decoded IEC LD network into an empty row range,
     /// retaining the original group. The copied operands and function instance
     /// names can be edited separately after insertion.
-    pub fn copy_iec_ld_group(
+    pub(crate) fn copy_iec_ld_group(
         &mut self,
         program_index: usize,
         group_index: usize,
@@ -8349,7 +8353,7 @@ impl XgwxDocument {
     /// program. Referenced local symbols and function instances must already
     /// exist with compatible types in the destination program.
     #[allow(clippy::too_many_arguments)]
-    pub fn copy_iec_ld_group_to_program(
+    pub(crate) fn copy_iec_ld_group_to_program(
         &mut self,
         source_program_index: usize,
         group_index: usize,
@@ -8807,7 +8811,7 @@ impl XgwxDocument {
     /// mappings retain their source address.
     /// A private document makes declaration insertion and network copying atomic.
     #[allow(clippy::too_many_arguments)]
-    pub fn copy_iec_ld_group_to_program_with_locals(
+    pub(crate) fn copy_iec_ld_group_to_program_with_locals(
         &mut self,
         source_program_index: usize,
         group_index: usize,
@@ -9010,7 +9014,7 @@ impl XgwxDocument {
     /// Create a standalone IEC comment in an empty row by copying a captured
     /// one-record comment group from the same program and replacing its text.
     /// The source group remains untouched; failures leave the document intact.
-    pub fn insert_iec_ld_comment(
+    pub(crate) fn insert_iec_ld_comment(
         &mut self,
         program_index: usize,
         destination_row_index: u16,
@@ -9382,7 +9386,7 @@ impl XgwxDocument {
     }
 
     /// Delete a scalar block on a branch row, retaining its branch scaffold.
-    pub fn delete_iec_ld_branch_function(
+    pub(crate) fn delete_iec_ld_branch_function(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -9409,7 +9413,7 @@ impl XgwxDocument {
     /// Replace a captured branch scalar function as one atomic document edit.
     /// A scaffold grows if needed and keeps surplus native branch rows; a completed
     /// branch tail uses only the replacement block's own pin rows.
-    pub fn replace_iec_ld_branch_function(
+    pub(crate) fn replace_iec_ld_branch_function(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -9442,7 +9446,7 @@ impl XgwxDocument {
     }
 
     /// Place a scalar MOVE, arithmetic, or comparison function in available IEC cells.
-    pub fn insert_iec_ld_function(
+    pub(crate) fn insert_iec_ld_function(
         &mut self,
         program_index: usize,
         row_index: u16,
@@ -9743,7 +9747,7 @@ impl XgwxDocument {
     }
 
     /// Insert the captured standalone WORD_TO_UDINT shape at a three-row group gap.
-    pub fn insert_iec_ld_standalone_function(
+    pub(crate) fn insert_iec_ld_standalone_function(
         &mut self,
         program_index: usize,
         insertion_offset: usize,
@@ -9958,7 +9962,7 @@ impl XgwxDocument {
     /// Insert the captured connected single-output FF function cell into a
     /// guarded two-row gap. Both stored rows and their surrounding records are
     /// retained; one function record and one output-link record are added.
-    pub fn insert_iec_ld_function_cell(
+    pub(crate) fn insert_iec_ld_function_cell(
         &mut self,
         program_index: usize,
         insertion_offset: usize,
@@ -10159,7 +10163,7 @@ impl XgwxDocument {
     /// Delete a captured IEC function cell while retaining unrelated records
     /// in the same stored rows. The block and all of its pin-link records are
     /// removed and each affected row's record count is decremented.
-    pub fn delete_iec_ld_function_cell(
+    pub(crate) fn delete_iec_ld_function_cell(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -10300,7 +10304,7 @@ impl XgwxDocument {
     /// Delete the first EQ in the captured four-block comparison chain.
     /// XG5000 closes the fourth row of that block and joins the x12 feed to
     /// the next EQ; deleting only the function records leaves a stale branch.
-    pub fn delete_iec_ld_eq_chain_head(
+    pub(crate) fn delete_iec_ld_eq_chain_head(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -10492,7 +10496,7 @@ impl XgwxDocument {
     /// Delete the first comparison block in the captured heating/cooling
     /// chain. Native Delete Line on its first pin row removes the four-row
     /// block body, joins the two long branch feeds, and shifts later rows.
-    pub fn delete_iec_ld_heating_chain_head(
+    pub(crate) fn delete_iec_ld_heating_chain_head(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -10703,7 +10707,7 @@ impl XgwxDocument {
 
     /// Delete one of the two captured middle EQ blocks in the heating chain.
     /// Native Delete Line on its first pin row keeps the x3/x15 branch feeds.
-    pub fn delete_iec_ld_heating_chain_middle(
+    pub(crate) fn delete_iec_ld_heating_chain_middle(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -10900,7 +10904,7 @@ impl XgwxDocument {
     /// Delete an x15-fed EQ in the captured heating comparison chain by its
     /// first pin row. The shape guard also accepts the next comparison after
     /// an earlier deletion has shifted its row index.
-    pub fn delete_iec_ld_heating_chain_x15_eq(
+    pub(crate) fn delete_iec_ld_heating_chain_x15_eq(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -11079,7 +11083,7 @@ impl XgwxDocument {
 
     /// Delete the captured contact-fed L62 EQ by its first pin row.
     /// XG5000 removes its x6/x12 contact branches and retains the x15 feed.
-    pub fn delete_iec_ld_heating_chain_contact_eq(
+    pub(crate) fn delete_iec_ld_heating_chain_contact_eq(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -11367,7 +11371,7 @@ impl XgwxDocument {
     }
 
     /// Delete the x3-fed EQ and its orphan x15 feed as one valid edit.
-    pub fn delete_iec_ld_heating_chain_x3_eq_repaired(
+    pub(crate) fn delete_iec_ld_heating_chain_x3_eq_repaired(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -11382,7 +11386,7 @@ impl XgwxDocument {
 
     /// Reproduce XG5000 Delete Line on the L59 pin row of the L58 EQ.
     /// This native edit leaves one input/output error until the circuit is repaired.
-    pub fn delete_iec_ld_heating_chain_x3_eq(
+    pub(crate) fn delete_iec_ld_heating_chain_x3_eq(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -11572,7 +11576,7 @@ impl XgwxDocument {
     /// Remove the dangling x15 feed segments after deleting an x3-fed
     /// comparison. The unique orphan chain is found from decoded rows and
     /// branch endpoints, restoring a valid circuit while retaining the x3 feed.
-    pub fn repair_iec_ld_heating_chain_x3_eq_deletion(
+    pub(crate) fn repair_iec_ld_heating_chain_x3_eq_deletion(
         &mut self,
         program_index: usize,
     ) -> Result<(), XgwxError> {
@@ -11728,7 +11732,7 @@ impl XgwxDocument {
 
     /// Delete a captured connected ADD/SUB in a five-row R_TRIG/arithmetic/MOVE group.
     /// XG5000 retains the R_TRIG and MOVE circuits as two separate groups.
-    pub fn delete_iec_ld_connected_arithmetic(
+    pub(crate) fn delete_iec_ld_connected_arithmetic(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -11930,7 +11934,7 @@ impl XgwxDocument {
     /// Delete a four-row scalar arithmetic block sharing an external branch spine.
     /// Matches native Delete Line on its final continuation row, retaining the
     /// spine and neighboring functions while shifting later rows up once.
-    pub fn delete_iec_ld_branched_arithmetic(
+    pub(crate) fn delete_iec_ld_branched_arithmetic(
         &mut self,
         program_index: usize,
         block_offset: usize,
@@ -12110,7 +12114,7 @@ impl XgwxDocument {
 
     /// Change a captured three-operand IEC ADD/SUB/MUL/DIV block.
     /// The native capture shows a paired function opcode and UTF-16 name.
-    pub fn update_iec_ld_arithmetic_function(
+    pub(crate) fn update_iec_ld_arithmetic_function(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -12156,7 +12160,7 @@ impl XgwxDocument {
     }
 
     /// Change a captured three-operand IEC comparison block among EQ/GT/GE/LT/LE.
-    pub fn update_iec_ld_comparison_function(
+    pub(crate) fn update_iec_ld_comparison_function(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -12289,7 +12293,7 @@ impl XgwxDocument {
     /// Insert, replace, or delete a contact/coil record in the captured
     /// LD format. Unlike text clearing, deletion removes the actual record.
     /// Unsupported topology is rejected without changing the document.
-    pub fn edit_ladder_cell(
+    pub(crate) fn edit_ladder_cell(
         &mut self,
         program_index: usize,
         edit: &LadderCellEdit,
@@ -12318,7 +12322,7 @@ impl XgwxDocument {
     }
 
     /// Insert a fixed-arity catalog instruction at an XGK row's output end.
-    pub fn insert_ladder_instruction(
+    pub(crate) fn insert_ladder_instruction(
         &mut self,
         program_index: usize,
         raw_y: u32,
@@ -12332,7 +12336,7 @@ impl XgwxDocument {
     }
 
     /// Insert a comparison contact spanning three cells at the selected column.
-    pub fn insert_ladder_comparison(
+    pub(crate) fn insert_ladder_comparison(
         &mut self,
         program_index: usize,
         raw_y: u32,
@@ -12348,7 +12352,7 @@ impl XgwxDocument {
     }
 
     /// Delete a verified XGK comparison contact, leaving its occupied wiring gap.
-    pub fn delete_ladder_comparison(
+    pub(crate) fn delete_ladder_comparison(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -12360,7 +12364,7 @@ impl XgwxDocument {
     }
 
     /// Delete a catalog application from an unbranched output row, including its feed wire.
-    pub fn delete_ladder_instruction(
+    pub(crate) fn delete_ladder_instruction(
         &mut self,
         program_index: usize,
         offset: usize,
@@ -12372,7 +12376,7 @@ impl XgwxDocument {
     }
 
     /// Create or edit a native rung/output comment record.
-    pub fn edit_ladder_comment(
+    pub(crate) fn edit_ladder_comment(
         &mut self,
         program_index: usize,
         edit: &LadderCommentEdit,
@@ -12383,7 +12387,7 @@ impl XgwxDocument {
     }
 
     /// Delete a native rung-comment row and close the resulting coordinate gap.
-    pub fn delete_ladder_rung_comment(
+    pub(crate) fn delete_ladder_rung_comment(
         &mut self,
         program_index: usize,
         raw_y: u32,
@@ -12395,7 +12399,7 @@ impl XgwxDocument {
     }
 
     /// Add or remove a supported vertical connection between adjacent rows.
-    pub fn edit_ladder_branch(
+    pub(crate) fn edit_ladder_branch(
         &mut self,
         program_index: usize,
         edit: &LadderBranchEdit,
@@ -12406,7 +12410,11 @@ impl XgwxDocument {
     }
 
     /// Insert a physical blank row before the selected row, as native Ctrl+L.
-    pub fn insert_ladder_row(&mut self, program_index: usize, raw_y: u32) -> Result<(), XgwxError> {
+    pub(crate) fn insert_ladder_row(
+        &mut self,
+        program_index: usize,
+        raw_y: u32,
+    ) -> Result<(), XgwxError> {
         self.edit_ladder_payload(program_index, |payload| {
             crate::ladder_write::insert_ladder_row(payload, raw_y)
         })

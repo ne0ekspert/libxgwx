@@ -1,22 +1,36 @@
 //! XGK IL is a textual projection of native ladder records, not IEC CodeList.
 use crate::{XgwxDocument, XgwxError};
+/// Owned textual IL projection of an XGK native ladder program.
+/// This differs from standalone IEC IL stored in a CodeList source container.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 pub struct VendorIlProgram {
+    /// Zero-based program index in document order.
     pub program_index: usize,
+    /// Native program ObjectId preserved as its identity.
     pub object_id: String,
+    /// Textual XGK ladder projection; `None` when the body cannot be converted.
     pub source: Option<String>,
+    /// Whether the captured layout and metadata permit the corresponding guarded writer.
     pub editable: bool,
+    /// Explanation of why editing is unavailable; `None` when editing is supported.
     pub reason: Option<String>,
 }
+/// Indexed textual replacement of an XGK ladder IL projection.
+/// The expected object ID and source protect against stale edits.
+/// For a selected vendor IL editor, use [`crate::VendorIlSourcePatch`].
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "wasm", derive(serde::Deserialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase", deny_unknown_fields))]
 pub struct VendorIlPatch {
+    /// Zero-based program index in document order.
     pub program_index: usize,
+    /// Previously read program ObjectId that must still identify the selected program.
     pub expected_object_id: String,
+    /// Exact previously read source, including line endings, used to reject stale edits.
     pub expected_source: String,
+    /// Replacement source text; line endings are part of the stored value.
     pub source: String,
 }
 fn fail(reason: impl Into<String>) -> XgwxError {
@@ -24,7 +38,7 @@ fn fail(reason: impl Into<String>) -> XgwxError {
 }
 
 impl XgwxDocument {
-    pub fn vendor_il_programs(&self) -> Vec<VendorIlProgram> {
+    pub(crate) fn vendor_il_programs(&self) -> Vec<VendorIlProgram> {
         let configs = self.configurations();
         if configs.len() != 1
             || !configs[0]
@@ -44,7 +58,7 @@ impl XgwxDocument {
             Some(VendorIlProgram{program_index:index,object_id:program.object_id.unwrap_or_default(),editable:reason.is_none(),reason,source})
         }).collect()
     }
-    pub fn edit_vendor_il(&mut self, patch: &VendorIlPatch) -> Result<(), XgwxError> {
+    pub(crate) fn edit_vendor_il(&mut self, patch: &VendorIlPatch) -> Result<(), XgwxError> {
         let before = self
             .vendor_il_programs()
             .into_iter()

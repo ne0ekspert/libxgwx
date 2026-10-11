@@ -54,7 +54,7 @@ fn reports_base64_payload_lengths() {
 fn decodes_xgi_d24_input_filter() {
     let doc = XgwxDocument::from_path("fixtures/elements.xgwx").expect("fixture parses");
     let module = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| {
             module
@@ -78,7 +78,11 @@ fn decodes_xgi_d24_input_filter() {
   </Parameter>
 </Project>"#;
     let doc = XgwxDocument::parse(&synthetic_xgwx_bytes(xml)).expect("synthetic parses");
-    let module = doc.modules().into_iter().next().expect("module exists");
+    let module = doc
+        .module_summaries()
+        .into_iter()
+        .next()
+        .expect("module exists");
 
     assert_eq!(module.input_filter_raw, Some(5));
     assert_eq!(module.input_filter, Some(ModuleInputFilter::Ms5));
@@ -154,7 +158,7 @@ fn preserves_unchanged_bytes_and_rewrites_supported_workspace() {
         .expect("input filter updates");
 
     let module = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| module.base == Some(0) && module.slot == Some(0))
         .expect("edited module exists");
@@ -168,7 +172,7 @@ fn preserves_unchanged_bytes_and_rewrites_supported_workspace() {
     let rewritten = doc.to_bytes().expect("edited document writes");
     let rewritten_doc = XgwxDocument::parse(&rewritten).expect("rewritten document parses");
     let rewritten_module = rewritten_doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| module.base == Some(0) && module.slot == Some(0))
         .expect("rewritten module exists");
@@ -367,7 +371,7 @@ fn selects_module_from_embedded_xgk_catalog() {
     let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
     let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
     let original = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| module.base == Some(0) && module.slot == Some(2))
         .expect("target module exists");
@@ -375,7 +379,7 @@ fn selects_module_from_embedded_xgk_catalog() {
     doc.select_module(0, 2, "xgf-rd8a")
         .expect("model matching is ASCII-case-insensitive");
     let module = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| module.base == Some(0) && module.slot == Some(2))
         .expect("selected module exists");
@@ -391,7 +395,7 @@ fn selects_module_from_embedded_xgk_catalog() {
     let rewritten = doc.to_bytes().expect("selected workspace writes");
     let reparsed = XgwxDocument::parse(&rewritten).expect("selected workspace reparses");
     let module = reparsed
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| module.base == Some(0) && module.slot == Some(2))
         .expect("selected module survives serialization");
@@ -404,12 +408,12 @@ fn selects_module_from_embedded_xgk_catalog() {
 fn deletes_one_module_and_round_trips() {
     let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
     let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
-    let original_count = doc.modules().len();
+    let original_count = doc.module_summaries().len();
 
     doc.delete_module(0, 2).expect("target module deletes");
-    assert_eq!(doc.modules().len(), original_count - 1);
+    assert_eq!(doc.module_summaries().len(), original_count - 1);
     assert!(
-        !doc.modules()
+        !doc.module_summaries()
             .iter()
             .any(|module| module.base == Some(0) && module.slot == Some(2))
     );
@@ -426,10 +430,10 @@ fn deletes_one_module_and_round_trips() {
 
     let bytes = doc.to_bytes().expect("deleted workspace writes");
     let reparsed = XgwxDocument::parse(&bytes).expect("deleted workspace reparses");
-    assert_eq!(reparsed.modules().len(), original_count - 1);
+    assert_eq!(reparsed.module_summaries().len(), original_count - 1);
     assert!(
         !reparsed
-            .modules()
+            .module_summaries()
             .iter()
             .any(|module| module.base == Some(0) && module.slot == Some(2))
     );
@@ -440,13 +444,13 @@ fn deletes_one_module_and_round_trips() {
 fn inserts_a_catalog_module_into_an_empty_slot_and_round_trips() {
     let source = std::fs::read("fixtures/elements-io.xgwx").expect("fixture reads");
     let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
-    let original_count = doc.modules().len();
+    let original_count = doc.module_summaries().len();
 
     doc.delete_module(0, 2).expect("slot becomes empty");
     doc.insert_module(0, 2, "XGF-RD8A")
         .expect("catalog module inserts into empty slot");
     let inserted = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| module.base == Some(0) && module.slot == Some(2))
         .expect("inserted module exists");
@@ -459,11 +463,11 @@ fn inserts_a_catalog_module_into_an_empty_slot_and_round_trips() {
     assert_eq!(inserted.name.as_deref(), Some(entry.name));
     assert_eq!(inserted.comment.as_deref(), Some(""));
     assert_eq!(inserted.details.as_deref(), Some(entry.details));
-    assert_eq!(doc.modules().len(), original_count);
+    assert_eq!(doc.module_summaries().len(), original_count);
 
     let bytes = doc.to_bytes().expect("workspace with insertion writes");
     let reparsed = XgwxDocument::parse(&bytes).expect("workspace with insertion reparses");
-    assert!(reparsed.modules().iter().any(|module| {
+    assert!(reparsed.module_summaries().iter().any(|module| {
         module.base == Some(0) && module.slot == Some(2) && module.id == Some(entry.id)
     }));
 }
@@ -797,7 +801,7 @@ fn exposes_and_writes_dt4a_emergency_output_groups() {
         .expect("second output group writes");
 
     let module = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| module.base == Some(0) && module.slot == Some(2))
         .expect("DT4A remains present");
@@ -845,7 +849,7 @@ fn exposes_and_writes_relay_emergency_output_groups() {
     doc.set_module_option(1, 1, "emergencyOutput", 1, 1)
         .expect("RY2A/B second output group writes");
 
-    let modules = doc.modules();
+    let modules = doc.module_summaries();
     assert_eq!(
         modules
             .iter()
@@ -882,7 +886,7 @@ fn treats_tc4ud_as_a_two_slot_module() {
     doc.select_module(0, 2, "XGF-TC4UD")
         .expect("TC4UD fits in empty slots 2 and 3");
     let selected = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|module| module.base == Some(0) && module.slot == Some(2))
         .expect("TC4UD remains anchored at its starting slot");
@@ -1025,7 +1029,7 @@ fn exposes_verified_high_speed_counter_options() {
 fn writes_high_speed_counter_options_at_xg5000_verified_offsets() {
     fn details_bytes(doc: &XgwxDocument, slot: u32) -> Vec<u8> {
         let details = doc
-            .modules()
+            .module_summaries()
             .into_iter()
             .find(|module| module.base == Some(1) && module.slot == Some(slot))
             .and_then(|module| module.details)
@@ -2608,8 +2612,8 @@ fn parses_real_fixture_from_env() {
     let _ = doc.configurations();
     let _ = doc.networks();
     let _ = doc.network_modules();
-    let _ = doc.bases();
-    let _ = doc.modules();
+    let _ = doc.base_summaries();
+    let _ = doc.module_summaries();
     let _ = doc.tasks();
     let _ = doc.programs();
     let _ = doc.variables();
@@ -7349,7 +7353,7 @@ fn compact_cpu_guards_preserve_document_and_allow_comments() {
     .unwrap();
     let reparsed = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
     assert_eq!(
-        reparsed.modules()[0].comment.as_deref(),
+        reparsed.module_summaries()[0].comment.as_deref(),
         Some("CompactAcceptance")
     );
     assert_eq!(reparsed.network_modules(), original_networks);
@@ -7485,7 +7489,7 @@ fn base_slot_counts_round_trip_and_preserve_other_configuration() {
         for count in [4, 6, 8, 10, 12] {
             let mut doc = source.clone();
             let old = doc
-                .bases()
+                .base_summaries()
                 .into_iter()
                 .find(|b| b.base == Some(base))
                 .unwrap()
@@ -7502,7 +7506,7 @@ fn base_slot_counts_round_trip_and_preserve_other_configuration() {
             let mut saved = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
             assert_eq!(
                 saved
-                    .bases()
+                    .base_summaries()
                     .into_iter()
                     .find(|b| b.base == Some(base))
                     .unwrap()
@@ -15284,7 +15288,7 @@ fn browser_hardware_edits_are_bounded_and_atomic() {
     ))
     .unwrap();
     let details = doc
-        .modules()
+        .module_summaries()
         .into_iter()
         .find(|m| m.base == Some(1))
         .unwrap()

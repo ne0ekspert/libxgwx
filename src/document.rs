@@ -87,16 +87,20 @@ impl XgwxDocument {
             .collect()
     }
 
-    /// Return high-level summaries for all hardware `<Base>` elements.
-    pub fn bases(&self) -> Vec<BaseSummary> {
+    /// Return raw summaries for all hardware `<Base>` elements in document order.
+    /// Use [`Self::bases`] for document-bound base handles and their modules.
+    pub fn base_summaries(&self) -> Vec<BaseSummary> {
         self.root
             .descendants_named("Base")
             .map(BaseSummary::from_element)
             .collect()
     }
 
-    /// Return high-level summaries for all hardware `<Module>` elements.
-    pub fn modules(&self) -> Vec<ModuleSummary> {
+    /// Return raw installed hardware summaries for all `<Module>` elements.
+    /// This is the former raw `modules()` API. It excludes additional network
+    /// membership records and does not classify I/O or resolve protocol settings.
+    /// Use [`Self::modules`] for the unified typed module list.
+    pub fn module_summaries(&self) -> Vec<ModuleSummary> {
         self.root
             .descendants_named("Module")
             .map(ModuleSummary::from_element)
@@ -104,7 +108,7 @@ impl XgwxDocument {
     }
 
     /// Return high-level summaries for all `<Task>` elements.
-    pub fn tasks(&self) -> Vec<TaskSummary> {
+    pub(crate) fn tasks(&self) -> Vec<TaskSummary> {
         self.root
             .descendants_named("Task")
             .map(TaskSummary::from_element)
@@ -112,7 +116,7 @@ impl XgwxDocument {
     }
 
     /// Return high-level summaries for all `<Program>` elements.
-    pub fn programs(&self) -> Vec<ProgramSummary> {
+    pub(crate) fn programs(&self) -> Vec<ProgramSummary> {
         self.root
             .descendants_named("Program")
             .map(ProgramSummary::from_element)
@@ -123,7 +127,7 @@ impl XgwxDocument {
     ///
     /// XG5000 stores `<Symbols>` as base64, usually bzip2-compressed, binary
     /// data. The observed symbol table contains fixed seven-string records.
-    pub fn variables(&self) -> Result<Vec<VariableSummary>, XgwxError> {
+    pub(crate) fn variables(&self) -> Result<Vec<VariableSummary>, XgwxError> {
         let Some(symbols) = self.root.descendants_named("Symbols").next() else {
             return Ok(Vec::new());
         };
@@ -133,7 +137,7 @@ impl XgwxDocument {
 
     /// Decode each program's IEC `PB50` local symbol table in program order.
     /// A missing table is represented by an empty list for that program.
-    pub fn iec_local_symbols(&self) -> Vec<Result<Vec<IecLocalSymbol>, XgwxError>> {
+    pub(crate) fn iec_local_symbols(&self) -> Vec<Result<Vec<IecLocalSymbol>, XgwxError>> {
         self.root
             .descendants_named("Program")
             .map(|program| {
@@ -154,7 +158,7 @@ impl XgwxDocument {
     /// XG5000 stores ladder bodies as base64, usually bzip2-compressed, binary
     /// blobs. This returns a partial decode that preserves the bytes and extracts
     /// embedded UTF-16 strings and likely instruction calls.
-    pub fn ladder_programs(&self) -> Vec<Result<LadderProgramData, XgwxError>> {
+    pub(crate) fn ladder_programs(&self) -> Vec<Result<LadderProgramData, XgwxError>> {
         self.root
             .descendants_named("Program")
             .map(LadderProgramData::from_program_element)
@@ -163,7 +167,10 @@ impl XgwxDocument {
 
     /// Decode only the selected program, without inflating unrelated payloads.
     /// The index uses the same document order as `ladder_programs`.
-    pub fn ladder_program(&self, index: usize) -> Option<Result<LadderProgramData, XgwxError>> {
+    pub(crate) fn ladder_program(
+        &self,
+        index: usize,
+    ) -> Option<Result<LadderProgramData, XgwxError>> {
         self.root
             .descendants_named("Program")
             .nth(index)
@@ -290,7 +297,7 @@ impl XgwxDocument {
     /// Cnet records can be associated with `<NetworkModule>` entries by
     /// matching `NetworkModule Id` to [`CnetConfigInfoSummary::type_code`].
     /// Base and slot are exposed but should not be used as stable identity.
-    pub fn cnet_config_infos(&self) -> Vec<CnetConfigInfoSummary> {
+    pub(crate) fn cnet_config_infos(&self) -> Vec<CnetConfigInfoSummary> {
         self.root
             .descendants_named("XGPD_CONFIG_INFO_CNET")
             .map(CnetConfigInfoSummary::from_element)
@@ -302,7 +309,7 @@ impl XgwxDocument {
     /// FEnet records can be associated with `<NetworkModule>` entries by
     /// matching `NetworkModule Id` to [`FenetConfigInfoSummary::type_code`].
     /// Base and slot are exposed but should not be used as stable identity.
-    pub fn fenet_config_infos(&self) -> Vec<FenetConfigInfoSummary> {
+    pub(crate) fn fenet_config_infos(&self) -> Vec<FenetConfigInfoSummary> {
         self.root
             .descendants_named("XGPD_CONFIG_INFO_FENET")
             .map(FenetConfigInfoSummary::from_element)

@@ -14,9 +14,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("ResetLatch", "RS"),
         ("SetLatch", "SR"),
     ] {
-        doc.edit_sfc_variable(&SfcVariablePatch {
+        let expected_variables = doc.variable().sfc_variables(0)?;
+        doc.variable_mut().edit_sfc_variable(&SfcVariablePatch {
             program_index: 0,
-            expected_variables: doc.sfc_variables(0)?,
+            expected_variables,
             name: name.into(),
             data_type: ty.into(),
             description: "".into(),
@@ -45,9 +46,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "TIME_OF_DAY",
         "DATE_AND_TIME",
     ] {
-        doc.edit_sfc_variable(&SfcVariablePatch {
+        let expected_variables = doc.variable().sfc_variables(0)?;
+        doc.variable_mut().edit_sfc_variable(&SfcVariablePatch {
             program_index: 0,
-            expected_variables: doc.sfc_variables(0)?,
+            expected_variables,
             name: format!("Value_{ty}"),
             data_type: ty.into(),
             description: "".into(),
@@ -56,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             update: false,
         })?;
     }
-    let block = doc.sfc_programs().remove(0).blocks.remove(0);
+    let block = doc.program().sfc_programs().remove(0).blocks.remove(0);
     let mut rows = block.editable_rows.clone().unwrap();
     rows[1].action = Some("UpdateValues".into());
     rows[1].action_code = Some("Count := ADD(Count, 1);\r\nValue_WORD := %MW100;\r\nValue_DWORD := DWORD#123;\r\nValue_LWORD := LWORD#123;\r\nDelay(IN := TRUE, PT := T#2s);\r\nTimerOff(IN := TRUE, PT := T#2s);\r\nPulse(IN := TRUE, PT := T#2s);\r\nCounterUp(CU := TRUE, R := FALSE, PV := 10);\r\nCounterDown(CD := TRUE, LD := FALSE, PV := 10);\r\nCounterBoth(CU := TRUE, CD := FALSE, R := FALSE, LD := FALSE, PV := 10);\r\nRise(CLK := TRUE);\r\nFall(CLK := TRUE);\r\nResetLatch(S := TRUE, R_1 := FALSE);\r\nSetLatch(S_1 := TRUE, R := FALSE);".into());
@@ -64,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     rows[4].title = "Value_BOOL".into();
     rows[2].title = "Ready".into();
     rows[2].transition_code = Some("TRANS := Count >= 10 AND Delay.Q;".into());
-    doc.replace_sfc_sequence(&SfcSequencePatch {
+    doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
         program_index: 0,
         block_index: 0,
         expected_entities: block.entities,

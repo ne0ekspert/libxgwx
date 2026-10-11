@@ -2,15 +2,21 @@
 #[path = "instruction_operand_data.rs"]
 mod data;
 
+/// Reviewed operand types and device permissions from the XGK instruction manual.
+/// Unknown permissions remain `None`; shared variant tables can retain a union of types.
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 pub struct LadderOperandSpec {
+    /// Operand label from the native instruction manual, such as a source or destination.
     pub label: &'static str,
+    /// Reviewed native data/storage type names allowed by the operand table.
     pub data_types: &'static [&'static str],
     /// None means the device permissions were not unambiguously decoded.
     pub device_areas: Option<&'static [&'static str]>,
+    /// Whether constants are permitted; `None` when the manual table is ambiguous.
     pub allows_constant: Option<bool>,
+    /// Source HTML page name in the reviewed local instruction manual.
     pub manual_page: &'static str,
 }
 

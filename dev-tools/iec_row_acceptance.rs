@@ -7,6 +7,7 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 fn generate(source: &Path, output: &Path, program_index: usize, after_row: u16) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
     let before = document
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -14,11 +15,15 @@ fn generate(source: &Path, output: &Path, program_index: usize, after_row: u16) 
     let before_rows = before.iec_row_frames().ok_or("IEC row framing failed")?;
     let before_max = u16::from_le_bytes(before.data[4..6].try_into()?);
 
-    document.insert_iec_ld_blank_row(program_index, after_row)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.insert_blank_row(after_row))?;
     document.write_to(output)?;
 
     let reparsed = XgwxDocument::from_path(output)?;
     let after = reparsed
+        .program()
         .ladder_programs()
         .into_iter()
         .nth(program_index)
@@ -53,8 +58,8 @@ fn generate(source: &Path, output: &Path, program_index: usize, after_row: u16) 
 fn verify(generated: &Path, resaved: &Path) -> Result<()> {
     let generated = XgwxDocument::from_path(generated)?;
     let resaved = XgwxDocument::from_path(resaved)?;
-    let generated_programs = generated.ladder_programs();
-    let resaved_programs = resaved.ladder_programs();
+    let generated_programs = generated.program().ladder_programs();
+    let resaved_programs = resaved.program().ladder_programs();
     if generated_programs.len() != resaved_programs.len() {
         return Err("resaved program count changed".into());
     }
@@ -73,10 +78,13 @@ fn verify(generated: &Path, resaved: &Path) -> Result<()> {
 
 fn delete(source: &Path, output: &Path, program_index: usize, blank_row: u16) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
-    document.delete_iec_ld_blank_row(program_index, blank_row)?;
+    document
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| selected_program.iec_ld()?.delete_blank_row(blank_row))?;
     document.write_to(output)?;
     let reparsed = XgwxDocument::from_path(output)?;
-    reparsed.ladder_programs()[program_index]
+    reparsed.program().ladder_programs()[program_index]
         .as_ref()
         .map_err(|error| error.to_string())?
         .iec_circuit_graph()

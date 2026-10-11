@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&out)?;
     for paths in [16, 511] {
         let mut doc = XgwxDocument::from_path("fixtures/sfc/multi-action-branch-native.xgwx")?;
-        let b = doc.sfc_programs()[0].blocks[0].clone();
+        let b = doc.program().sfc_programs()[0].blocks[0].clone();
         let mut rows = b.editable_rows.clone().ok_or("read-only chart")?;
         let start = rows
             .iter()
@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let p = r.position.as_ref().unwrap();
             (p.row, p.column)
         });
-        doc.replace_sfc_sequence(&SfcSequencePatch {
+        doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
             program_index: 0,
             block_index: 0,
             expected_entities: b.entities,

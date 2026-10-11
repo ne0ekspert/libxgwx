@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .parse::<usize>()?;
     let row_index = args.next().ok_or("missing row index")?.parse::<u16>()?;
     let document = XgwxDocument::from_path(path)?;
-    let programs = document.ladder_programs();
+    let programs = document.program().ladder_programs();
     let program = programs
         .get(program_index)
         .ok_or("program index is out of range")?

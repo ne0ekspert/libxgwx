@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let program_index = args[2].parse::<usize>()?;
     let row = args[3].parse::<u16>()?;
     let x = args[4].parse::<u8>()?;
-    let program = native.ladder_programs().remove(program_index)?;
+    let program = native.program().ladder_programs().remove(program_index)?;
     let blocks = program
         .iec_function_blocks()
         .ok_or("invalid native blocks")?;
@@ -35,11 +35,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("capture group contains another function".into());
     }
     let mut generated = native.clone();
-    generated.delete_iec_ld_group(program_index, target.group_index, row)?;
-    generated.insert_iec_ld_function(program_index, row, x, &args[5], &args[6..])?;
+    generated
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .delete_group(target.group_index, row)
+        })?;
+    generated
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .insert_function(row, x, &args[5], &args[6..])
+        })?;
     generated.write_to(&args[1])?;
-    let a = generated.ladder_programs();
-    let b = native.ladder_programs();
+    let a = generated.program().ladder_programs();
+    let b = native.program().ladder_programs();
     assert_eq!(a.len(), b.len());
     let mut exact = true;
     for (index, (a, b)) in a.into_iter().zip(b).enumerate() {
@@ -55,8 +69,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
         exact &= diffs.is_empty();
     }
-    let a = generated.iec_local_symbols();
-    let b = native.iec_local_symbols();
+    let a = generated.variable().iec_local_symbols();
+    let b = native.variable().iec_local_symbols();
     assert_eq!(a.len(), b.len());
     for (index, (a, b)) in a.into_iter().zip(b).enumerate() {
         assert_eq!(

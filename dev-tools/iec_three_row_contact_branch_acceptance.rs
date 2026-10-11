@@ -3,7 +3,7 @@ use std::{env, error::Error, fs};
 use xgwx::XgwxDocument;
 
 fn group_bytes(document: &XgwxDocument) -> Result<Vec<u8>, Box<dyn Error>> {
-    let program = document.ladder_programs().remove(3)?;
+    let program = document.program().ladder_programs().remove(3)?;
     let rows = program.iec_row_frames().ok_or("IEC row framing failed")?;
     let group = rows
         .iter()
@@ -23,7 +23,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     let mut first = XgwxDocument::from_path(source)?;
     println!("native comparison: program 3 group 11 L25-L26");
-    first.edit_iec_ld_branch_segment(3, 11, 25, 26, 6, true, false)?;
+    first
+        .program_mut()
+        .get(3)
+        .and_then(|mut selected_program| {
+            selected_program
+                .iec_ld()?
+                .edit_branch_segment(11, 25, 26, 6, true, false)
+        })?;
     fs::write(first_output, first.to_bytes()?)?;
     let first = XgwxDocument::from_path(first_output)?;
     let native = XgwxDocument::from_path(native)?;
@@ -31,9 +38,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("generated group 11 differs from XG5000 Delete Line".into());
     }
     for (index, (ours, theirs)) in first
+        .program()
         .ladder_programs()
         .into_iter()
-        .zip(native.ladder_programs())
+        .zip(native.program().ladder_programs())
         .enumerate()
     {
         let ours = ours?;
@@ -52,11 +60,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         (11, 25, 26),
     ] {
         println!("combined group {group} L{start}-L{end}");
-        combined.edit_iec_ld_branch_segment(3, group, start, end, 6, true, false)?;
+        combined
+            .program_mut()
+            .get(3)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .iec_ld()?
+                    .edit_branch_segment(group, start, end, 6, true, false)
+            })?;
     }
     fs::write(combined_output, combined.to_bytes()?)?;
     let combined = XgwxDocument::from_path(combined_output)?;
     combined
+        .program()
         .ladder_programs()
         .remove(3)?
         .iec_circuit_graph()
