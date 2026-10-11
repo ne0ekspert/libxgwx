@@ -479,3 +479,29 @@ mod tests {
         assert_eq!(IO_IDENTITIES, expected);
     }
 }
+
+pub(crate) fn installed_base_index(doc: &XgwxDocument, index: usize) -> Option<usize> {
+    let inventory = Inventory::new(&doc.root);
+    let hardware = inventory.hardware.get(index)?;
+    inventory.base_owner(
+        inventory.hardware_bases[index],
+        hardware.configuration_index,
+        hardware.hardware.base,
+    )
+}
+
+pub(crate) fn installed_base_indices(doc: &XgwxDocument) -> Vec<Option<usize>> {
+    let inventory = Inventory::new(&doc.root);
+    inventory
+        .hardware
+        .iter()
+        .enumerate()
+        .map(|(index, hardware)| {
+            inventory.base_owner(
+                inventory.hardware_bases[index],
+                hardware.configuration_index,
+                hardware.hardware.base,
+            )
+        })
+        .collect()
+}

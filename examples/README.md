@@ -27,3 +27,10 @@ lists and optionally applies an atomic JSON edit batch through the same C ABI.
 
 Acceptance generators, diagnostics, probes and benchmarks live in
 [`dev-tools`](../dev-tools/README.md).
+
+`hardware_handles` (`--features write`) demonstrates selected base/module edits,
+input filters, stale-field patches, consuming deletion, and verified serialization.
+
+`cargo run --example network_handles --features write` lists selected networks and
+memberships, updates their metadata, and edits a uniquely associated FEnet IP
+address. The example verifies serialization by reparsing the output.

@@ -45,6 +45,12 @@ pub enum XgwxError {
         resource: &'static str,
         limit: usize,
     },
+    /// Installed record index does not exist.
+    ModuleIndexNotFound {
+        index: usize,
+    },
+    /// A selected hardware record cannot be safely edited.
+    HardwareEdit(String),
     ModuleNotFound {
         base: u32,
         slot: u32,
@@ -71,6 +77,11 @@ pub enum XgwxError {
     MissingNetworkAttribute {
         index: usize,
         attribute: &'static str,
+    },
+    /// A document-wide network membership index is absent.
+    NetworkModuleIndexNotFound {
+        /// Requested membership index.
+        index: usize,
     },
     NetworkModuleNotFound {
         base: u32,
@@ -288,6 +299,9 @@ impl fmt::Display for XgwxError {
             Self::MissingNetworkAttribute { index, attribute } => {
                 write!(f, "network at index {index} is missing {attribute}")
             }
+            Self::NetworkModuleIndexNotFound { index } => {
+                write!(f, "network membership at index {index} was not found")
+            }
             Self::NetworkModuleNotFound { base, slot } => {
                 write!(
                     f,
@@ -386,6 +400,8 @@ impl fmt::Display for XgwxError {
                 f,
                 "module at base {base}, slot {slot} occupies {slot_span} slots and overlaps the module at slot {conflicting_slot}"
             ),
+            Self::ModuleIndexNotFound { index } => write!(f, "module index {index} not found"),
+            Self::HardwareEdit(reason) => write!(f, "cannot edit hardware: {reason}"),
             Self::BaseIndexNotFound { index } => {
                 write!(f, "base at index {index} was not found")
             }

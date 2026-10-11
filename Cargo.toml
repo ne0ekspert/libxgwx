@@ -56,5 +56,14 @@ path = "examples/program_handles.rs"
 required-features = ["write"]
 
 [[example]]
+name = "hardware_handles"
+path = "examples/hardware_handles.rs"
+required-features = ["write"]
+
+[[example]]
 name = "gui"
 required-features = ["gui"]
+
+[[example]]
+name = "network_handles"
+required-features = ["write"]

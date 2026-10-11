@@ -641,3 +641,63 @@ for the XGK-CPUSN mnemonic audit and the distinction from XGI IEC IL.
 With `write,il`, `vendor_il_programs()` exposes classic XGK ladder programs as vendor IL. `edit_vendor_il(&VendorIlPatch)` checks identity and stale source and builds native ladder records using existing cell/catalog writers and CPU operand guards. It supports series LOAD/AND contacts, negated and edge variants, OUT/SET/RST outputs and fixed-arity catalog instructions. Branches, comments and Auto-allocation ladder text replacement remain guarded. IEC CodeList is never used to store XGK vendor IL. Read eligibility validates each instruction without rebuilding the full ladder; applying an edit builds and verifies a candidate atomically.
 
 Generate CPU-family acceptance candidates with `cargo run --features write,il --manifest-path dev-tools/Cargo.toml --bin text-cpu-expansion-acceptance`. Native captures and semantic Save As comparisons are in `fixtures/text-cpus/`.
+
+### Selected hardware editors
+
+Hardware writes can bind the document once and omit repeated base/slot arguments:
+
+```rust,no_run
+let mut base = doc.base_mut().get(0)?; // base record index, not native number
+base.set_slot_count(4)?;
+base.insert_module(0, "XGI-D24A/B")?;
+let mut module = base.module(0)?; // starting physical slot; consumes the base editor
+module.set_input_filter(xgwx::ModuleInputFilter::Ms5)?;
+module.update(&xgwx::ModulePatch {
+    comment: Some("Inputs".into()),
+    ..Default::default()
+})?;
+module.delete()?; // consumes the module editor
+```
+
+Use `doc.module().get(index)` for a borrowed installed-record view and
+`doc.module_mut().get(index)` for its editor. These indices exclude additional
+network membership records. `base.installed_modules()` lists each installed
+record once; `base.modules()` retains the full typed membership inventory.
+Native coordinate selection via `module_mut().at(base, slot)` and
+`base_mut().by_number(base)` rejects ambiguous targets. Edits retain the existing
+CPU, catalog, slot-span, stale-field, and transaction guards. Configuration-scoped
+selection does not enable previously unsupported multi-PLC writes.
+
+Run `cargo run --example hardware_handles --features write` for a complete
+create/edit/delete/verified-serialization example.
+
+Selected networks and memberships support bound edits:
+
+```rust,no_run
+# fn example(doc: &mut xgwx::XgwxDocument) -> Result<(), xgwx::XgwxError> {
+let mut network = doc.network_mut().get(0)?;
+network.update(&xgwx::NetworkPatch {
+    name: Some("Factory".into()),
+    ..Default::default()
+})?;
+let mut module = network.module(0)?; // Membership position within this network.
+module.update(&xgwx::NetworkModulePatch {
+    alias: Some("Uplink".into()),
+    ..Default::default()
+})?;
+module.fenet()?.edit_field(&xgwx::NetworkFieldEdit {
+    field: "ipAddress".into(),
+    expected_value: "192.168.0.100".into(),
+    replacement: "10.20.30.40".into(),
+})?;
+# Ok(())
+# }
+```
+
+Read handles are available through `doc.network().get(index)` and
+`network.modules()`. Their membership indices differ from installed hardware
+indices. `doc.network_mut().module_at(base, slot)` selects a globally unique
+membership. Protocol selection with `.fenet()` or `.cnet()` rejects missing,
+ambiguous, or mismatched configuration associations. Cnet's
+`edit_settings(&[CnetFieldEdit])` applies a batch atomically with captured-value
+checks. See `examples/network_handles.rs` for a complete runnable example.

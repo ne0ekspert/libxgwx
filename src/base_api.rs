@@ -64,6 +64,10 @@ impl<'a> BaseView<'a> {
 }
 
 impl<'a> Base<'a> {
+    pub(crate) fn document(&self) -> &'a XgwxDocument {
+        self.doc
+    }
+
     pub(crate) fn new(
         doc: &'a XgwxDocument,
         index: usize,

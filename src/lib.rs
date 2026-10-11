@@ -42,13 +42,24 @@ mod cnet_write;
 #[cfg(feature = "write")]
 pub use cnet_write::{CnetFieldEdit, CnetSettingsPatch};
 mod base_api;
+mod hardware_api;
+#[cfg(feature = "write")]
+pub use hardware_api::{
+    BaseCollectionEditor, BaseEditor, ModuleCollectionEditor, ModuleEditor, ModuleFieldEdit,
+};
+pub use hardware_api::{ModuleRef, ModuleView};
 mod comparison_catalog;
 mod cpu;
 mod document;
 mod document_api;
 pub use base_api::{Base, BaseView};
 mod network_api;
-pub use network_api::NetworkView;
+#[cfg(feature = "write")]
+pub use network_api::{
+    CnetEditor, FenetEditor, NetworkCollectionEditor, NetworkEditor, NetworkFieldEdit,
+    NetworkModuleEditor,
+};
+pub use network_api::{NetworkModuleRef, NetworkRef, NetworkView};
 mod program_api;
 #[cfg(feature = "write")]
 pub use document_api::{ProgramEditor, VariableEditor};

@@ -32,8 +32,29 @@ pub fn edit_xgwx_browser_hardware_wasm(bytes: &[u8], patch: JsValue) -> Result<V
     let patch: BrowserHardwarePatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_browser_hardware(&patch)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    if patch.operation == "slotCount" {
+        doc.base_mut()
+            .by_number(patch.base)
+            .and_then(|mut selected| {
+                selected.edit_slot_count(&patch.expected_value, &patch.replacement)
+            })
+    } else {
+        let slot = patch
+            .slot
+            .ok_or_else(|| JsValue::from_str("missing module slot"))?;
+        doc.module_mut()
+            .at(patch.base, slot)
+            .and_then(|mut selected| {
+                selected.edit_field(&ModuleFieldEdit {
+                    operation: patch.operation,
+                    expected_value: patch.expected_value,
+                    replacement: patch.replacement,
+                    key: patch.key,
+                    index: patch.index,
+                })
+            })
+    }
+    .map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.to_verified_bytes()
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }
@@ -268,7 +289,9 @@ pub fn set_xgwx_base_slot_count_wasm(
     slot_count: u32,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.set_base_slot_count(base, slot_count)
+    doc.base_mut()
+        .by_number(base)
+        .and_then(|mut selected| selected.set_slot_count(slot_count))
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.to_bytes()
         .map_err(|e| JsValue::from_str(&e.to_string()))
@@ -470,7 +493,9 @@ pub fn select_xgwx_module_wasm(
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.select_module(base, slot, model)
+    doc.module_mut()
+        .at(base, slot)
+        .and_then(|mut selected| selected.select_model(model))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -487,7 +512,9 @@ pub fn insert_xgwx_module_wasm(
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.insert_module(base, slot, model)
+    doc.base_mut()
+        .by_number(base)
+        .and_then(|mut selected| selected.insert_module(slot, model))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -499,7 +526,9 @@ pub fn insert_xgwx_module_wasm(
 pub fn delete_xgwx_module_wasm(bytes: &[u8], base: u32, slot: u32) -> Result<Vec<u8>, JsValue> {
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.delete_module(base, slot)
+    doc.module_mut()
+        .at(base, slot)
+        .and_then(|selected| selected.delete())
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -515,7 +544,9 @@ pub fn xgwx_module_option_values_wasm(
 ) -> Result<JsValue, JsValue> {
     let doc = XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     let values = doc
-        .module_option_values(base, slot)
+        .module()
+        .at(base, slot)
+        .and_then(|selected| selected.option_values())
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let json = serde_json::to_string(&values).map_err(|error| {
         JsValue::from_str(&format!(
@@ -538,7 +569,9 @@ pub fn set_xgwx_module_option_wasm(
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.set_module_option(base, slot, key, index, value)
+    doc.module_mut()
+        .at(base, slot)
+        .and_then(|mut selected| selected.set_option(key, index, value))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -560,7 +593,9 @@ pub fn update_xgwx_module_wasm(
         .map_err(|error| JsValue::from_str(&format!("invalid module patch: {error}")))?;
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.update_module(base, slot, &patch)
+    doc.module_mut()
+        .at(base, slot)
+        .and_then(|mut selected| selected.update(&patch))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -577,7 +612,9 @@ pub fn set_xgwx_module_input_filter_wasm(
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.set_module_input_filter(base, slot, ModuleInputFilter::from_raw(raw_filter))
+    doc.module_mut()
+        .at(base, slot)
+        .and_then(|mut selected| selected.set_input_filter(ModuleInputFilter::from_raw(raw_filter)))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -811,8 +848,40 @@ pub fn edit_xgwx_browser_network_wasm(bytes: &[u8], patch: JsValue) -> Result<Ve
     let patch = serde_json::from_str::<BrowserNetworkPatch>(&json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_browser_network(&patch)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let edit = crate::NetworkFieldEdit {
+        field: patch.field,
+        expected_value: patch.expected_value,
+        replacement: patch.replacement,
+    };
+    let result = if patch.module {
+        let mut module = doc
+            .network_mut()
+            .get(patch.network_index)
+            .and_then(|network| {
+                let index = network
+                    .view()
+                    .modules()
+                    .iter()
+                    .position(|m| {
+                        let summary = m.summary();
+                        summary.base == patch.base && summary.slot == patch.slot
+                    })
+                    .ok_or_else(|| {
+                        crate::XgwxError::BrowserNetworkEdit(
+                            "module does not belong to selected network".into(),
+                        )
+                    })?;
+                network.module(index)
+            })
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        module.edit_field(&edit)
+    } else {
+        doc.network_mut()
+            .get(patch.network_index)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?
+            .edit_field(&edit)
+    };
+    result.map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.to_verified_bytes()
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }
@@ -827,7 +896,10 @@ pub fn edit_xgwx_cnet_settings_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<
     let patch = serde_json::from_str::<CnetSettingsPatch>(&json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_cnet_settings(&patch)
+    doc.network_mut()
+        .module_at(patch.base, patch.slot)
+        .and_then(|module| module.cnet())
+        .and_then(|mut config| config.edit_settings(&patch.changes))
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.to_verified_bytes()
         .map_err(|e| JsValue::from_str(&e.to_string()))
@@ -843,7 +915,16 @@ pub fn edit_xgwx_fenet_field_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8
     let patch = serde_json::from_str::<FenetFieldPatch>(&json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.edit_fenet_field(&patch)
+    doc.network_mut()
+        .module_at(patch.base, patch.slot)
+        .and_then(|module| module.fenet())
+        .and_then(|mut config| {
+            config.edit_field(&crate::NetworkFieldEdit {
+                field: patch.field,
+                expected_value: patch.expected_value,
+                replacement: patch.replacement,
+            })
+        })
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.to_verified_bytes()
         .map_err(|e| JsValue::from_str(&e.to_string()))
@@ -864,7 +945,9 @@ pub fn update_xgwx_network_wasm(
         .map_err(|error| JsValue::from_str(&format!("invalid network patch: {error}")))?;
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.update_network(network_index, &patch)
+    doc.network_mut()
+        .get(network_index)
+        .and_then(|mut network| network.update(&patch))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -886,7 +969,9 @@ pub fn update_xgwx_network_module_wasm(
         .map_err(|error| JsValue::from_str(&format!("invalid network-module patch: {error}")))?;
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.update_network_module(base, slot, &patch)
+    doc.network_mut()
+        .module_at(base, slot)
+        .and_then(|mut module| module.update(&patch))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))

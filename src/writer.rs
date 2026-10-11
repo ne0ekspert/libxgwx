@@ -609,6 +609,7 @@ pub struct BrowserHardwarePatch {
 impl XgwxDocument {
     /// Apply one supported hardware field transactionally. The XML outside the
     /// exact selected attribute is compared byte for byte before commit.
+    #[doc(hidden)]
     pub fn edit_browser_hardware(&mut self, patch: &BrowserHardwarePatch) -> Result<(), XgwxError> {
         let fail = |message: &str| XgwxError::BrowserHardwareEdit(message.to_owned());
         let is_base = patch.operation == "slotCount";
@@ -727,6 +728,7 @@ impl XgwxDocument {
     }
 
     /// Reuse metadata writers; commit only one exact XML attribute delta.
+    #[doc(hidden)]
     pub fn edit_browser_network(&mut self, patch: &BrowserNetworkPatch) -> Result<(), XgwxError> {
         let fail = |s: &str| XgwxError::BrowserNetworkEdit(s.to_owned());
         let attr = match (patch.module, patch.field.as_str()) {
@@ -806,6 +808,7 @@ impl XgwxDocument {
     }
 
     /// Change a captured FEnet setting without altering module identity or payloads.
+    #[doc(hidden)]
     pub fn edit_fenet_field(&mut self, patch: &FenetFieldPatch) -> Result<(), XgwxError> {
         let fail = |reason: &str| XgwxError::BrowserNetworkEdit(reason.to_owned());
         let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
@@ -1275,6 +1278,7 @@ impl XgwxDocument {
     /// Change an existing XGK base's physical slot count without removing modules.
     /// Native XG5000 choices are 4, 6, 8, 10 and 12. CPU limits, ambiguous
     /// bases and modules extending beyond the requested size are rejected.
+    #[doc(hidden)]
     pub fn set_base_slot_count(&mut self, base: u32, slot_count: u32) -> Result<(), XgwxError> {
         let cpu = self.require_xgk_hardware()?;
         if ![4, 6, 8, 10, 12].contains(&slot_count) {
@@ -1338,6 +1342,7 @@ impl XgwxDocument {
     /// The module receives the latest-stable catalog defaults and an empty
     /// comment. The operation fails without mutating the document when the
     /// base is absent, the module does not fit, or any occupied slot overlaps.
+    #[doc(hidden)]
     pub fn insert_module(&mut self, base: u32, slot: u32, model: &str) -> Result<(), XgwxError> {
         self.require_xgk_hardware()?;
         let entry = crate::catalog::find_xgk_module(model)?;
@@ -1397,6 +1402,7 @@ impl XgwxDocument {
     /// The containing base and every other XML node remain unchanged. The
     /// operation fails without mutating the document when the target is absent
     /// or ambiguous.
+    #[doc(hidden)]
     pub fn delete_module(&mut self, base: u32, slot: u32) -> Result<(), XgwxError> {
         self.validate_hardware_identity_edit(base, slot)?;
         let mut changed = self.clone();
@@ -1428,6 +1434,7 @@ impl XgwxDocument {
     /// `Name`, and `Details` are replaced atomically with the catalog defaults.
     /// Captured network-module companion records are synchronized at the same
     /// time for supported communication models.
+    #[doc(hidden)]
     pub fn select_module(&mut self, base: u32, slot: u32, model: &str) -> Result<(), XgwxError> {
         self.require_xgk_hardware()?;
         let entry = crate::catalog::find_xgk_module(model)?;
@@ -1668,6 +1675,7 @@ impl XgwxDocument {
     }
 
     /// Return all currently selected values for the module's verified options.
+    #[doc(hidden)]
     pub fn module_option_values(
         &self,
         base: u32,
@@ -1692,6 +1700,7 @@ impl XgwxDocument {
     ///
     /// `index` is zero for module-wide options and selects the channel or group
     /// for scoped options. Values not listed in the catalog are rejected.
+    #[doc(hidden)]
     pub fn set_module_option(
         &mut self,
         base: u32,
@@ -1772,6 +1781,7 @@ impl XgwxDocument {
     /// Only the requested XML attribute values are replaced. Element order,
     /// whitespace, unknown elements, binary payloads, and the workspace trailer
     /// remain untouched.
+    #[doc(hidden)]
     pub fn update_module(
         &mut self,
         base: u32,
@@ -1866,6 +1876,7 @@ impl XgwxDocument {
     }
 
     /// Set the first `Details` byte for an XGI-D24A/B digital input module.
+    #[doc(hidden)]
     pub fn set_module_input_filter(
         &mut self,
         base: u32,
@@ -2190,6 +2201,7 @@ impl XgwxDocument {
     }
 
     /// Update editable metadata for one network selected by document order.
+    #[doc(hidden)]
     pub fn update_network(
         &mut self,
         network_index: usize,
@@ -2230,6 +2242,7 @@ impl XgwxDocument {
 
     /// Update user-facing metadata for the unique network module at a base and
     /// slot. Hardware identity and network protocol fields remain unchanged.
+    #[doc(hidden)]
     pub fn update_network_module(
         &mut self,
         base: u32,
