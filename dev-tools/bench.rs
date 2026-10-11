@@ -101,37 +101,51 @@ fn run_iterations(
 
 fn decode_all(bytes: &[u8]) -> Result<usize, Box<dyn Error>> {
     let doc = XgwxDocument::parse(bytes)?;
-    let project = doc.project_info();
+    let project = doc.project().info();
     let variables = doc.variable().variables()?;
     let ladder = doc.program().ladder_programs();
-    let decoded_payloads = doc.decoded_payloads();
-    let hsc_parameters = doc.hsc_parameters();
+    let decoded_payloads = doc.container().decoded_payloads();
+    let hsc_parameters = doc.parameter().hsc();
 
     let checksum = project.name.as_ref().map_or(0, String::len)
-        + doc.configurations().len()
-        + doc.networks().len()
-        + doc.network_modules().len()
-        + doc.base_summaries().len()
-        + doc.module_summaries().len()
+        + doc.configuration().list().len()
+        + doc.network().list().len()
+        + doc.network().module_summaries().len()
+        + doc.base().summaries().len()
+        + doc.module().summaries().len()
         + doc.program().tasks().len()
         + doc.program().programs().len()
         + variables.len()
         + ladder.iter().filter(|item| item.is_ok()).count()
         + decoded_payloads.iter().filter(|item| item.is_ok()).count()
         + hsc_parameters.iter().filter(|item| item.is_ok()).count()
-        + doc.high_speed_links().len()
-        + doc.high_speed_link_blocks().len()
-        + doc.project_options().map_or(0, |_| 1)
-        + doc.parameters().len()
-        + doc.position_parameters().len()
-        + doc.pid_cal_parameters().len()
-        + doc.pid_tune_parameters().len()
-        + doc.safety_comm().map_or(0, |_| 1)
-        + doc.trend_monitoring().map_or(0, |_| 1)
-        + doc.xgpd_config_infos().len()
+        + doc.high_speed_link().summaries().len()
+        + doc
+            .high_speed_link()
+            .blocks()
+            .iter()
+            .map(|record| record.summary())
+            .collect::<Vec<_>>()
+            .len()
+        + doc.project().options().map_or(0, |_| 1)
+        + doc.parameter().summaries().len()
+        + doc.parameter().position().len()
+        + doc.parameter().pid().calculation().len()
+        + doc.parameter().pid().tuning().len()
+        + doc
+            .safety()
+            .first()
+            .map(|record| record.summary())
+            .map_or(0, |_| 1)
+        + doc
+            .trend()
+            .first()
+            .map(|record| record.summary())
+            .map_or(0, |_| 1)
+        + doc.network().config_infos().len()
         + doc.network().cnet_config_infos().len()
         + doc.network().fenet_config_infos().len()
-        + doc.properties().len();
+        + doc.container().properties().len();
 
     Ok(checksum)
 }

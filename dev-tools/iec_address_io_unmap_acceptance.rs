@@ -22,11 +22,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Result<Vec<_>, _>>()?;
     let mut generated = XgwxDocument::from_path(source)?;
     generated
-        .variable_mut()
-        .update_iec_local_symbol_address(0, 12, "조명_1", "%QX10", "")?;
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .update_address(12, "조명_1", "%QX10", "")
+        })?;
     generated
-        .variable_mut()
-        .update_iec_local_symbol_address(1, 3, "커튼_제어", "%IX0.0.7", "")?;
+        .program_mut()
+        .get(1)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .update_address(3, "커튼_제어", "%IX0.0.7", "")
+        })?;
     let encoded = generated.to_bytes()?;
     let reparsed = XgwxDocument::parse(&encoded)?;
     let symbols = reparsed

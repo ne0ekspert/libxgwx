@@ -34,3 +34,20 @@ input filters, stale-field patches, consuming deletion, and verified serializati
 `cargo run --example network_handles --features write` lists selected networks and
 memberships, updates their metadata, and edits a uniquely associated FEnet IP
 address. The example verifies serialization by reparsing the output.
+
+`cargo run --example project_configuration_handles --features write` inspects
+project metadata, option entries and scoped configuration bases, then renames the
+project, selects a supported CPU, and verifies the serialized result.
+
+`cargo run --example global_variable_handles --features write` generates supported
+I/O globals, lists selected records, checks a captured snapshot, updates a name and
+description, and reparses the serialized result.
+
+`cargo run --example parameter_handles -- project.xgwx` lists selected parameter
+sections and PLC ownership, decodes HSC channels, positioning axes and PID loops,
+and inspects parameters within each configuration. Decode failures are reported
+per section, so other records remain accessible. This example needs no `write` feature.
+
+`cargo run --example services_handles -- project.xgwx` inspects high-speed link
+blocks, safety channels and trend sections, then lists each PLC's scoped records.
+It needs no `write` feature.

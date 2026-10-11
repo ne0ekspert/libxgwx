@@ -25,7 +25,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let mut doc = XgwxDocument::from_path(&input)?;
-    doc.set_module_input_filter(base, slot, ModuleInputFilter::from_raw(raw_filter))?;
+    doc.module_mut()
+        .at(base, slot)
+        .and_then(|mut selected_record| {
+            selected_record.set_input_filter(ModuleInputFilter::from_raw(raw_filter))
+        })?;
     doc.write_to(&output)?;
 
     println!("wrote {output}");

@@ -67,3 +67,11 @@ required-features = ["gui"]
 [[example]]
 name = "network_handles"
 required-features = ["write"]
+
+[[example]]
+name = "project_configuration_handles"
+required-features = ["write"]
+
+[[example]]
+name = "global_variable_handles"
+required-features = ["write"]

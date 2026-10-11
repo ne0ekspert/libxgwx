@@ -16,11 +16,11 @@ fn appends_blank_programs_and_preserves_existing_records() {
         ("fixtures/sfc/native-loop.xgwx", "SFC"),
     ] {
         let mut doc = XgwxDocument::from_path(file).unwrap();
-        let parsed = roxmltree::Document::parse(&doc.xml).unwrap();
+        let parsed = roxmltree::Document::parse(&doc.container().xml()).unwrap();
         let old: Vec<_> = parsed
             .descendants()
             .filter(|n| n.has_tag_name("Program"))
-            .map(|n| doc.xml[n.range()].to_owned())
+            .map(|n| doc.container().xml()[n.range()].to_owned())
             .collect();
         let count = parsed
             .root_element()
@@ -29,11 +29,11 @@ fn appends_blank_programs_and_preserves_existing_records() {
             .parse::<u32>()
             .unwrap();
         doc.program_mut()
-            .create_program(&request("AddedProgram", language))
+            .create(&request("AddedProgram", language))
             .unwrap();
         let bytes = doc.to_verified_bytes().unwrap();
         let reloaded = XgwxDocument::parse(&bytes).unwrap();
-        let after = roxmltree::Document::parse(&reloaded.xml).unwrap();
+        let after = roxmltree::Document::parse(&reloaded.container().xml()).unwrap();
         let programs: Vec<_> = after
             .descendants()
             .filter(|n| n.has_tag_name("Program"))
@@ -49,7 +49,7 @@ fn appends_blank_programs_and_preserves_existing_records() {
             count + if file.contains("new-xgk") { 1 } else { 3 }
         );
         for (node, original) in programs.iter().zip(old) {
-            assert_eq!(&reloaded.xml[node.range()], original);
+            assert_eq!(&reloaded.container().xml()[node.range()], original);
         }
         assert_eq!(programs.last().unwrap().text(), Some("AddedProgram"));
         if language == "SFC" {
@@ -85,18 +85,12 @@ fn invalid_requests_are_atomic() {
             ..request("Added", "LD")
         },
     ] {
-        assert!(doc.program_mut().create_program(&patch).is_err());
+        assert!(doc.program_mut().create(&patch).is_err());
         assert_eq!(doc.to_bytes().unwrap(), before);
     }
-    doc.program_mut()
-        .create_program(&request("Added", "LD"))
-        .unwrap();
+    doc.program_mut().create(&request("Added", "LD")).unwrap();
     let before = doc.to_bytes().unwrap();
-    assert!(
-        doc.program_mut()
-            .create_program(&request("Another", "LD"))
-            .is_err()
-    );
+    assert!(doc.program_mut().create(&request("Another", "LD")).is_err());
     assert_eq!(doc.to_bytes().unwrap(), before);
 }
 
@@ -115,8 +109,8 @@ fn native_save_as_retains_program_identity_rows_and_declarations() {
             .unwrap();
         let b = XgwxDocument::from_path(format!("fixtures/program-create/{stem}-roundtrip.xgwx"))
             .unwrap();
-        let source = roxmltree::Document::parse(&a.xml).unwrap();
-        let saved = roxmltree::Document::parse(&b.xml).unwrap();
+        let source = roxmltree::Document::parse(&a.container().xml()).unwrap();
+        let saved = roxmltree::Document::parse(&b.container().xml()).unwrap();
         assert_eq!(
             source.root_element().attribute("WksNodeCount"),
             saved.root_element().attribute("WksNodeCount")
@@ -169,29 +163,36 @@ fn deleting_any_program_preserves_survivors_and_allows_recreation_after_last_del
     ] {
         for index in [0, 1] {
             let mut doc = XgwxDocument::from_path(file).unwrap();
-            let before = roxmltree::Document::parse(&doc.xml).unwrap();
+            let before = roxmltree::Document::parse(&doc.container().xml()).unwrap();
             let programs: Vec<_> = before
                 .descendants()
                 .filter(|n| n.has_tag_name("Program"))
                 .collect();
             let identity = programs[index].attribute("ObjectId").unwrap().to_owned();
-            let survivor = doc.xml[programs[1 - index].range()].to_owned();
-            doc.program_mut().delete_program(index, &identity).unwrap();
+            let survivor = doc.container().xml()[programs[1 - index].range()].to_owned();
+            doc.program_mut()
+                .get_if(index, &identity)
+                .and_then(|program| program.delete())
+                .unwrap();
             let bytes = doc.to_verified_bytes().unwrap();
             let mut reloaded = XgwxDocument::parse(&bytes).unwrap();
-            let parsed = roxmltree::Document::parse(&reloaded.xml).unwrap();
+            let parsed = roxmltree::Document::parse(&reloaded.container().xml()).unwrap();
             let remaining: Vec<_> = parsed
                 .descendants()
                 .filter(|n| n.has_tag_name("Program"))
                 .collect();
             assert_eq!(remaining.len(), 1);
-            assert_eq!(&reloaded.xml[remaining[0].range()], survivor);
+            assert_eq!(&reloaded.container().xml()[remaining[0].range()], survivor);
             let identity = remaining[0].attribute("ObjectId").unwrap().to_owned();
-            reloaded.program_mut().delete_program(0, &identity).unwrap();
+            reloaded
+                .program_mut()
+                .get_if(0, &identity)
+                .and_then(|program| program.delete())
+                .unwrap();
             assert_eq!(reloaded.program().programs().len(), 0);
             reloaded
                 .program_mut()
-                .create_program(&request("Recreated", "LD"))
+                .create(&request("Recreated", "LD"))
                 .unwrap();
             assert_eq!(reloaded.program().programs().len(), 1);
             reloaded.to_verified_bytes().unwrap();
@@ -206,12 +207,14 @@ fn stale_deletion_identity_and_invalid_index_leave_the_file_unchanged() {
     let before = doc.to_bytes().unwrap();
     assert!(
         doc.program_mut()
-            .delete_program(0, "abcdef01-1234-4567-89ab-0123456789ab")
+            .get_if(0, "abcdef01-1234-4567-89ab-0123456789ab")
+            .and_then(|program| program.delete())
             .is_err()
     );
     assert!(
         doc.program_mut()
-            .delete_program(7, "abcdef01-1234-4567-89ab-0123456789ab")
+            .get_if(7, "abcdef01-1234-4567-89ab-0123456789ab")
+            .and_then(|program| program.delete())
             .is_err()
     );
     assert_eq!(doc.to_bytes().unwrap(), before);
@@ -226,8 +229,8 @@ fn moving_programs_preserves_exact_records_and_outer_xml() {
         let mut patch = request("Third", if file == "xgi-sfc" { "SFC" } else { "LD" });
         patch.object_id = "abcdef03-1234-4567-89ab-0123456789ab".into();
         patch.symbol_id = "abcdef04-1234-4567-89ab-0123456789ab".into();
-        doc.program_mut().create_program(&patch).unwrap();
-        let original = doc.xml.clone();
+        doc.program_mut().create(&patch).unwrap();
+        let original = doc.container().xml().to_owned();
         let parsed = roxmltree::Document::parse(&original).unwrap();
         let nodes: Vec<_> = parsed
             .descendants()
@@ -242,14 +245,15 @@ fn moving_programs_preserves_exact_records_and_outer_xml() {
             let mut moved = doc.clone();
             moved
                 .program_mut()
-                .move_program(from, to, ids[from], ids[to])
+                .get_if(from, ids[from])
+                .and_then(|mut selected_program| selected_program.move_to_if(to, ids[to]))
                 .unwrap();
             let reloaded = XgwxDocument::parse(&moved.to_verified_bytes().unwrap()).unwrap();
-            let parsed = roxmltree::Document::parse(&reloaded.xml).unwrap();
+            let parsed = roxmltree::Document::parse(&reloaded.container().xml()).unwrap();
             let actual: Vec<_> = parsed
                 .descendants()
                 .filter(|n| n.has_tag_name("Program"))
-                .map(|n| &reloaded.xml[n.range()])
+                .map(|n| &reloaded.container().xml()[n.range()])
                 .collect();
             let mut expected = records.clone();
             let record = expected.remove(from);
@@ -257,36 +261,40 @@ fn moving_programs_preserves_exact_records_and_outer_xml() {
             assert_eq!(actual, expected);
             moved
                 .program_mut()
-                .move_program(
-                    to,
-                    from,
-                    ids[from],
-                    parsed
-                        .descendants()
-                        .filter(|n| n.has_tag_name("Program"))
-                        .nth(from)
-                        .unwrap()
-                        .attribute("ObjectId")
-                        .unwrap(),
-                )
+                .get_if(to, ids[from])
+                .and_then(|mut selected_program| {
+                    selected_program.move_to_if(
+                        from,
+                        parsed
+                            .descendants()
+                            .filter(|n| n.has_tag_name("Program"))
+                            .nth(from)
+                            .unwrap()
+                            .attribute("ObjectId")
+                            .unwrap(),
+                    )
+                })
                 .unwrap();
-            assert_eq!(moved.xml, original);
+            assert_eq!(moved.container().xml(), original);
         }
         assert!(
             doc.program_mut()
-                .move_program(0, 1, ids[1], ids[0])
+                .get_if(0, ids[1])
+                .and_then(|mut selected_program| selected_program.move_to_if(1, ids[0]))
                 .is_err()
         );
         assert!(
             doc.program_mut()
-                .move_program(0, 1, ids[0], "stale")
+                .get_if(0, ids[0])
+                .and_then(|mut selected_program| selected_program.move_to_if(1, "stale"))
                 .is_err()
         );
         assert!(
             doc.program_mut()
-                .move_program(0, 7, ids[0], ids[1])
+                .get_if(0, ids[0])
+                .and_then(|mut selected_program| selected_program.move_to_if(7, ids[1]))
                 .is_err()
         );
-        assert_eq!(doc.xml, original);
+        assert_eq!(doc.container().xml(), original);
     }
 }

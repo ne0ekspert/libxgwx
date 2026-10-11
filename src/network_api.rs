@@ -41,6 +41,18 @@ impl XgwxDocument {
 }
 
 impl NetworkView<'_> {
+    /// Detached native network membership summaries in document order.
+    /// These describe network records rather than installed hardware slots.
+    pub fn module_summaries(&self) -> Vec<crate::NetworkModuleSummary> {
+        self.doc.network_modules()
+    }
+    /// Generic Dnet, FDEnet and Rnet configuration metadata. Records retain
+    /// unknown attributes and the original tag-family ordering. Use
+    /// [`Self::cnet_config_infos`] and [`Self::fenet_config_infos`] for the
+    /// separately decoded Cnet and FEnet protocol settings.
+    pub fn config_infos(&self) -> Vec<crate::XgpdConfigInfoSummary> {
+        self.doc.xgpd_config_infos()
+    }
     /// Raw network summaries, including their membership records.
     pub fn list(&self) -> Vec<NetworkSummary> {
         self.doc.networks()

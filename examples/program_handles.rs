@@ -11,9 +11,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         object_id: "aaaaaaaa-1111-2222-3333-444444444444".into(),
         symbol_id: "bbbbbbbb-1111-2222-3333-444444444444".into(),
     })?;
+    let controller_id = text_doc
+        .program()
+        .get(0)?
+        .summary()
+        .object_id
+        .ok_or("missing identity")?;
+    let temporary_id = text_doc
+        .program()
+        .get(1)?
+        .summary()
+        .object_id
+        .ok_or("missing identity")?;
     {
         // The selected handle owns the document borrow, so it can be stored.
-        let mut program = text_doc.program_mut().get(0)?;
+        let mut program = text_doc.program_mut().get_if(0, &controller_id)?;
         program.rename("Controller")?;
         let expected_variables = program.view().declarations()?;
         program
@@ -36,8 +48,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Existing stale-source checks still reject replaying this edit.
         assert!(text.update(&patch).is_err());
     }
-    // Consuming delete prevents using the handle afterwards.
-    text_doc.program_mut().get(1)?.delete()?;
+    {
+        let mut controller = text_doc.program_mut().get_if(0, &controller_id)?;
+        assert!(controller.move_to_if(1, "stale destination").is_err());
+        controller.move_to_if(1, &temporary_id)?;
+        assert_eq!(controller.index(), 1);
+    }
+    // Consuming delete prevents using the handle afterwards. Temporary moved
+    // to index 0, so verify its captured identity before deleting it.
+    text_doc.program_mut().get_if(0, &temporary_id)?.delete()?;
     let selected = text_doc.program().get(0)?;
     println!(
         "{}: {:?}",

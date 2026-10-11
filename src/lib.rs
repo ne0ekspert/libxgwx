@@ -15,11 +15,11 @@
 //! use xgwx::XgwxDocument;
 //!
 //! if let Ok(doc) = XgwxDocument::from_path("project.xgwx") {
-//!     let project = doc.project_info();
+//!     let project = doc.project().info();
 //!
 //!     println!("project: {:?}", project.name);
 //!     println!("programs: {}", doc.program().programs().len());
-//!     println!("modules: {}", doc.module_summaries().len());
+//!     println!("modules: {}", doc.module().summaries().len());
 //!
 //!     for fenet in doc.network().fenet_config_infos() {
 //!         println!(
@@ -49,10 +49,33 @@ pub use hardware_api::{
 };
 pub use hardware_api::{ModuleRef, ModuleView};
 mod comparison_catalog;
+mod configuration_api;
+mod container_api;
 mod cpu;
 mod document;
+#[cfg(feature = "write")]
+pub use container_api::ContainerEditor;
+pub use container_api::ContainerView;
 mod document_api;
+mod services_api;
+pub use services_api::{
+    HighSpeedLinkBlockRef, HighSpeedLinkRef, HighSpeedLinkView, SafetyRef, SafetyView, TrendRef,
+    TrendView,
+};
+mod parameter_api;
+pub use parameter_api::{ParameterData, ParameterKind, ParameterRef, ParameterView, PidView};
+mod variable_api;
+#[cfg(feature = "write")]
+pub use variable_api::GlobalVariableEditor;
+pub use variable_api::GlobalVariableRef;
+mod project_api;
 pub use base_api::{Base, BaseView};
+#[cfg(feature = "write")]
+pub use configuration_api::{ConfigurationCollectionEditor, ConfigurationEditor};
+pub use configuration_api::{ConfigurationRef, ConfigurationView};
+#[cfg(feature = "write")]
+pub use project_api::ProjectEditor;
+pub use project_api::ProjectView;
 mod network_api;
 #[cfg(feature = "write")]
 pub use network_api::{

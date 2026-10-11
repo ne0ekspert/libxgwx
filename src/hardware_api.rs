@@ -20,12 +20,25 @@ impl XgwxDocument {
         ModuleView { doc: self }
     }
     /// Exclusively borrow installed hardware for guarded edits.
+    /// Root mutation bridges are private; select a module first.
+    /// ```compile_fail
+    /// # use xgwx::{XgwxDocument, ModuleInputFilter};
+    /// fn old_api(doc: &mut XgwxDocument) {
+    ///     doc.set_module_input_filter(0, 0, ModuleInputFilter::from_raw(0)).unwrap();
+    /// }
+    /// ```
     #[cfg(feature = "write")]
     pub fn module_mut(&mut self) -> ModuleCollectionEditor<'_> {
         ModuleCollectionEditor { doc: self }
     }
 }
 impl<'a> ModuleView<'a> {
+    /// Detached installed hardware summaries in document order, including
+    /// unknown module identities. Network memberships are listed separately
+    /// through [`crate::NetworkView::module_summaries`].
+    pub fn summaries(self) -> Vec<ModuleSummary> {
+        self.doc.module_summaries()
+    }
     /// List borrowed installed records, retaining unknown module identities.
     pub fn list(self) -> Vec<ModuleRef<'a>> {
         (0..self.doc.module_summaries().len())

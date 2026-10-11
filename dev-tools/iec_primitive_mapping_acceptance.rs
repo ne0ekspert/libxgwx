@@ -80,20 +80,22 @@ fn generate(
         assert_eq!(symbol.storage_class, "M");
         assert_eq!(symbol.allocation_number, Some(bit));
         assert_eq!(symbol.allocation_width, Some(*width));
-        base.variable_mut().update_iec_local_symbol_address(
-            0,
-            symbol_index,
-            &name,
-            &address,
-            "",
-        )?;
-        edited.variable_mut().update_iec_local_symbol_address(
-            0,
-            symbol_index,
-            &name,
-            &address,
-            &format!("{prefix}{}", bit / width + 1),
-        )?;
+        base.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .update_address(symbol_index, &name, &address, "")
+        })?;
+        edited
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.variable_mut().update_address(
+                    symbol_index,
+                    &name,
+                    &address,
+                    &format!("{prefix}{}", bit / width + 1),
+                )
+            })?;
     }
     base.write_to(output.join("PRBASE.xgwx"))?;
     let mut recreated = base;
@@ -103,13 +105,17 @@ fn generate(
             .iter()
             .position(|symbol| symbol.name == name)
             .unwrap();
-        recreated.variable_mut().update_iec_local_symbol_address(
-            0,
-            symbol_index,
-            &name,
-            "",
-            &format!("{prefix}{}", (16000 + index as u32 * 128) / width),
-        )?;
+        recreated
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.variable_mut().update_address(
+                    symbol_index,
+                    &name,
+                    "",
+                    &format!("{prefix}{}", (16000 + index as u32 * 128) / width),
+                )
+            })?;
     }
     exact(&source, &recreated)?;
     recreated.write_to(output.join("PRREGEN.xgwx"))?;
@@ -131,8 +137,11 @@ fn generate(
         ] {
             assert!(
                 edited
-                    .variable_mut()
-                    .update_iec_local_symbol_address(0, symbol_index, &name, &current, &rejected)
+                    .program_mut()
+                    .get(0)
+                    .and_then(|mut selected_program| selected_program
+                        .variable_mut()
+                        .update_address(symbol_index, &name, &current, &rejected))
                     .is_err(),
                 "{name} must reject {rejected}"
             );
@@ -150,8 +159,11 @@ fn generate(
             .unwrap();
         assert!(
             edited
-                .variable_mut()
-                .update_iec_local_symbol_address(0, index, name, current, overlap)
+                .program_mut()
+                .get(0)
+                .and_then(|mut selected_program| selected_program
+                    .variable_mut()
+                    .update_address(index, name, current, overlap))
                 .is_err()
         );
         assert_eq!(before, edited.to_bytes()?);
@@ -207,8 +219,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     types.sort();
     for (index, name) in types.iter().enumerate() {
         document
-            .variable_mut()
-            .insert_iec_local_symbol(0, &format!("AAA_{name}"), name, "")?;
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .variable_mut()
+                    .insert(&format!("AAA_{name}"), name, "")
+            })?;
         println!(
             "{} AAA_{name} proposed bit {}",
             index + 1,

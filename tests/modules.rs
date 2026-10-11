@@ -148,7 +148,7 @@ fn repeated_module_types_are_disambiguated_by_current_location() {
 fn built_in_network_interface_without_hardware_is_retained() {
     let doc = XgwxDocument::from_path("fixtures/XGB_Enet01.xgwx").unwrap();
     let networks = doc.resolved_network_modules();
-    let raw: Vec<xgwx::ModuleSummary> = doc.module_summaries();
+    let raw: Vec<xgwx::ModuleSummary> = doc.module().summaries();
     let all: Vec<Module> = doc.modules();
     assert_eq!(raw.len(), 2);
     assert_eq!(all.len(), 3);
@@ -284,7 +284,7 @@ fn missing_identity_and_wrong_subtype_or_location_do_not_match() {
 #[test]
 fn other_protocol_attributes_are_preserved_and_unsupported_hardware_stays_other() {
     let doc = XgwxDocument::from_path("fixtures/elements-io.xgwx").unwrap();
-    assert_eq!(doc.hardware_modules().len(), doc.module_summaries().len());
+    assert_eq!(doc.hardware_modules().len(), doc.module().summaries().len());
     let networks = doc.resolved_network_modules();
     assert!(!networks.is_empty());
     for network in networks {
@@ -332,7 +332,7 @@ fn base_handles_scope_typed_modules_to_their_xml_owner_and_plc() {
     assert_eq!(bases.len(), 2);
     assert_eq!(
         bases.iter().map(|b| b.summary()).collect::<Vec<_>>(),
-        doc.base_summaries()
+        doc.base().summaries()
     );
     for (index, ip, count) in [(0, "10.0.0.1", 3), (1, "10.0.0.2", 1)] {
         let base = doc.base().get(index).unwrap();

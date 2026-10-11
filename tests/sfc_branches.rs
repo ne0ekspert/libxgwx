@@ -1,4 +1,7 @@
 #[cfg(feature = "write")]
+#[path = "support/mutation_support.rs"]
+mod mutation_support;
+#[cfg(feature = "write")]
 use xgwx::SfcSequencePatch;
 use xgwx::XgwxDocument;
 
@@ -39,12 +42,17 @@ fn native_balanced_branch_kinds_and_three_paths_are_decoded_with_st() {
 #[cfg(feature = "write")]
 fn apply(doc: &mut XgwxDocument, rows: Vec<xgwx::SfcRow>) -> Result<(), xgwx::XgwxError> {
     let block = doc.program().sfc_programs()[0].blocks[0].clone();
-    doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
-        program_index: 0,
-        block_index: 0,
-        expected_entities: block.entities,
-        expected_rows: block.editable_rows,
-        rows,
+    doc.program_mut().get(0).and_then(|selected_program| {
+        mutation_support::replace_sfc_sequence(
+            selected_program,
+            &SfcSequencePatch {
+                program_index: 0,
+                block_index: 0,
+                expected_entities: block.entities,
+                expected_rows: block.editable_rows,
+                rows,
+            },
+        )
     })
 }
 
@@ -129,7 +137,7 @@ fn malformed_branch_layouts_are_rejected_atomically() {
             _ => rows[side].position = None,
         }
         assert!(apply(&mut doc, rows).is_err());
-        assert_eq!(doc.xml, source.xml);
+        assert_eq!(doc.container().xml(), source.container().xml());
     }
     let mut stale = source.clone();
     let mut patch = SfcSequencePatch {
@@ -142,8 +150,17 @@ fn malformed_branch_layouts_are_rejected_atomically() {
         rows: original,
     };
     patch.expected_rows.as_mut().unwrap()[0].title = "stale".into();
-    assert!(stale.program_mut().replace_sfc_sequence(&patch).is_err());
-    assert_eq!(stale.xml, source.xml);
+    assert!(
+        stale
+            .program_mut()
+            .get((&patch).program_index)
+            .and_then(|selected_program| mutation_support::replace_sfc_sequence(
+                selected_program,
+                &patch
+            ))
+            .is_err()
+    );
+    assert_eq!(stale.container().xml(), source.container().xml());
 }
 
 #[cfg(feature = "write")]
@@ -151,20 +168,30 @@ fn malformed_branch_layouts_are_rejected_atomically() {
 fn unknown_branch_priorities_and_connectors_stay_guarded() {
     let source = XgwxDocument::from_path("fixtures/sfc/branch-alternative-native.xgwx").unwrap();
     for xml in [
-        source.xml.replacen(
+        source.container().xml().replacen(
             "<EntityBranch Priority=\"-1\" BranchType=\"0\">",
             "<EntityBranch Priority=\"-1\" BranchType=\"0\"><Extension/>",
             1,
         ),
-        source.xml.replacen("Priority=\"-1\"", "Priority=\"0\"", 1),
-        source.xml.replacen("Type=\"8\"", "Type=\"7\"", 1),
         source
-            .xml
+            .container()
+            .xml()
+            .replacen("Priority=\"-1\"", "Priority=\"0\"", 1),
+        source
+            .container()
+            .xml()
+            .replacen("Type=\"8\"", "Type=\"7\"", 1),
+        source
+            .container()
+            .xml()
             .replacen("BranchType=\"1\"", "BranchType=\"3\"", 1),
     ] {
-        assert_ne!(xml, source.xml);
+        assert_ne!(xml, source.container().xml());
         let mut seed = source.clone();
-        seed.xml = xml;
+        {
+            let replacement_xml = xml;
+            seed.container_mut().replace_xml(replacement_xml).unwrap();
+        };
         let doc = XgwxDocument::parse(&seed.to_bytes().unwrap()).unwrap();
         assert!(
             doc.program().sfc_programs()[0].blocks[0]

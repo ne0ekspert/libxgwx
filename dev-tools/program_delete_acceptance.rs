@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ] {
         let mut doc =
             XgwxDocument::from_path(format!("fixtures/program-create/{file}-roundtrip.xgwx"))?;
-        let parsed = roxmltree::Document::parse(&doc.xml)?;
+        let parsed = roxmltree::Document::parse(&doc.container().xml())?;
         let identity = parsed
             .descendants()
             .filter(|n| n.has_tag_name("Program"))
@@ -20,7 +20,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .attribute("ObjectId")
             .unwrap()
             .to_owned();
-        doc.program_mut().delete_program(1, &identity)?;
+        doc.program_mut()
+            .get_if(1, &identity)
+            .and_then(|program| program.delete())?;
         std::fs::write(format!("{out}/{stem}.xgwx"), doc.to_verified_bytes()?)?;
     }
     Ok(())

@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
     })?;
     let doc = XgwxDocument::from_path(&path)?;
-    let project = doc.project_info();
+    let project = doc.project().info();
 
     println!("file: {path}");
     println!(
@@ -28,8 +28,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         "version: {}",
         project.file_version.as_deref().unwrap_or("<unknown>")
     );
-    println!("configurations: {}", doc.configurations().len());
-    for configuration in doc.configurations() {
+    println!("configurations: {}", doc.configuration().list().len());
+    for configuration in doc.configuration().list() {
         let model = configuration
             .type_code
             .and_then(|code| cpu_catalog().iter().find(|cpu| cpu.type_code == code))
@@ -40,8 +40,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             option_u32(configuration.type_code)
         );
     }
-    println!("networks: {}", doc.networks().len());
-    println!("modules: {}", doc.module_summaries().len());
+    println!("networks: {}", doc.network().list().len());
+    println!("modules: {}", doc.module().summaries().len());
     println!("programs: {}", doc.program().programs().len());
     for (program, decoded) in doc
         .program()
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "variables: {}",
         doc.variable().variables().map(|items| items.len())?
     );
-    println!("payloads: {}", doc.decoded_payloads().len());
+    println!("payloads: {}", doc.container().decoded_payloads().len());
 
     print_cnet(&doc);
     print_fenet(&doc);
@@ -111,7 +111,8 @@ fn print_fenet(doc: &XgwxDocument) {
 
 fn print_hsc(doc: &XgwxDocument) -> Result<(), Box<dyn Error>> {
     let hsc = doc
-        .hsc_parameters()
+        .parameter()
+        .hsc()
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
     println!("hsc parameters: {}", hsc.len());
@@ -149,7 +150,7 @@ fn print_hsc(doc: &XgwxDocument) -> Result<(), Box<dyn Error>> {
 }
 
 fn print_position(doc: &XgwxDocument) {
-    let position = doc.position_parameters();
+    let position = doc.parameter().position();
     println!("position parameters: {}", position.len());
     for parameter in position {
         println!(
@@ -169,8 +170,8 @@ fn print_position(doc: &XgwxDocument) {
 }
 
 fn print_pid(doc: &XgwxDocument) {
-    let cal = doc.pid_cal_parameters();
-    let tune = doc.pid_tune_parameters();
+    let cal = doc.parameter().pid().calculation();
+    let tune = doc.parameter().pid().tuning();
     println!("pid cal parameters: {}", cal.len());
     for parameter in cal {
         println!("  loops={}", parameter.loops.len());

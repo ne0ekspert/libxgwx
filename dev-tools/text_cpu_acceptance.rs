@@ -14,7 +14,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("XGI-CPUUN", "TCPUN"),
     ] {
         let mut doc = source.clone();
-        doc.select_cpu(model)?;
+        doc.configuration_mut()
+            .get(0)
+            .and_then(|mut plc| plc.select_cpu(model))?;
         assert_eq!(
             doc.program().text_programs(),
             source.program().text_programs()

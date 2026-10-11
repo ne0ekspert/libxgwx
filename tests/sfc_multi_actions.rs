@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "support/mutation_support.rs"]
+mod mutation_support;
 use xgwx::XgwxDocument;
 #[test]
 fn native_additional_timed_action_belongs_to_the_preceding_step() {
@@ -51,16 +54,20 @@ fn additional_actions_cannot_cross_a_transition_or_become_initial_steps() {
         }
         assert!(
             doc.program_mut()
-                .replace_sfc_sequence(&xgwx::SfcSequencePatch {
-                    program_index: 0,
-                    block_index: 0,
-                    expected_entities: block.entities.clone(),
-                    expected_rows: block.editable_rows.clone(),
-                    rows
-                })
+                .get(0)
+                .and_then(|selected_program| mutation_support::replace_sfc_sequence(
+                    selected_program,
+                    &xgwx::SfcSequencePatch {
+                        program_index: 0,
+                        block_index: 0,
+                        expected_entities: block.entities.clone(),
+                        expected_rows: block.editable_rows.clone(),
+                        rows
+                    }
+                ))
                 .is_err()
         );
-        assert_eq!(doc.xml, source.xml);
+        assert_eq!(doc.container().xml(), source.container().xml());
     }
 }
 

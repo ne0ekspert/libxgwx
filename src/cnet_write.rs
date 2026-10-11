@@ -32,8 +32,10 @@ pub struct CnetSettingsPatch {
 
 impl XgwxDocument {
     /// Edit existing Cnet fields without rebuilding port records or opaque data.
-    #[doc(hidden)]
-    pub fn edit_cnet_settings(&mut self, patch: &CnetSettingsPatch) -> Result<(), XgwxError> {
+    pub(crate) fn edit_cnet_settings(
+        &mut self,
+        patch: &CnetSettingsPatch,
+    ) -> Result<(), XgwxError> {
         let fail = |reason: &str| XgwxError::BrowserNetworkEdit(reason.to_owned());
         let xml = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
         let at_position = |n: &roxmltree::Node<'_, '_>| {

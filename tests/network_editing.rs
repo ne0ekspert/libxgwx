@@ -1,10 +1,19 @@
 #![cfg(feature = "write")]
+#[cfg(feature = "write")]
+#[path = "support/hardware_support.rs"]
+mod hardware_support;
 use xgwx::{BrowserNetworkPatch, FenetFieldPatch, XgwxDocument};
 fn project() -> XgwxDocument {
     let mut doc =
         XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgk.xgwx")).unwrap();
-    doc.insert_module(0, 0, "XGL-EFMT(B)").unwrap();
-    doc.insert_module(0, 1, "XGL-EFMT(B)").unwrap();
+    doc.base_mut()
+        .by_number(0)
+        .and_then(|mut selected_record| selected_record.insert_module(0, "XGL-EFMT(B)"))
+        .unwrap();
+    doc.base_mut()
+        .by_number(0)
+        .and_then(|mut selected_record| selected_record.insert_module(1, "XGL-EFMT(B)"))
+        .unwrap();
     doc
 }
 fn patch(field: &str, expected: &str, replacement: &str) -> FenetFieldPatch {
@@ -19,16 +28,22 @@ fn patch(field: &str, expected: &str, replacement: &str) -> FenetFieldPatch {
 #[test]
 fn fenet_address_and_dhcp_edits_preserve_other_modules_and_programs() {
     let mut doc = project();
-    let original = doc.xml.clone();
+    let original = doc.container().xml().to_owned();
     let before = doc.program().ladder_programs().remove(0).unwrap().data;
-    doc.edit_fenet_field(&patch("ipAddress", "192.168.0.100", "10.20.30.40"))
-        .unwrap();
+    {
+        let field_patch = &patch("ipAddress", "192.168.0.100", "10.20.30.40");
+        hardware_support::edit_fenet_field(&mut doc, field_patch)
+    }
+    .unwrap();
     let ips = doc.network().fenet_config_infos();
     assert_eq!(ips[0].ip_address.as_ref().unwrap().address, "10.20.30.40");
     assert_eq!(ips[1].ip_address.as_ref().unwrap().address, "192.168.0.100");
-    doc.edit_fenet_field(&patch("ipAddress", "10.20.30.40", "192.168.0.100"))
-        .unwrap();
-    assert_eq!(doc.xml, original);
+    {
+        let field_patch = &patch("ipAddress", "10.20.30.40", "192.168.0.100");
+        hardware_support::edit_fenet_field(&mut doc, field_patch)
+    }
+    .unwrap();
+    assert_eq!(doc.container().xml(), original);
     for (field, old, new) in [
         ("subnet", "255.255.255.0", "255.255.0.0"),
         ("gateway", "192.168.0.1", "10.20.0.1"),
@@ -40,10 +55,18 @@ fn fenet_address_and_dhcp_edits_preserve_other_modules_and_programs() {
         ("dhcp", "0", "1"),
         ("dhcp2", "0", "1"),
     ] {
-        doc.edit_fenet_field(&patch(field, old, new)).unwrap();
+        {
+            let field_patch = &patch(field, old, new);
+            hardware_support::edit_fenet_field(&mut doc, field_patch)
+        }
+        .unwrap();
         XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-        doc.edit_fenet_field(&patch(field, new, old)).unwrap();
-        assert_eq!(doc.xml, original);
+        {
+            let field_patch = &patch(field, new, old);
+            hardware_support::edit_fenet_field(&mut doc, field_patch)
+        }
+        .unwrap();
+        assert_eq!(doc.container().xml(), original);
     }
     assert_eq!(
         doc.program().ladder_programs().remove(0).unwrap().data,
@@ -53,7 +76,7 @@ fn fenet_address_and_dhcp_edits_preserve_other_modules_and_programs() {
 #[test]
 fn invalid_and_stale_fenet_edits_are_atomic() {
     let mut doc = project();
-    let original = doc.xml.clone();
+    let original = doc.container().xml().to_owned();
     for p in [
         patch("ipAddress", "wrong", "1.2.3.4"),
         patch("ipAddress", "192.168.0.100", "1.2.3.256"),
@@ -67,12 +90,31 @@ fn invalid_and_stale_fenet_edits_are_atomic() {
             ..patch("dhcp", "0", "1")
         },
     ] {
-        assert!(doc.edit_fenet_field(&p).is_err());
-        assert_eq!(doc.xml, original);
+        assert!(
+            {
+                let field_patch = &p;
+                hardware_support::edit_fenet_field(&mut doc, field_patch)
+            }
+            .is_err()
+        );
+        assert_eq!(doc.container().xml(), original);
     }
     let mut wrong = doc.clone();
-    wrong.xml = wrong.xml.replacen("Type=\"23041\"", "Type=\"23042\"", 1);
-    assert!(wrong.edit_fenet_field(&patch("dhcp", "0", "1")).is_err());
+    {
+        let replacement_xml =
+            wrong
+                .container()
+                .xml()
+                .replacen("Type=\"23041\"", "Type=\"23042\"", 1);
+        wrong.container_mut().replace_xml(replacement_xml).unwrap();
+    };
+    assert!(
+        {
+            let field_patch = &patch("dhcp", "0", "1");
+            hardware_support::edit_fenet_field(&mut wrong, field_patch)
+        }
+        .is_err()
+    );
 }
 #[test]
 fn network_metadata_edits_preserve_linked_configuration() {
@@ -83,15 +125,18 @@ fn network_metadata_edits_preserve_linked_configuration() {
         (true, "alias", "", "Main PLC"),
         (true, "description", "", "Ethernet <uplink>"),
     ] {
-        doc.edit_browser_network(&BrowserNetworkPatch {
-            network_index: 0,
-            module,
-            base: Some(0),
-            slot: Some(0),
-            field: field.into(),
-            expected_value: old.into(),
-            replacement: new.into(),
-        })
+        {
+            let field_patch = &BrowserNetworkPatch {
+                network_index: 0,
+                module,
+                base: Some(0),
+                slot: Some(0),
+                field: field.into(),
+                expected_value: old.into(),
+                replacement: new.into(),
+            };
+            hardware_support::edit_browser_network(&mut doc, field_patch)
+        }
         .unwrap();
         assert_eq!(doc.network().fenet_config_infos(), fenet);
         XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
@@ -117,17 +162,24 @@ fn generate_native_network_acceptance_files() {
         ("dns", "0.0.0.0", "1.1.1.1"),
         ("dhcp", "0", "1"),
     ] {
-        doc.edit_fenet_field(&patch(field, old, new)).unwrap();
+        {
+            let field_patch = &patch(field, old, new);
+            hardware_support::edit_fenet_field(&mut doc, field_patch)
+        }
+        .unwrap();
     }
-    doc.edit_browser_network(&BrowserNetworkPatch {
-        network_index: 0,
-        module: true,
-        base: Some(0),
-        slot: Some(0),
-        field: "alias".into(),
-        expected_value: "".into(),
-        replacement: "Main Ethernet".into(),
-    })
+    {
+        let field_patch = &BrowserNetworkPatch {
+            network_index: 0,
+            module: true,
+            base: Some(0),
+            slot: Some(0),
+            field: "alias".into(),
+            expected_value: "".into(),
+            replacement: "Main Ethernet".into(),
+        };
+        hardware_support::edit_browser_network(&mut doc, field_patch)
+    }
     .unwrap();
     std::fs::write(
         directory.join("NETEDIT.xgwx"),
@@ -150,22 +202,28 @@ fn native_saved_fenet_project_remains_editable() {
     assert_eq!(native[0].subnet.as_ref().unwrap().address, "255.255.0.0");
     assert_eq!(native[0].dhcp, Some(1));
     assert_eq!(
-        doc.networks()[0].modules[0].alias.as_deref(),
+        doc.network().list()[0].modules[0].alias.as_deref(),
         Some("Main Ethernet")
     );
-    let original = doc.xml.clone();
-    doc.edit_fenet_field(&patch("ipAddress", "10.20.30.40", "10.20.30.41"))
-        .unwrap();
+    let original = doc.container().xml().to_owned();
+    {
+        let field_patch = &patch("ipAddress", "10.20.30.40", "10.20.30.41");
+        hardware_support::edit_fenet_field(&mut doc, field_patch)
+    }
+    .unwrap();
     assert_eq!(doc.network().fenet_config_infos()[1], native[1]);
-    doc.edit_fenet_field(&patch("ipAddress", "10.20.30.41", "10.20.30.40"))
-        .unwrap();
-    assert_eq!(doc.xml, original);
+    {
+        let field_patch = &patch("ipAddress", "10.20.30.41", "10.20.30.40");
+        hardware_support::edit_fenet_field(&mut doc, field_patch)
+    }
+    .unwrap();
+    assert_eq!(doc.container().xml(), original);
 }
 
 #[test]
 fn fenet_numeric_fields_edit_atomically_and_preserve_other_settings() {
     let mut doc = project();
-    let original = doc.xml.clone();
+    let original = doc.container().xml().to_owned();
     let other = doc.network().fenet_config_infos()[1].clone();
     for (field, old, new) in [
         ("stationNo", "0", "63"),
@@ -175,11 +233,19 @@ fn fenet_numeric_fields_edit_atomically_and_preserve_other_settings() {
         ("clientWaitTime", "60", "2"),
         ("glofaSocketCount", "3", "16"),
     ] {
-        doc.edit_fenet_field(&patch(field, old, new)).unwrap();
+        {
+            let field_patch = &patch(field, old, new);
+            hardware_support::edit_fenet_field(&mut doc, field_patch)
+        }
+        .unwrap();
         assert_eq!(doc.network().fenet_config_infos()[1], other);
         XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-        doc.edit_fenet_field(&patch(field, new, old)).unwrap();
-        assert_eq!(doc.xml, original);
+        {
+            let field_patch = &patch(field, new, old);
+            hardware_support::edit_fenet_field(&mut doc, field_patch)
+        }
+        .unwrap();
+        assert_eq!(doc.container().xml(), original);
     }
     for (field, old, value) in [
         ("stationNo", "0", "64"),
@@ -190,8 +256,14 @@ fn fenet_numeric_fields_edit_atomically_and_preserve_other_settings() {
         ("clientWaitTime", "60", "-2"),
         ("clientWaitTime", "60", "2.5"),
     ] {
-        assert!(doc.edit_fenet_field(&patch(field, old, value)).is_err());
-        assert_eq!(doc.xml, original);
+        assert!(
+            {
+                let field_patch = &patch(field, old, value);
+                hardware_support::edit_fenet_field(&mut doc, field_patch)
+            }
+            .is_err()
+        );
+        assert_eq!(doc.container().xml(), original);
     }
 }
 
@@ -214,7 +286,7 @@ fn native_driver_and_timeout_encodings_remain_editable() {
         ),
     ] {
         let mut doc = XgwxDocument::parse(bytes).unwrap();
-        let original = doc.xml.clone();
+        let original = doc.container().xml().to_owned();
         let other = doc.network().fenet_config_infos()[1].clone();
         let program = doc.program().ladder_programs().remove(0).unwrap().data;
         for (field, old, new) in [
@@ -222,8 +294,12 @@ fn native_driver_and_timeout_encodings_remain_editable() {
             ("rcvWaitTime", receive, "100"),
             ("clientWaitTime", client, "60"),
         ] {
-            doc.edit_fenet_field(&patch(field, old, new)).unwrap();
-            let xml = roxmltree::Document::parse(&doc.xml).unwrap();
+            {
+                let field_patch = &patch(field, old, new);
+                hardware_support::edit_fenet_field(&mut doc, field_patch)
+            }
+            .unwrap();
+            let xml = roxmltree::Document::parse(&doc.container().xml()).unwrap();
             let record = xml
                 .descendants()
                 .find(|n| n.has_tag_name("XGPD_CONFIG_INFO_FENET"))
@@ -235,8 +311,12 @@ fn native_driver_and_timeout_encodings_remain_editable() {
                 doc.program().ladder_programs().remove(0).unwrap().data,
                 program
             );
-            doc.edit_fenet_field(&patch(field, new, old)).unwrap();
-            assert_eq!(doc.xml, original);
+            {
+                let field_patch = &patch(field, new, old);
+                hardware_support::edit_fenet_field(&mut doc, field_patch)
+            }
+            .unwrap();
+            assert_eq!(doc.container().xml(), original);
         }
     }
 }
@@ -247,15 +327,25 @@ fn rapienet_station_range_uses_the_existing_protocol() {
         "../fixtures/networks/fenet-smart-native.xgwx"
     ))
     .unwrap();
-    doc.xml = doc
-        .xml
-        .replacen("RapienetProtocol=\"0\"", "RapienetProtocol=\"1\"", 1);
-    doc.edit_fenet_field(&patch("stationNo", "63", "220"))
-        .unwrap();
-    let original = doc.xml.clone();
+    {
+        let replacement_xml =
+            doc.container()
+                .xml()
+                .replacen("RapienetProtocol=\"0\"", "RapienetProtocol=\"1\"", 1);
+        doc.container_mut().replace_xml(replacement_xml).unwrap();
+    };
+    {
+        let field_patch = &patch("stationNo", "63", "220");
+        hardware_support::edit_fenet_field(&mut doc, field_patch)
+    }
+    .unwrap();
+    let original = doc.container().xml().to_owned();
     assert!(
-        doc.edit_fenet_field(&patch("stationNo", "220", "221"))
-            .is_err()
+        {
+            let field_patch = &patch("stationNo", "220", "221");
+            hardware_support::edit_fenet_field(&mut doc, field_patch)
+        }
+        .is_err()
     );
-    assert_eq!(doc.xml, original);
+    assert_eq!(doc.container().xml(), original);
 }

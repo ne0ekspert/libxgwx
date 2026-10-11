@@ -21,13 +21,13 @@ for the repository's GUI example.
 use xgwx::XgwxDocument;
 
 let doc = XgwxDocument::from_path("project.xgwx")?;
-let project = doc.project_info();
+let project = doc.project().info();
 
-println!("header label: {:?}", doc.header.label);
+println!("header label: {:?}", doc.container().header().label);
 println!("project name: {:?}", project.name);
 println!("file version: {:?}", project.file_version);
 
-for module in doc.module_summaries() {
+for module in doc.module().summaries() {
     println!(
         "module base={:?} slot={:?} id={:?} name={:?}",
         module.base,
@@ -59,6 +59,88 @@ Generate and open the reference locally:
 cargo doc --open --lib --no-deps --features write,il,wasm,ffi
 ```
 
+## Container inspection and XML replacement
+
+Document state is private. Borrow the XML, tree, and preserved binary data
+through `doc.container()`:
+
+```rust,no_run
+use xgwx::XgwxDocument;
+let doc = XgwxDocument::from_path("project.xgwx")?;
+let container = doc.container();
+println!("XML bytes: {}", container.xml().len());
+println!("Original gzip bytes: {}", container.main_gzip().len());
+println!("Header: {:?}", container.header());
+# Ok::<(), xgwx::XgwxError>(())
+```
+
+With `write`, `doc.container_mut().replace_xml(xml)?` parses replacement XML
+before updating the document and its tree together. Invalid XML leaves the
+document unchanged. This low-level operation checks syntax; use domain editors
+for supported PLC edits and their native format guards. Header, gzip, and
+trailer accessors describe the original parsed container until emitted bytes
+are reparsed. `to_bytes()` preserves an unchanged input byte for byte.
+
+This is a breaking change: replace `doc.xml` with
+`doc.container().xml()`, and use the corresponding container accessors for
+`root`, `header`, `main_gzip`, `trailer`, and `trailer_gzip_members`.
+
+## Root API migration
+
+Project, configuration, parameter, service, hardware and network readers now
+belong to their object namespaces. The former root readers are private.
+
+| Former call | Current call |
+| --- | --- |
+| `doc.project_info()` | `doc.project().info()` |
+| `doc.project_name()` | `doc.project().name()` |
+| `doc.project_options()` | `doc.project().options()` |
+| `doc.configurations()` | `doc.configuration().list()` |
+| `doc.module_summaries()` | `doc.module().summaries()` |
+| `doc.base_summaries()` | `doc.base().summaries()` |
+| `doc.networks()` | `doc.network().list()` |
+| `doc.network_modules()` | `doc.network().module_summaries()` |
+| `doc.xgpd_config_infos()` | `doc.network().config_infos()` |
+| `doc.parameters()` | `doc.parameter().summaries()` |
+| `doc.hsc_parameters()` | `doc.parameter().hsc()` |
+| `doc.position_parameters()` | `doc.parameter().position()` |
+| `doc.pid_cal_parameters()` | `doc.parameter().pid().calculation()` |
+| `doc.pid_tune_parameters()` | `doc.parameter().pid().tuning()` |
+| `doc.high_speed_links()` | `doc.high_speed_link().summaries()` |
+| `doc.high_speed_link_blocks()` | `doc.high_speed_link().blocks()` followed by each handle's `summary()` |
+| `doc.safety_comm()` | `doc.safety().first().map(|record| record.summary())` |
+| `doc.trend_monitoring()` | `doc.trend().first().map(|record| record.summary())` |
+| `doc.select_cpu(model)` | `doc.configuration_mut().get(0)?.select_cpu(model)` |
+| `doc.rename_project(expected, name)` | `doc.project_mut().rename_if(expected, name)` |
+
+The configuration index is document order. CPU migration remains guarded to a
+single configuration; selecting an index does not enable multi-PLC CPU writes.
+Hardware profiles are inspected through a selected configuration's
+`hardware_profile()`. `doc.modules()` remains the unified typed module list.
+
+Root hardware and network mutation bridges are also private:
+
+| Former call | Current call |
+| --- | --- |
+| `doc.set_base_slot_count(base, count)` | `doc.base_mut().by_number(base)?.set_slot_count(count)` |
+| `doc.insert_module(base, slot, model)` | `doc.base_mut().by_number(base)?.insert_module(slot, model)` |
+| `doc.delete_module(base, slot)` | `doc.module_mut().at(base, slot)?.delete()` |
+| `doc.select_module(base, slot, model)` | `doc.module_mut().at(base, slot)?.select_model(model)` |
+| `doc.update_module(base, slot, patch)` | `doc.module_mut().at(base, slot)?.update(patch)` |
+| `doc.set_module_option(base, slot, key, index, value)` | `doc.module_mut().at(base, slot)?.set_option(key, index, value)` |
+| `doc.set_module_input_filter(base, slot, filter)` | `doc.module_mut().at(base, slot)?.set_input_filter(filter)` |
+| `doc.module_option_values(base, slot)` | `doc.module().at(base, slot)?.option_values()` |
+| `doc.update_network(index, patch)` | `doc.network_mut().get(index)?.update(patch)` |
+| `doc.update_network_module(base, slot, patch)` | `doc.network_mut().module_at(base, slot)?.update(patch)` |
+
+Browser field patches translate to `ModuleEditor::edit_field`,
+`BaseEditor::edit_slot_count`, or the selected network editor's `edit_field`.
+FEnet edits use `doc.network_mut().module_at(base, slot)?.fenet()?.edit_field(...)`;
+Cnet batches use the same membership's `cnet()?.edit_settings(&changes)`.
+Field edits retain expected-value guards. Selectors reject ambiguous coordinates
+and unsupported associations before editing; C/WASM and MCP wire arguments retain
+their existing format.
+
 ## Program and Variable Namespaces
 
 Program and variable methods are grouped behind borrowed namespaces. The old
@@ -83,8 +165,8 @@ let locals = doc.variable().locals();
 | `program_mut()` | Select program handles, create programs, read collection metadata |
 | `variable_mut()` | Global symbol edits and I/O variable generation |
 
-Global operation names are retained, for example
-`doc.variable_mut().update_variable(index, &patch)`. Program body and local
+Global variable updates use `doc.variable_mut().get(index)?.update(&patch)`.
+The former indexed collection mutators have been removed. Program body and local
 declaration edits use the selected handles described below. Read methods are also
 available on editors. An editor borrows the document exclusively: collect the
 expected source/identity/declaration values first, then open the editor.
@@ -124,6 +206,9 @@ Use `update(&ProgramPatch)` for metadata, `move_to(index)` to reorder it, and
 `delete()` to remove it. Deletion consumes the handle; `move_to()` updates the
 handle's index so subsequent edits still target the same program. Creation stays
 on the collection as `doc.program_mut().create(&NewProgram)`.
+Use `doc.program_mut().get_if(index, expected_object_id)?` when applying a
+previously captured selection. `program.move_to_if(to, expected_target_id)`
+also checks the captured destination identity before reordering.
 
 | Selected editor | Operations |
 | --- | --- |
@@ -186,7 +271,7 @@ Ambiguous or unplaced records remain visible through `doc.modules()`. Empty
 bases remain in the list, and module-list length is not a physical slot count.
 
 Use `base.summary()` for a detached native record. The former raw `doc.bases()`
-getter is now `doc.base_summaries()`; native C/WASM and MCP base listings keep
+getter is now `doc.base().summaries()`; native C/WASM and MCP base listings keep
 their existing fields, indices, and ordering. The views require no optional features.
 
 ### Network configuration records
@@ -216,8 +301,8 @@ The crate version remains `0.1.0` while these APIs are unpublished.
 
 The default-feature API provides `HardwareModule` for common installed hardware
 metadata, `IOModule` for confirmed numeric I/O identities, and `NetworkModule`
-for network memberships with their protocol settings. `modules()` returns the unified `Vec<Module>` view; `module_summaries()`
-returns raw installed hardware records. `network_modules()` still returns
+for network memberships with their protocol settings. `modules()` returns the unified `Vec<Module>` view; `doc.module().summaries()`
+returns raw installed hardware records. `doc.network().module_summaries()` still returns
 network membership summaries.
 
 ```rust,no_run
@@ -259,7 +344,7 @@ Run `cargo run --example modules -- project.xgwx` for complete settings output.
 `XgwxDocument::modules()` now returns `Vec<Module>` instead of
 `Vec<ModuleSummary>`. Match `Module::Io`, `Module::Network`, and `Module::Other`
 when enumerating all modules. Code needing the previous installed hardware list
-must call `module_summaries()` instead. The earlier `typed_modules()` getter has
+must call `doc.module().summaries()` instead. The earlier `typed_modules()` getter has
 been replaced by `modules()`.
 
 WASM `hardware.modules`, native C JSON module lists, and hardware writer targets
@@ -312,15 +397,14 @@ module. The module must be uniquely identified by its current base and slot:
 use xgwx::{ModuleInputFilter, ModulePatch, XgwxDocument};
 
 let mut doc = XgwxDocument::from_path("project.xgwx")?;
-doc.update_module(
-    0,
-    2,
+let mut module = doc.module_mut().at(0, 2)?;
+module.update(
     &ModulePatch {
         comment: Some("Updated from an external editor".to_owned()),
         ..ModulePatch::default()
     },
 )?;
-doc.set_module_input_filter(0, 2, ModuleInputFilter::Ms5)?;
+module.set_input_filter(ModuleInputFilter::Ms5)?;
 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -496,16 +580,16 @@ wiring OUT replaces that assignment. Unsupported block layouts remain guarded.
 
 ### SFC charts
 
-`XgwxDocument::sfc_programs()` reads native SFC XML blocks and their positioned
+`doc.program().sfc_programs()` reads native SFC XML blocks and their positioned
 entities independently of binary ladder bodies. It retains unknown property
 attributes. The WASM summary exposes this model as `sfc`; the VS Code editor
 renders steps, transitions, labels, jumps, and variable actions in a dedicated
 SFC view.
 
-With `write`, `edit_sfc_entity(&SfcEntityPatch)` supports step comments
+With `write`, `program.sfc()?.edit_entity(&SfcEntityEdit)` supports step comments
 and existing direct `%MX` BOOL transition conditions, with stale-value and
 position checks. Transition annotation cells are synchronized.
-`replace_sfc_sequence(&SfcSequencePatch)` creates and replaces captured linear
+`program.sfc()?.replace_sequence(&SfcSequenceEdit)` creates and replaces captured linear
 main charts using typed `SfcRow` values and a complete expected-entity snapshot.
 It supports steps, direct `%MX` transitions, labels/jumps, and direct BOOL
 actions with N, R, S, L, D, P, SD, DS, or SL qualifiers. Timed
@@ -575,7 +659,7 @@ container compression, alignment, size and checksum are generated. See
 
 ### Creating scan programs
 
-`create_program(&NewProgram)` appends a blank LD or SFC program using captured
+`doc.program_mut().create(&NewProgram)` appends a blank LD or SFC program using captured
 native templates, with unique program/symbol GUIDs and a unique identifier name.
 It binds to the existing scan task, updates the workspace node count, and
 preserves existing program records. XGK supports LD creation; XGI supports LD,
@@ -585,13 +669,13 @@ The WASM entry point is `create_xgwx_program(bytes, patch)`. Native Save As
 coverage and expected blank-program diagnostics are documented in
 [creation fixtures](fixtures/program-create/README.md).
 
-`delete_program(program_index, expected_object_id)` removes a top-level program
+`doc.program_mut().get_if(index, expected_object_id)?.delete()` removes a top-level program
 and its local declarations, checks the selected identity, and updates the workspace
 node count. Other program records, shared globals, hardware and scan tasks remain
 intact. The WASM export is `delete_xgwx_program`; the extension uses its normal
 document edit history so deletion supports Undo.
 
-`move_program(from, to, expected_object_id, expected_target_id)` moves a program
+`program.move_to_if(to, expected_target_id)` moves a selected program
 into its final list index. It checks source and destination identities, preserves
 complete program XML records and task assignments, and leaves workspace counts
 unchanged. The WASM export is `move_xgwx_program`. The extension provides sidebar
@@ -600,17 +684,17 @@ programs in list order within their scan/task; task scheduling remains independe
 
 ### Standalone ST and IEC IL source
 
-`XgwxDocument::text_programs()` reads validated Structured Text (`Kind=4`) and IEC
+`doc.program().text_programs()` reads validated Structured Text (`Kind=4`) and IEC
 Instruction List (`Kind=9`) programs from their native `Body/ST_Program/CodeList`
 records. Both languages store bzip2-compressed UTF-16 source with a `CodeCount`
 measured in UTF-16 code units. Blank programs use the captured XG5000 templates.
 
-With `write`, `edit_text_program(&TextProgramPatch)` checks program identity,
-language and expected source before replacing only CodeList. It accepts up to
+With `write`, `program.text()?.update(&TextSourcePatch)` keeps the selected
+identity and language bound and checks expected source before replacing only CodeList. It accepts up to
 65536 UTF-16 units, rejects NUL characters, and preserves program metadata,
 declarations and neighboring programs. Unknown source layouts, encrypted
 programs and bookmark/breakpoint metadata remain read only.
-`edit_text_variable(object_id, &SfcVariablePatch)` uses the existing IEC
+`program.variable_mut().edit_declaration(&ProgramVariablePatch)` uses the existing IEC
 PB50 declaration encoder, including arrays, STRING, initial values, Retain and
 captured function blocks. Referenced declarations cannot be removed or have
 their type/bounds changed. The WASM exports are `edit_xgwx_text_program` and
@@ -638,7 +722,7 @@ for the XGK-CPUSN mnemonic audit and the distinction from XGI IEC IL.
 
 `program_languages()` supplies the CPU/project-mode capabilities used by both the writer and VS Code. Native blank captures enable ST/IEC IL on XEC-E/H/S/U, XEM-H2/HP, GIPAM, KL and XGR-CPUH. XGK Auto-allocation enables ST and native LD creation. XGK scalar declarations use a separately captured type-ID mapping; native D allocations are normalized only in the reading copy. Advanced XGK declaration shapes remain guarded. XGI-CPUS/P text creation stays disabled until a native profile is captured.
 
-With `write,il`, `vendor_il_programs()` exposes classic XGK ladder programs as vendor IL. `edit_vendor_il(&VendorIlPatch)` checks identity and stale source and builds native ladder records using existing cell/catalog writers and CPU operand guards. It supports series LOAD/AND contacts, negated and edge variants, OUT/SET/RST outputs and fixed-arity catalog instructions. Branches, comments and Auto-allocation ladder text replacement remain guarded. IEC CodeList is never used to store XGK vendor IL. Read eligibility validates each instruction without rebuilding the full ladder; applying an edit builds and verifies a candidate atomically.
+With `write,il`, `doc.program().vendor_il_programs()` exposes classic XGK ladder programs as vendor IL. `program.vendor_il()?.update(&VendorIlSourcePatch)` checks identity and stale source and builds native ladder records using existing cell/catalog writers and CPU operand guards. It supports series LOAD/AND contacts, negated and edge variants, OUT/SET/RST outputs and fixed-arity catalog instructions. Branches, comments and Auto-allocation ladder text replacement remain guarded. IEC CodeList is never used to store XGK vendor IL. Read eligibility validates each instruction without rebuilding the full ladder; applying an edit builds and verifies a candidate atomically.
 
 Generate CPU-family acceptance candidates with `cargo run --features write,il --manifest-path dev-tools/Cargo.toml --bin text-cpu-expansion-acceptance`. Native captures and semantic Save As comparisons are in `fixtures/text-cpus/`.
 
@@ -701,3 +785,92 @@ membership. Protocol selection with `.fenet()` or `.cnet()` rejects missing,
 ambiguous, or mismatched configuration associations. Cnet's
 `edit_settings(&[CnetFieldEdit])` applies a batch atomically with captured-value
 checks. See `examples/network_handles.rs` for a complete runnable example.
+
+Project and configuration APIs bind inspection and editing to their objects:
+
+```rust,no_run
+# fn example(doc: &mut xgwx::XgwxDocument) -> Result<(), xgwx::XgwxError> {
+let project = doc.project();
+println!("Name: {:?}, options: {:?}", project.name(), project.options());
+let configuration = doc.configuration().get(0)?;
+println!("CPU: {:?}, bases: {}", configuration.cpu(), configuration.bases().len());
+doc.project_mut().rename("Factory")?;
+doc.configuration_mut().get(0)?.select_cpu("XGK-CPUUN")?;
+# Ok(())
+# }
+```
+
+`ProjectEditor::rename_if(expected_name, replacement)` retains a previously
+captured name check for editor transactions. Project options and other metadata
+remain read-only. Configuration selection uses document indices, so repeated
+PLC names remain distinct. CPU selection still requires one configuration and
+uses the existing native migration and hardware-limit guards. See
+`examples/project_configuration_handles.rs` for a runnable example.
+
+Global variables also have selected record handles:
+
+```rust,no_run
+# fn example(doc: &mut xgwx::XgwxDocument) -> Result<(), xgwx::XgwxError> {
+let snapshot = doc.variable().get(0)?.summary().clone();
+let mut variable = doc.variable_mut().get_if(0, &snapshot)?;
+variable.rename("StartInput")?;
+variable.update(&xgwx::VariablePatch {
+    description: Some("Factory start button".into()),
+    ..Default::default()
+})?;
+# Ok(())
+# }
+```
+
+`doc.variable().list()` returns selected read handles; `get(index)` uses native
+global-record indices. `named(name)` selects a unique name without case distinctions.
+`get_if(index, snapshot)` rejects stale decoded values, including records changed
+by I/O generation. Updates preserve other global records and retain native text
+length restrictions. Multiple symbol tables are rejected rather than guessing
+which PLC owns a record. Global insertion and deletion remain unsupported.
+
+Parameters are read through document-bound sections or a selected PLC:
+
+```rust,no_run
+# fn example(doc: &xgwx::XgwxDocument) -> Result<(), xgwx::XgwxError> {
+let parameters = doc.configuration().get(0)?.parameters();
+let counters = parameters.hsc();
+let axes = parameters.position();
+let calculation = parameters.pid().calculation();
+let tuning = parameters.pid().tuning();
+for record in parameters.list() {
+    println!("{}: {:?}", record.index(), record.decode()?);
+}
+# Ok(())
+# }
+```
+
+`doc.parameter()` includes all sections, including those outside a configuration.
+Scoped `get(index)` retains document-wide parameter indices and rejects records
+owned by another PLC. `of_kind(ParameterKind)` filters selected handles;
+`decode()` returns typed HSC, positioning, PID calculation/tuning data or preserved
+metadata for other native types. Invalid HSC payloads remain per-record errors.
+These parameter families are read-only; their writer layouts are not validated.
+
+High-speed links, safety communication, and trend monitoring have read-only
+collections, both document-wide and scoped to a selected PLC:
+
+```rust,no_run
+# fn example(doc: &xgwx::XgwxDocument) -> Result<(), xgwx::XgwxError> {
+let plc = doc.configuration().get(0)?;
+for link in plc.high_speed_link().list() {
+    for block in link.blocks() { println!("{:?}", block.summary()); }
+}
+let safety = plc.safety().list();
+let trends = plc.trend().list();
+# Ok(())
+# }
+```
+
+Document-wide access uses `doc.high_speed_link()`, `doc.safety()`, and `doc.trend()`.
+Each collection supports `list()`, `get(document_index)`, and detached `summaries()`.
+High-speed blocks retain their nearest link ancestor, configuration, and independent
+block indices; native block selectors can repeat. Unowned blocks remain in the
+collection's `blocks()` list. Safety and trend lists retain all records, while
+`first()` preserves the old optional-first reader behavior. Trend `sections()`
+retains unknown and repeated children. No new native writer layouts are assumed.

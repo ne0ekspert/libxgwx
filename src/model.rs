@@ -5,14 +5,23 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct ProjectInfo {
+    /// Direct project name text, when present.
     pub name: Option<String>,
+    /// Preserved native project attribute flags.
     pub attribute: Option<u32>,
+    /// Native project version value.
     pub version: Option<u32>,
+    /// Stored project comment.
     pub comment: Option<String>,
+    /// Native workspace node count, when present.
     pub wks_node_count: Option<u32>,
+    /// Stored project identifier.
     pub guid: Option<String>,
+    /// Stored XG5000 file version.
     pub file_version: Option<String>,
+    /// Stored file modification timestamp.
     pub file_last_write_time: Option<String>,
+    /// All native XML attributes, including unknown fields.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -36,14 +45,23 @@ impl ProjectInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct ConfigurationSummary {
+    /// Direct PLC configuration name text.
     pub name: Option<String>,
+    /// Native configuration version.
     pub version: Option<u32>,
+    /// Preserved native configuration attribute flags.
     pub attribute: Option<u32>,
+    /// Stored configuration comment.
     pub comment: Option<String>,
+    /// Native configuration kind selector.
     pub kind: Option<u32>,
+    /// Native CPU type code; unknown codes are retained.
     pub type_code: Option<u32>,
+    /// Stored configuration identifier.
     pub guid: Option<String>,
+    /// Preserved native write signature.
     pub write_signature: Option<String>,
+    /// All native XML attributes, including unknown fields.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -357,20 +375,29 @@ impl ProgramSummary {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "ffi", derive(serde::Serialize))]
 pub struct VariableSummary {
+    /// Native symbol record format marker.
     pub format_version: Option<String>,
+    /// Decoded global name, when present.
     pub name: Option<String>,
     /// Deprecated compatibility alias. Prefer [`VariableSummary::data_type`].
     pub type_name: Option<String>,
     /// Deprecated compatibility alias. Prefer [`VariableSummary::address`].
     pub scope: Option<String>,
+    /// Native device address area.
     pub address_area: Option<String>,
+    /// Numeric native device address.
     pub address_number: Option<u32>,
+    /// Native symbol data type text.
     pub data_type: Option<String>,
+    /// Decoded variable description.
     pub description: Option<String>,
     /// Deprecated compatibility alias. Prefer [`VariableSummary::description`].
     pub comment: Option<String>,
+    /// Formatted native address when enough fields are known.
     pub address: Option<String>,
+    /// Preserved native source reference text.
     pub source_ref: Option<String>,
+    /// Preserved native range text.
     pub range: Option<String>,
 }
 
@@ -631,16 +658,27 @@ pub struct LadderInstruction {
 /// High-level summary of an `<XGPD_HS_LINK>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighSpeedLinkSummary {
+    /// Native value from the `SelfStationNo` attribute.
     pub self_station_no: Option<u32>,
+    /// Native value from the `Type` attribute.
     pub type_code: Option<u32>,
+    /// Native value from the `Base` attribute.
     pub base: Option<u32>,
+    /// Native value from the `Slot` attribute.
     pub slot: Option<u32>,
+    /// Native value from the `Index` attribute.
     pub index: Option<u32>,
+    /// Native value from the `TxRXCycle` attribute.
     pub tx_rx_cycle: Option<u32>,
+    /// Native value from the `LinkType` attribute.
     pub link_type: Option<String>,
+    /// Native value from the `StatusFlagArea` attribute.
     pub status_flag_area: Option<String>,
+    /// Native value from the `BlockInfoCount` attribute.
     pub block_info_count: Option<u32>,
+    /// Direct native child block summaries in stored order.
     pub blocks: Vec<HighSpeedLinkBlockSummary>,
+    /// All preserved native XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -668,31 +706,57 @@ impl HighSpeedLinkSummary {
 /// High-level summary of an `<XGPD_HS_LINK_BLK>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighSpeedLinkBlockSummary {
+    /// Native value from the `BlockIndex` attribute.
     pub block_index: Option<u32>,
+    /// Native value from the `BlockId` attribute.
     pub block_id: Option<u32>,
+    /// Native value from the `MasterSlaveType` attribute.
     pub master_slave_type: Option<u32>,
+    /// Native value from the `StationNo` attribute.
     pub station_no: Option<u32>,
+    /// Native value from the `TxRxType` attribute.
     pub tx_rx_type: Option<u32>,
+    /// Native value from the `LinkType` attribute.
     pub link_type: Option<u32>,
+    /// Native value from the `StationType` attribute.
     pub station_type: Option<u32>,
+    /// Native value from the `ModuleSelectTypeRnet` attribute.
     pub module_select_type_rnet: Option<u32>,
+    /// Native value from the `TxSize` attribute.
     pub tx_size: Option<u32>,
+    /// Native value from the `RxSize` attribute.
     pub rx_size: Option<u32>,
+    /// Native value from the `MasterNO` attribute.
     pub master_no: Option<i32>,
+    /// Native value from the `SelfStationNO` attribute.
     pub self_station_no: Option<i32>,
+    /// Native value from the `NewBlkDPnet` attribute.
     pub new_blk_dpnet: Option<u32>,
+    /// Native value from the `BlockUse` attribute.
     pub block_use: Option<u32>,
+    /// Native value from the `ConnType` attribute.
     pub conn_type: Option<String>,
+    /// Native value from the `DataType` attribute.
     pub data_type: Option<String>,
+    /// Native value from the `SlaveType` attribute.
     pub slave_type: Option<String>,
+    /// Native value from the `TxAddress` attribute.
     pub tx_address: Option<String>,
+    /// Native value from the `RxAddress` attribute.
     pub rx_address: Option<String>,
+    /// Native value from the `TxDataType` attribute.
     pub tx_data_type: Option<String>,
+    /// Native value from the `RxDataType` attribute.
     pub rx_data_type: Option<String>,
+    /// Native value from the `TxVarScope` attribute.
     pub tx_var_scope: Option<String>,
+    /// Native value from the `RxVarScope` attribute.
     pub rx_var_scope: Option<String>,
+    /// Native value from the `ModuleType` attribute.
     pub module_type: Option<String>,
+    /// Native value from the `RemoteIO` attribute.
     pub remote_io: Option<u32>,
+    /// All preserved native XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -732,8 +796,11 @@ impl HighSpeedLinkBlockSummary {
 /// Project options parsed from the `<Options Details="...">` text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectOptionsSummary {
+    /// Preserved native Details text before entry parsing.
     pub raw_details: Option<String>,
+    /// Parsed key/value entries in their stored order.
     pub entries: Vec<ProjectOptionEntry>,
+    /// All native option XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -756,15 +823,20 @@ impl ProjectOptionsSummary {
 /// One parsed `key=value` option entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectOptionEntry {
+    /// Stored option key.
     pub key: String,
+    /// Stored option value; no native meaning is assumed.
     pub value: String,
 }
 
 /// High-level summary of a `<Parameter>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParameterSummary {
+    /// Preserved native Type selector, including unknown families.
     pub parameter_type: Option<String>,
+    /// Metadata for direct child sections in stored order.
     pub sections: Vec<XmlSectionSummary>,
+    /// All preserved native parameter XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -1135,30 +1207,55 @@ pub struct PositionAxisParameterSummary {
     pub soft_upper_limit: Option<i32>,
     /// Software lower travel limit.
     pub soft_lower_limit: Option<i32>,
+    /// Native value from the `BacklashCompensation` attribute.
     pub backlash_compensation: Option<i32>,
+    /// Native value from the `SCurveRatio` attribute.
     pub s_curve_ratio: Option<u32>,
+    /// Native value from the `ENUM_Shape` attribute.
     pub shape: Option<u32>,
+    /// Native value from the `ENUM_MCode` attribute.
     pub m_code: Option<u32>,
+    /// Native value from the `ENUM_DectSoftLimit` attribute.
     pub detect_soft_limit: Option<u32>,
+    /// Native value from the `ENUM_DisplayPosition` attribute.
     pub display_position: Option<u32>,
+    /// Native value from the `ENUM_UsePosition` attribute.
     pub use_position: Option<u32>,
+    /// Native value from the `ENUM_PulseOutputLevel` attribute.
     pub pulse_output_level: Option<u32>,
+    /// Native value from the `ENUM_UseLimit` attribute.
     pub use_limit: Option<u32>,
+    /// Native value from the `ENUM_PulseOutputMode` attribute.
     pub pulse_output_mode: Option<u32>,
+    /// Native value from the `Orientation` attribute.
     pub orientation: Option<i32>,
+    /// Native value from the `ReturnVelocityHigh` attribute.
     pub return_velocity_high: Option<u32>,
+    /// Native value from the `ReturnVelocityLow` attribute.
     pub return_velocity_low: Option<u32>,
+    /// Native value from the `ReturnAccelTime` attribute.
     pub return_accel_time: Option<u32>,
+    /// Native value from the `ReturnDeAccelTime` attribute.
     pub return_decel_time: Option<u32>,
+    /// Native value from the `ReturnDwellTime` attribute.
     pub return_dwell_time: Option<u32>,
+    /// Native value from the `ENUM_ReturnPolicy` attribute.
     pub return_policy: Option<u32>,
+    /// Native value from the `ENUM_ReturnDirection` attribute.
     pub return_direction: Option<u32>,
+    /// Native value from the `JogAccelTime` attribute.
     pub jog_accel_time: Option<u32>,
+    /// Native value from the `JogDeAccelTime` attribute.
     pub jog_decel_time: Option<u32>,
+    /// Native value from the `InchingTime` attribute.
     pub inching_time: Option<u32>,
+    /// Native value from the `JogVelocityHigh` attribute.
     pub jog_velocity_high: Option<u32>,
+    /// Native value from the `JogVelocityLow` attribute.
     pub jog_velocity_low: Option<u32>,
+    /// Native value from the `ENUM_InterpolationMethod` attribute.
     pub interpolation_method: Option<u32>,
+    /// Preserved native XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -1215,12 +1312,19 @@ impl PositionAxisParameterSummary {
 pub struct PidCalParameterSummary {
     /// Raw header words from `Header_0` and `Header_1`.
     pub header: [Option<u32>; 2],
+    /// Native value from the `ParaSize` attribute.
     pub parameter_size: Option<u32>,
+    /// Native value from the `SetPidOut` attribute.
     pub set_pid_out: Option<u32>,
+    /// Native value from the `SetDirection` attribute.
     pub set_direction: Option<u32>,
+    /// Native value from the `PreventAntiWindup` attribute.
     pub prevent_anti_windup: Option<u32>,
+    /// Native value from the `ProControlCalMethod` attribute.
     pub proportional_control_method: Option<u32>,
+    /// Native value from the `DiffControlCalMethod` attribute.
     pub differential_control_method: Option<u32>,
+    /// Native value from the `PermitPWM` attribute.
     pub permit_pwm: Option<u32>,
     /// Parsed PID calculation loop records.
     pub loops: Vec<PidCalLoopSummary>,
@@ -1260,27 +1364,45 @@ pub struct PidCalLoopSummary {
     pub target_value: Option<i32>,
     /// Scan time for this loop.
     pub scan_time: Option<u32>,
+    /// Native value from the `ProPortionGainDotLeft` attribute.
     pub proportional_gain_left: Option<i32>,
+    /// Native value from the `ProPortionGainDotRight` attribute.
     pub proportional_gain_right: Option<i32>,
+    /// Native value from the `IntergralGainDotLeft` attribute.
     pub integral_gain_left: Option<i32>,
+    /// Native value from the `IntergralGainDotRight` attribute.
     pub integral_gain_right: Option<i32>,
+    /// Native value from the `DifferentialGainDotLeft` attribute.
     pub differential_gain_left: Option<i32>,
+    /// Native value from the `DifferentialGainDotRight` attribute.
     pub differential_gain_right: Option<i32>,
+    /// Native value from the `PVLimit` attribute.
     pub pv_limit: Option<u32>,
+    /// Native value from the `MVLimit` attribute.
     pub mv_limit: Option<u32>,
+    /// Native value from the `MVMax` attribute.
     pub mv_max: Option<i32>,
+    /// Native value from the `MVMin` attribute.
     pub mv_min: Option<i32>,
+    /// Native value from the `MVMan` attribute.
     pub mv_manual: Option<i32>,
+    /// Native value from the `DeadBand` attribute.
     pub dead_band: Option<i32>,
+    /// Native value from the `DiffDelayFilter` attribute.
     pub differential_delay_filter: Option<u32>,
     /// Raw PWM point value. This is a P-area bit offset in LSD-hex notation.
     pub forward_pwm: Option<u32>,
     /// PWM output period.
     pub pwm_out_period: Option<u32>,
+    /// Native value from the `SetSVSetAverage` attribute.
     pub set_sv_average: Option<u32>,
+    /// Native value from the `PVTrackingSetValue` attribute.
     pub pv_tracking_set_value: Option<i32>,
+    /// Native value from the `PVMin` attribute.
     pub pv_min: Option<i32>,
+    /// Native value from the `PVMax` attribute.
     pub pv_max: Option<i32>,
+    /// Preserved native XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -1317,8 +1439,11 @@ impl PidCalLoopSummary {
 /// Embedded PID tuning parameters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PidTuneParameterSummary {
+    /// Native value from the `SetDirection` attribute.
     pub set_direction: Option<u32>,
+    /// Native value from the `PermitPWM` attribute.
     pub permit_pwm: Option<u32>,
+    /// Native value from the `CheckSum` attribute.
     pub checksum: Option<u32>,
     /// Raw footer words from `Footer_0` and `Footer_1`.
     pub footer: [Option<u32>; 2],
@@ -1356,12 +1481,15 @@ pub struct PidTuneLoopSummary {
     pub target_value: Option<i32>,
     /// Scan time for this loop.
     pub scan_time: Option<u32>,
+    /// Native value from the `MVMax` attribute.
     pub mv_max: Option<i32>,
+    /// Native value from the `MVMin` attribute.
     pub mv_min: Option<i32>,
     /// Raw PWM point value. This is a P-area bit offset in LSD-hex notation.
     pub set_pwm_at_point: Option<u32>,
     /// PWM output period.
     pub out_period: Option<u32>,
+    /// Native value from the `SetHisterisys` attribute.
     pub hysteresis: Option<i32>,
     /// Raw XML attributes from the loop node.
     pub attributes: Vec<XmlAttribute>,
@@ -1406,18 +1534,31 @@ impl XmlSectionSummary {
 /// Safety communication parameters from `<Safety_Comm>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SafetyCommSummary {
+    /// Native value from the `RcvWaitTime` attribute.
     pub rcv_wait_time: Option<u32>,
+    /// Native value from the `RetransTime` attribute.
     pub retrans_time: Option<u32>,
+    /// Native value from the `GlofaSocketCnt` attribute.
     pub glofa_socket_count: Option<u32>,
+    /// Native value from the `DriverType` attribute.
     pub driver_type: Option<u32>,
+    /// Native value from the `IPAddress` attribute.
     pub ip_address_raw: Option<u32>,
+    /// Native value from the `IPAddress` attribute.
     pub ip_address: Option<String>,
+    /// Native value from the `Gateway` attribute.
     pub gateway_raw: Option<u32>,
+    /// Native value from the `Gateway` attribute.
     pub gateway: Option<String>,
+    /// Native value from the `Subnet` attribute.
     pub subnet_raw: Option<u32>,
+    /// Native value from the `Subnet` attribute.
     pub subnet: Option<String>,
+    /// Native value from the `EnableHostTable` attribute.
     pub enable_host_table: Option<u32>,
+    /// Native child channel records, including unknown channel tags.
     pub channels: Vec<SafetyCommChannelSummary>,
+    /// All preserved native XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -1448,13 +1589,21 @@ impl SafetyCommSummary {
 /// One child channel/config record below `<Safety_Comm>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SafetyCommChannelSummary {
+    /// Native channel element tag.
     pub name: String,
+    /// Formatted native channel address, when decoded.
     pub address: Option<String>,
+    /// Decoded native device area, when recognized.
     pub device: Option<char>,
+    /// Native value from the `DeviceType` attribute.
     pub device_type: Option<u32>,
+    /// Preserved native field.
     pub data_type: Option<u32>,
+    /// Native value from the `Size` attribute.
     pub size: Option<u32>,
+    /// Preserved native field.
     pub addr: Option<u32>,
+    /// All preserved native XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 
@@ -1479,9 +1628,13 @@ impl SafetyCommChannelSummary {
 /// Trend monitoring settings from `<TrendMonitoring>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrendMonitoringSummary {
+    /// First native trace configuration child, if present.
     pub trace_configuration: Option<XmlSectionSummary>,
+    /// First native graph configuration child, if present.
     pub graph_configuration: Option<XmlSectionSummary>,
+    /// First native window configuration child, if present.
     pub window_configuration: Option<XmlSectionSummary>,
+    /// All preserved native XML attributes.
     pub attributes: Vec<XmlAttribute>,
 }
 

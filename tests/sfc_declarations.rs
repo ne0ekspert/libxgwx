@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "support/mutation_support.rs"]
+mod mutation_support;
 use xgwx::XgwxDocument;
 #[test]
 fn native_array_initial_value_retention_and_string_are_decoded() {
@@ -47,7 +50,10 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
         }),
     };
     let mut doc = source.clone();
-    doc.variable_mut().edit_sfc_variable(&patch).unwrap();
+    doc.program_mut()
+        .get((&patch).program_index)
+        .and_then(|selected_program| mutation_support::edit_sfc_variable(selected_program, &patch))
+        .unwrap();
     assert_eq!(
         doc.variable()
             .sfc_variables(0)
@@ -59,12 +65,23 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
         patch.declaration
     );
     let saved = doc.to_verified_bytes().unwrap();
-    assert!(doc.variable_mut().edit_sfc_variable(&patch).is_err());
+    assert!(
+        doc.program_mut()
+            .get((&patch).program_index)
+            .and_then(|selected_program| mutation_support::edit_sfc_variable(
+                selected_program,
+                &patch
+            ))
+            .is_err()
+    );
     assert_eq!(doc.to_verified_bytes().unwrap(), saved);
     patch.expected_variables = doc.variable().sfc_variables(0).unwrap();
     patch.update = true;
     patch.description = "updated".into();
-    doc.variable_mut().edit_sfc_variable(&patch).unwrap();
+    doc.program_mut()
+        .get((&patch).program_index)
+        .and_then(|selected_program| mutation_support::edit_sfc_variable(selected_program, &patch))
+        .unwrap();
     assert_eq!(
         doc.variable()
             .sfc_variables(0)
@@ -78,7 +95,10 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
     patch.expected_variables = doc.variable().sfc_variables(0).unwrap();
     patch.update = false;
     patch.remove = true;
-    doc.variable_mut().edit_sfc_variable(&patch).unwrap();
+    doc.program_mut()
+        .get((&patch).program_index)
+        .and_then(|selected_program| mutation_support::edit_sfc_variable(selected_program, &patch))
+        .unwrap();
     assert_eq!(
         doc.variable().sfc_variables(0).unwrap(),
         source.variable().sfc_variables(0).unwrap()
@@ -109,10 +129,16 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
             _ => p.name = "TRANS".into(),
         }
         assert!(
-            doc.variable_mut().edit_sfc_variable(&p).is_err(),
+            doc.program_mut()
+                .get((&p).program_index)
+                .and_then(|selected_program| mutation_support::edit_sfc_variable(
+                    selected_program,
+                    &p
+                ))
+                .is_err(),
             "case {invalid}"
         );
-        assert_eq!(doc.xml, source.xml);
+        assert_eq!(doc.container().xml(), source.container().xml());
     }
     let mut doc = source.clone();
     patch.name = "Count".into();
@@ -125,7 +151,10 @@ fn advanced_declarations_update_add_delete_and_reject_invalid_or_stale_writes_at
         retain: false,
         ..Default::default()
     });
-    doc.variable_mut().edit_sfc_variable(&patch).unwrap();
+    doc.program_mut()
+        .get((&patch).program_index)
+        .and_then(|selected_program| mutation_support::edit_sfc_variable(selected_program, &patch))
+        .unwrap();
     assert!(
         doc.program().sfc_programs()[0].blocks[0]
             .editable_rows
@@ -146,20 +175,26 @@ fn original_symbol_offsets_survive_normalizing_array_initializers() {
     use xgwx::{SfcArrayBound, SfcDeclaration, SfcVariablePatch};
     let mut doc = XgwxDocument::from_path("fixtures/sfc/declarations-array-native.xgwx").unwrap();
     let expected_variables = doc.variable().sfc_variables(0).unwrap();
-    doc.variable_mut()
-        .edit_sfc_variable(&SfcVariablePatch {
-            program_index: 0,
-            expected_variables,
-            name: "Numbers".into(),
-            data_type: "BOOL".into(),
-            description: "".into(),
-            remove: false,
-            update: true,
-            declaration: Some(SfcDeclaration {
-                dimensions: vec![SfcArrayBound { lower: 0, upper: 1 }],
-                initial_value: "TRUE,FALSE".into(),
-                retain: false,
-            }),
+    doc.program_mut()
+        .get(0)
+        .and_then(|selected_program| {
+            mutation_support::edit_sfc_variable(
+                selected_program,
+                &SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables,
+                    name: "Numbers".into(),
+                    data_type: "BOOL".into(),
+                    description: "".into(),
+                    remove: false,
+                    update: true,
+                    declaration: Some(SfcDeclaration {
+                        dimensions: vec![SfcArrayBound { lower: 0, upper: 1 }],
+                        initial_value: "TRUE,FALSE".into(),
+                        retain: false,
+                    }),
+                },
+            )
         })
         .unwrap();
     let before = doc.variable().sfc_variables(0).unwrap();
@@ -174,16 +209,22 @@ fn original_symbol_offsets_survive_normalizing_array_initializers() {
             .initial_value,
         "TRUE,FALSE"
     );
-    doc.variable_mut()
-        .edit_sfc_variable(&SfcVariablePatch {
-            program_index: 0,
-            expected_variables: before.clone(),
-            name: "Value_USINT".into(),
-            data_type: "USINT".into(),
-            description: "".into(),
-            remove: true,
-            update: false,
-            declaration: None,
+    doc.program_mut()
+        .get(0)
+        .and_then(|selected_program| {
+            mutation_support::edit_sfc_variable(
+                selected_program,
+                &SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables: before.clone(),
+                    name: "Value_USINT".into(),
+                    data_type: "USINT".into(),
+                    description: "".into(),
+                    remove: true,
+                    update: false,
+                    declaration: None,
+                },
+            )
         })
         .unwrap();
     assert_eq!(

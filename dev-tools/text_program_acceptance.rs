@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use xgwx::{
     NewProgram, SfcArrayBound, SfcDeclaration, SfcVariablePatch, TextProgramPatch, XgwxDocument,
 };
@@ -8,10 +11,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Keep only the captured ST and IL programs; the capture project's SFC was blank.
     for _ in 0..2 {
         let id = doc.program().programs()[0].object_id.clone().unwrap();
-        doc.program_mut().delete_program(0, &id)?;
+        doc.program_mut()
+            .get_if(0, &id)
+            .and_then(|program| program.delete())?;
     }
     for (i, language) in ["ST", "IL"].iter().enumerate() {
-        doc.program_mut().create_program(&NewProgram {
+        doc.program_mut().create(&NewProgram {
             name: format!("Created{language}"),
             language: (*language).into(),
             object_id: format!("abcd000{}-1234-4567-89ab-0123456789ab", i * 2 + 1),
@@ -65,31 +70,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .into_iter()
                 .find(|p| p.program_index == index)
                 .unwrap();
-            doc.variable_mut().edit_text_variable(
-                &current.object_id,
-                &SfcVariablePatch {
-                    program_index: index,
-                    expected_variables: current.variables,
-                    name: name.into(),
-                    data_type: ty.into(),
-                    description: String::new(),
-                    remove: false,
-                    update: false,
-                    declaration,
-                },
-            )?;
+            doc.program_mut()
+                .get_if(index, &current.object_id)
+                .and_then(|selected_program| {
+                    mutation_support::edit_text_variable(
+                        selected_program,
+                        &SfcVariablePatch {
+                            program_index: index,
+                            expected_variables: current.variables,
+                            name: name.into(),
+                            data_type: ty.into(),
+                            description: String::new(),
+                            remove: false,
+                            update: false,
+                            declaration,
+                        },
+                    )
+                })?;
         }
         let source = if text.language == "ST" {
             "Count := Count + 1;\r\nSamples[0] := Count;\r\nDelay(IN := TRUE, PT := T#1s);\r\n%MX0 := Delay.Q;\r\nMessage := 'Running';\r\n"
         } else {
             "LD 2\r\nST Count\r\n"
         };
-        doc.program_mut().edit_text_program(&TextProgramPatch {
-            program_index: index,
-            expected_object_id: text.object_id,
-            expected_language: text.language,
-            expected_source: text.source.unwrap(),
-            source: source.into(),
+        doc.program_mut().get(index).and_then(|selected_program| {
+            mutation_support::edit_text_program(
+                selected_program,
+                &TextProgramPatch {
+                    program_index: index,
+                    expected_object_id: text.object_id,
+                    expected_language: text.language,
+                    expected_source: text.source.unwrap(),
+                    source: source.into(),
+                },
+            )
         })?;
     }
     let output = std::env::args()

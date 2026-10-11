@@ -27,16 +27,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("missing destination R_TRIG instance was not rejected atomically".into());
     }
     if document
-        .variable_mut()
-        .copy_iec_instance_declaration_to_program(0, "INST_사본2", 4, "Timer")
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .copy_instance_to_program("INST_사본2", 4, "Timer")
+        })
         .is_ok()
         || document.to_bytes()? != cleared
     {
         return Err("existing destination instance name was not rejected atomically".into());
     }
     document
-        .variable_mut()
-        .copy_iec_instance_declaration_to_program(0, "INST_사본2", 4, "INST_사본2")?;
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .copy_instance_to_program("INST_사본2", 4, "INST_사본2")
+        })?;
     let instance = document
         .variable()
         .iec_local_symbols()

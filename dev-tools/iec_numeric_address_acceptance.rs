@@ -39,7 +39,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             ("ADDR_REAL", "REAL"),
             ("ADDR_WORD", "WORD"),
         ] {
-            d.variable_mut().insert_iec_local_symbol(0, name, ty, "")?;
+            d.program_mut().get(0).and_then(|mut selected_program| {
+                selected_program.variable_mut().insert(name, ty, "")
+            })?;
         }
         d.write_to(output.join("ADPRE.xgwx"))?;
         return Ok(());
@@ -58,8 +60,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             .iter()
             .position(|s| s.name == name)
             .ok_or("missing capture symbol")?;
-        base.variable_mut()
-            .update_iec_local_symbol_address(0, index, name, address, "")?;
+        base.program_mut().get(0).and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .update_address(index, name, address, "")
+        })?;
     }
     base.write_to(output.join("ADBASE.xgwx"))?;
     let mut recreated = base.clone();
@@ -72,8 +77,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             .position(|s| s.name == name)
             .unwrap();
         recreated
-            .variable_mut()
-            .update_iec_local_symbol_address(0, index, name, "", address)?;
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .variable_mut()
+                    .update_address(index, name, "", address)
+            })?;
     }
     exact(&recreated, &source)?;
     recreated.write_to(output.join("ADREGEN.xgwx"))?;
@@ -87,13 +97,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             .iter()
             .position(|s| s.name == name)
             .unwrap();
-        edited.variable_mut().update_iec_local_symbol_address(
-            0,
-            index,
-            name,
-            address,
-            replacement,
-        )?;
+        edited
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .variable_mut()
+                    .update_address(index, name, address, replacement)
+            })?;
     }
     let bytes = edited.to_bytes()?;
     let word_index = edited
@@ -106,8 +117,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     for rejected in ["%MW2002", "%MD2202", "%MW+2203", "%MW4294967295"] {
         assert!(
             edited
-                .variable_mut()
-                .update_iec_local_symbol_address(0, word_index, "ADDR_WORD", "%MW2202", rejected)
+                .program_mut()
+                .get(0)
+                .and_then(
+                    |mut selected_program| selected_program.variable_mut().update_address(
+                        word_index,
+                        "ADDR_WORD",
+                        "%MW2202",
+                        rejected
+                    )
+                )
                 .is_err(),
             "must reject {rejected}"
         );

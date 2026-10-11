@@ -9,20 +9,20 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XgwxDocument {
     /// Parsed fixed/header metadata.
-    pub header: XgwxHeader,
+    pub(crate) header: XgwxHeader,
     /// Inflated XML project payload.
-    pub xml: String,
+    pub(crate) xml: String,
     /// Original compressed main XML member.
     ///
     /// Writers retain this so an unmodified document can be emitted byte for
     /// byte without depending on a particular gzip encoder implementation.
-    pub main_gzip: Vec<u8>,
+    pub(crate) main_gzip: Vec<u8>,
     /// XML payload parsed into a lightweight owned tree.
-    pub root: XmlElement,
+    pub(crate) root: XmlElement,
     /// Raw bytes after the main gzip XML member.
-    pub trailer: Vec<u8>,
+    pub(crate) trailer: Vec<u8>,
     /// Additional valid gzip members found inside the trailer, if any.
-    pub trailer_gzip_members: Vec<GzipMember>,
+    pub(crate) trailer_gzip_members: Vec<GzipMember>,
 }
 
 impl XgwxDocument {
@@ -59,12 +59,12 @@ impl XgwxDocument {
     }
 
     /// Return high-level metadata from the root `<Project>` element.
-    pub fn project_info(&self) -> ProjectInfo {
+    pub(crate) fn project_info(&self) -> ProjectInfo {
         ProjectInfo::from_element(&self.root)
     }
 
     /// Return high-level summaries for all `<Configuration>` elements.
-    pub fn configurations(&self) -> Vec<ConfigurationSummary> {
+    pub(crate) fn configurations(&self) -> Vec<ConfigurationSummary> {
         self.root
             .descendants_named("Configuration")
             .map(ConfigurationSummary::from_element)
@@ -72,7 +72,7 @@ impl XgwxDocument {
     }
 
     /// Return high-level summaries for all `<Network>` elements.
-    pub fn networks(&self) -> Vec<NetworkSummary> {
+    pub(crate) fn networks(&self) -> Vec<NetworkSummary> {
         self.root
             .descendants_named("Network")
             .map(NetworkSummary::from_element)
@@ -80,7 +80,7 @@ impl XgwxDocument {
     }
 
     /// Return high-level summaries for all `<NetworkModule>` elements.
-    pub fn network_modules(&self) -> Vec<NetworkModuleSummary> {
+    pub(crate) fn network_modules(&self) -> Vec<NetworkModuleSummary> {
         self.root
             .descendants_named("NetworkModule")
             .map(NetworkModuleSummary::from_element)
@@ -89,7 +89,7 @@ impl XgwxDocument {
 
     /// Return raw summaries for all hardware `<Base>` elements in document order.
     /// Use [`Self::bases`] for document-bound base handles and their modules.
-    pub fn base_summaries(&self) -> Vec<BaseSummary> {
+    pub(crate) fn base_summaries(&self) -> Vec<BaseSummary> {
         self.root
             .descendants_named("Base")
             .map(BaseSummary::from_element)
@@ -100,7 +100,7 @@ impl XgwxDocument {
     /// This is the former raw `modules()` API. It excludes additional network
     /// membership records and does not classify I/O or resolve protocol settings.
     /// Use [`Self::modules`] for the unified typed module list.
-    pub fn module_summaries(&self) -> Vec<ModuleSummary> {
+    pub(crate) fn module_summaries(&self) -> Vec<ModuleSummary> {
         self.root
             .descendants_named("Module")
             .map(ModuleSummary::from_element)
@@ -178,7 +178,8 @@ impl XgwxDocument {
     }
 
     /// Return high-level summaries for all `<XGPD_HS_LINK>` elements.
-    pub fn high_speed_links(&self) -> Vec<HighSpeedLinkSummary> {
+    #[cfg(test)]
+    pub(crate) fn high_speed_links(&self) -> Vec<HighSpeedLinkSummary> {
         self.root
             .descendants_named("XGPD_HS_LINK")
             .map(HighSpeedLinkSummary::from_element)
@@ -186,7 +187,8 @@ impl XgwxDocument {
     }
 
     /// Return high-level summaries for all `<XGPD_HS_LINK_BLK>` elements.
-    pub fn high_speed_link_blocks(&self) -> Vec<HighSpeedLinkBlockSummary> {
+    #[cfg(test)]
+    pub(crate) fn high_speed_link_blocks(&self) -> Vec<HighSpeedLinkBlockSummary> {
         self.root
             .descendants_named("XGPD_HS_LINK_BLK")
             .map(HighSpeedLinkBlockSummary::from_element)
@@ -194,7 +196,7 @@ impl XgwxDocument {
     }
 
     /// Return project option entries from the `<Options>` section.
-    pub fn project_options(&self) -> Option<ProjectOptionsSummary> {
+    pub(crate) fn project_options(&self) -> Option<ProjectOptionsSummary> {
         self.root
             .descendants_named("Options")
             .next()
@@ -202,7 +204,8 @@ impl XgwxDocument {
     }
 
     /// Return summaries for all top-level `<Parameter>` sections.
-    pub fn parameters(&self) -> Vec<ParameterSummary> {
+    #[cfg(test)]
+    pub(crate) fn parameters(&self) -> Vec<ParameterSummary> {
         self.root
             .descendants_named("Parameter")
             .map(ParameterSummary::from_element)
@@ -216,7 +219,8 @@ impl XgwxDocument {
     /// per-channel fields: counter mode, pulse input mode, compare output mode,
     /// preset bytes, ring counter maximum, compare output min/max, unit time,
     /// and pulses per revolution.
-    pub fn hsc_parameters(&self) -> Vec<Result<HscParameterSummary, XgwxError>> {
+    #[cfg(test)]
+    pub(crate) fn hsc_parameters(&self) -> Vec<Result<HscParameterSummary, XgwxError>> {
         self.root
             .descendants_named("Parameter")
             .filter(|element| element.attribute("Type") == Some("HSC PARAMETER"))
@@ -228,7 +232,8 @@ impl XgwxDocument {
     ///
     /// The observed XGB samples contain X and Y axis data, but this parser
     /// keeps additional axis records if the file reports more axes.
-    pub fn position_parameters(&self) -> Vec<PositionParameterSummary> {
+    #[cfg(test)]
+    pub(crate) fn position_parameters(&self) -> Vec<PositionParameterSummary> {
         self.root
             .descendants_named("Parameter")
             .filter(|element| element.attribute("Type") == Some("POSITION PARAMETER"))
@@ -237,7 +242,8 @@ impl XgwxDocument {
     }
 
     /// Return embedded PID calculation parameters from `PID CAL PARAMETER`.
-    pub fn pid_cal_parameters(&self) -> Vec<PidCalParameterSummary> {
+    #[cfg(test)]
+    pub(crate) fn pid_cal_parameters(&self) -> Vec<PidCalParameterSummary> {
         self.root
             .descendants_named("Parameter")
             .filter(|element| element.attribute("Type") == Some("PID CAL PARAMETER"))
@@ -250,7 +256,8 @@ impl XgwxDocument {
     /// PWM point values are raw P-area offsets in XG5000's LSD-hex bit address
     /// convention; callers can format them using the same rule as other P bit
     /// addresses if desired.
-    pub fn pid_tune_parameters(&self) -> Vec<PidTuneParameterSummary> {
+    #[cfg(test)]
+    pub(crate) fn pid_tune_parameters(&self) -> Vec<PidTuneParameterSummary> {
         self.root
             .descendants_named("Parameter")
             .filter(|element| element.attribute("Type") == Some("PID TUNE PARAMETER"))
@@ -259,7 +266,8 @@ impl XgwxDocument {
     }
 
     /// Return DeviceNet/FEnet safety communication parameters, if present.
-    pub fn safety_comm(&self) -> Option<SafetyCommSummary> {
+    #[cfg(test)]
+    pub(crate) fn safety_comm(&self) -> Option<SafetyCommSummary> {
         self.root
             .descendants_named("Safety_Comm")
             .next()
@@ -267,7 +275,8 @@ impl XgwxDocument {
     }
 
     /// Return trend monitoring configuration, if present.
-    pub fn trend_monitoring(&self) -> Option<TrendMonitoringSummary> {
+    #[cfg(test)]
+    pub(crate) fn trend_monitoring(&self) -> Option<TrendMonitoringSummary> {
         self.root
             .descendants_named("TrendMonitoring")
             .next()
@@ -276,7 +285,7 @@ impl XgwxDocument {
 
     /// Return generic XGPD configuration records for DeviceNet, FDEnet, and
     /// Rnet modules. The tag name in `kind` identifies the protocol.
-    pub fn xgpd_config_infos(&self) -> Vec<XgpdConfigInfoSummary> {
+    pub(crate) fn xgpd_config_infos(&self) -> Vec<XgpdConfigInfoSummary> {
         let mut configurations = Vec::new();
         for tag in [
             "XGPD_CONFIG_INFO_DNET",
@@ -317,7 +326,7 @@ impl XgwxDocument {
     }
 
     /// Return project property records.
-    pub fn properties(&self) -> Vec<PropertySummary> {
+    pub(crate) fn properties(&self) -> Vec<PropertySummary> {
         self.root
             .descendants_named("Properties")
             .map(PropertySummary::from_element)
@@ -330,14 +339,14 @@ impl XgwxDocument {
     /// tables, safety signatures, and retained values. The returned summaries
     /// preserve decoded bytes but do not assign proprietary semantics to tables
     /// whose binary layout is not yet identified.
-    pub fn decoded_payloads(&self) -> Vec<Result<DecodedPayloadSummary, XgwxError>> {
+    pub(crate) fn decoded_payloads(&self) -> Vec<Result<DecodedPayloadSummary, XgwxError>> {
         let mut payloads = Vec::new();
         collect_decoded_payloads(&self.root, &mut Vec::new(), &mut payloads);
         payloads
     }
 
     /// Returns the direct text inside the root `<Project>` element, if present.
-    pub fn project_name(&self) -> Option<&str> {
+    pub(crate) fn project_name(&self) -> Option<&str> {
         let name = self.root.text.trim();
         (!name.is_empty()).then_some(name)
     }

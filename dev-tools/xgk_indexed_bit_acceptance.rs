@@ -1,4 +1,7 @@
 //! Generate the FF and indexed-bit native acceptance case from XGKZEROS.
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use std::{env, error::Error, fs::OpenOptions, io::Write};
 use xgwx::{LadderCellEdit, LadderEditElement, LadderEditKind, XgwxDocument};
 
@@ -14,9 +17,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .iter()
         .find(|s| s.value == "STOP")
         .ok_or("STOP missing")?;
-    document
-        .program_mut()
-        .update_ladder_cell_text(0, stop.offset, "STOP", "FF,M00030")?;
+    document.program_mut().get(0).and_then(|selected_program| {
+        mutation_support::update_cell_text(selected_program, stop.offset, "STOP", "FF,M00030")
+    })?;
     for (y, operand, mnemonic, values) in [
         (0, "M00000", "B", ["D000100", "4"]),
         (4, "M00001", "BN", ["D000104", "D000108"]),

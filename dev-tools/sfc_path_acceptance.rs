@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use xgwx::{SfcPosition, SfcRow, SfcSequencePatch, XgwxDocument};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out = std::env::args()
@@ -46,12 +49,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let p = r.position.as_ref().unwrap();
         (p.row, p.column)
     });
-    doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
-        program_index: 0,
-        block_index: 0,
-        expected_entities: b.entities,
-        expected_rows: b.editable_rows,
-        rows,
+    doc.program_mut().get(0).and_then(|selected_program| {
+        mutation_support::replace_sfc_sequence(
+            selected_program,
+            &SfcSequencePatch {
+                program_index: 0,
+                block_index: 0,
+                expected_entities: b.entities,
+                expected_rows: b.editable_rows,
+                rows,
+            },
+        )
     })?;
     if let Some(parent) = std::path::Path::new(&out).parent() {
         std::fs::create_dir_all(parent)?;

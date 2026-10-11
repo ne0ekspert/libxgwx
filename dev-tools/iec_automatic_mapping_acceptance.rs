@@ -52,8 +52,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         for rejected in ["%MX0", "%MD+700", "%MW4294967296"] {
             assert!(
                 edited
-                    .variable_mut()
-                    .update_iec_local_symbol_address(4, index, name, "", rejected)
+                    .program_mut()
+                    .get(4)
+                    .and_then(|mut selected_program| selected_program
+                        .variable_mut()
+                        .update_address(index, name, "", rejected))
                     .is_err()
             );
             assert_eq!(before, edited.to_bytes()?, "rejection is atomic");
@@ -62,8 +65,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             for rejected in ["%IX0.5.1", "%QX400"] {
                 assert!(
                     edited
-                        .variable_mut()
-                        .update_iec_local_symbol_address(4, index, name, "", rejected)
+                        .program_mut()
+                        .get(4)
+                        .and_then(|mut selected_program| selected_program
+                            .variable_mut()
+                            .update_address(index, name, "", rejected))
                         .is_err()
                 );
                 assert_eq!(
@@ -74,8 +80,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         edited
-            .variable_mut()
-            .update_iec_local_symbol_address(4, index, name, "", address)?;
+            .program_mut()
+            .get(4)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .variable_mut()
+                    .update_address(index, name, "", address)
+            })?;
     }
     let output = Path::new(&args[1]);
     edited.write_to(output.join("ATGEN.xgwx"))?;

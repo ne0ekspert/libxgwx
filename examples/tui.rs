@@ -73,7 +73,7 @@ struct App {
 
 impl App {
     fn new(path: String, doc: XgwxDocument) -> Self {
-        let project = doc.project_info();
+        let project = doc.project().info();
         Self {
             path,
             project_name: project.name.unwrap_or_else(|| "<unnamed>".to_owned()),
@@ -82,7 +82,7 @@ impl App {
                 .unwrap_or_else(|| "<unknown>".to_owned()),
             ladder_programs: doc.program().ladder_programs(),
             variables: doc.variable().variables(),
-            decoded_payloads: doc.decoded_payloads(),
+            decoded_payloads: doc.container().decoded_payloads(),
             doc,
             view: View::Programs,
             program_selected: 0,
@@ -99,12 +99,13 @@ impl App {
     }
 
     fn networks(&self) -> Vec<NetworkSummary> {
-        self.doc.networks()
+        self.doc.network().list()
     }
 
     fn selected_program_element(&self) -> Option<&XmlElement> {
         self.doc
-            .root
+            .container()
+            .root()
             .descendants_named("Program")
             .nth(self.program_selected)
     }
@@ -130,8 +131,10 @@ impl App {
                 self.variable_selected = next_index(self.variable_selected, len);
             }
             View::Parameters => {
-                self.parameter_selected =
-                    next_index(self.parameter_selected, self.doc.parameters().len());
+                self.parameter_selected = next_index(
+                    self.parameter_selected,
+                    self.doc.parameter().summaries().len(),
+                );
             }
             View::Data => {
                 self.data_selected = next_index(self.data_selected, self.decoded_payloads.len());
@@ -159,8 +162,10 @@ impl App {
                 self.variable_selected = previous_index(self.variable_selected, len);
             }
             View::Parameters => {
-                self.parameter_selected =
-                    previous_index(self.parameter_selected, self.doc.parameters().len());
+                self.parameter_selected = previous_index(
+                    self.parameter_selected,
+                    self.doc.parameter().summaries().len(),
+                );
             }
             View::Data => {
                 self.data_selected =
@@ -485,7 +490,7 @@ fn render_parameters(
     list_area: ratatui::layout::Rect,
     detail_area: ratatui::layout::Rect,
 ) {
-    let parameters = app.doc.parameters();
+    let parameters = app.doc.parameter().summaries();
     let items = parameters
         .iter()
         .enumerate()
@@ -700,7 +705,7 @@ fn parameter_details(app: &App, parameter: Option<&ParameterSummary>) -> Vec<Lin
         .parameter_type
         .as_deref()
         .is_some_and(|parameter_type| parameter_type.contains("FENET"))
-        && let Some(safety) = app.doc.safety_comm()
+        && let Some(safety) = app.doc.safety().first().map(|record| record.summary())
     {
         lines.push(Line::from(""));
         lines.push(heading("Safety Comm"));
@@ -749,7 +754,8 @@ fn parameter_details(app: &App, parameter: Option<&ParameterSummary>) -> Vec<Lin
         lines.push(heading("HSC Payload"));
         match app
             .doc
-            .hsc_parameters()
+            .parameter()
+            .hsc()
             .into_iter()
             .collect::<Result<Vec<_>, _>>()
         {
@@ -774,7 +780,7 @@ fn parameter_details(app: &App, parameter: Option<&ParameterSummary>) -> Vec<Lin
     if parameter.parameter_type.as_deref() == Some("POSITION PARAMETER") {
         lines.push(Line::from(""));
         lines.push(heading("Position Parameter"));
-        let position_parameters = app.doc.position_parameters();
+        let position_parameters = app.doc.parameter().position();
         if position_parameters.is_empty() {
             lines.push(Line::from("  <none>"));
         } else {
@@ -807,7 +813,7 @@ fn parameter_details(app: &App, parameter: Option<&ParameterSummary>) -> Vec<Lin
     if parameter.parameter_type.as_deref() == Some("PID CAL PARAMETER") {
         lines.push(Line::from(""));
         lines.push(heading("PID Calculation"));
-        let pid_parameters = app.doc.pid_cal_parameters();
+        let pid_parameters = app.doc.parameter().pid().calculation();
         if pid_parameters.is_empty() {
             lines.push(Line::from("  <none>"));
         } else {
@@ -820,7 +826,7 @@ fn parameter_details(app: &App, parameter: Option<&ParameterSummary>) -> Vec<Lin
     if parameter.parameter_type.as_deref() == Some("PID TUNE PARAMETER") {
         lines.push(Line::from(""));
         lines.push(heading("PID Tuning"));
-        let pid_parameters = app.doc.pid_tune_parameters();
+        let pid_parameters = app.doc.parameter().pid().tuning();
         if pid_parameters.is_empty() {
             lines.push(Line::from("  <none>"));
         } else {
@@ -1520,7 +1526,7 @@ fn data_details(app: &App) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     lines.push(heading("Options"));
-    if let Some(options) = app.doc.project_options() {
+    if let Some(options) = app.doc.project().options() {
         lines.push(field("Entries", Some(options.entries.len().to_string())));
         for entry in &options.entries {
             lines.push(field(
@@ -1532,7 +1538,7 @@ fn data_details(app: &App) -> Vec<Line<'static>> {
         lines.push(Line::from("  <none>"));
     }
 
-    if let Some(trend) = app.doc.trend_monitoring() {
+    if let Some(trend) = app.doc.trend().first().map(|record| record.summary()) {
         lines.push(Line::from(""));
         lines.push(heading("Trend Monitoring"));
         if let Some(trace) = trend.trace_configuration.as_ref() {
@@ -1546,7 +1552,7 @@ fn data_details(app: &App) -> Vec<Line<'static>> {
         }
     }
 
-    let xgpd = app.doc.xgpd_config_infos();
+    let xgpd = app.doc.network().config_infos();
     if !xgpd.is_empty() {
         lines.push(Line::from(""));
         lines.push(heading("XGPD Config"));
@@ -1558,7 +1564,7 @@ fn data_details(app: &App) -> Vec<Line<'static>> {
         }
     }
 
-    let properties = app.doc.properties();
+    let properties = app.doc.container().properties();
     if !properties.is_empty() {
         lines.push(Line::from(""));
         lines.push(heading("Properties"));

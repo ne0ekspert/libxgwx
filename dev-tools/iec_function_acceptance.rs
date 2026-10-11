@@ -173,8 +173,13 @@ fn generate_standalone_insert_with_symbol(
 ) -> Result<()> {
     let mut document = XgwxDocument::from_path(source)?;
     document
-        .variable_mut()
-        .insert_iec_local_symbol(program_index, output_symbol, "UDINT", "")?;
+        .program_mut()
+        .get(program_index)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .insert(output_symbol, "UDINT", "")
+        })?;
     document
         .program_mut()
         .get(program_index)

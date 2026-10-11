@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use xgwx::{SfcSequencePatch, XgwxDocument};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out = std::env::args().nth(1).unwrap_or("target/sfc-multi".into());
@@ -18,12 +21,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         row.action_qualifier = Some("P".into());
         row.action_time = None;
         row.action_code = Some("Count := Count + 3;".into());
-        doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
-            program_index: 0,
-            block_index: 0,
-            expected_entities: block.entities,
-            expected_rows: block.editable_rows,
-            rows: rows.clone(),
+        doc.program_mut().get(0).and_then(|selected_program| {
+            mutation_support::replace_sfc_sequence(
+                selected_program,
+                &SfcSequencePatch {
+                    program_index: 0,
+                    block_index: 0,
+                    expected_entities: block.entities,
+                    expected_rows: block.editable_rows,
+                    rows: rows.clone(),
+                },
+            )
         })?;
         assert_eq!(
             doc.program().sfc_programs()[0].blocks[0]

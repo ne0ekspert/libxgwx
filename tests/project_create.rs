@@ -27,18 +27,23 @@ fn generated_native_defaults_preserve_xml_and_security() {
     ] {
         let expected = XgwxDocument::parse(native).unwrap();
         let generated = create_project(cpu, language).unwrap();
-        assert_eq!(generated.root, expected.root, "{cpu} {language}");
+        assert_eq!(
+            generated.container().root(),
+            expected.container().root(),
+            "{cpu} {language}"
+        );
         let security = |doc: &XgwxDocument| {
-            let padding = doc.header.compressed_size_hint.unwrap() as usize - doc.main_gzip.len();
-            doc.trailer[padding..].to_vec()
+            let padding = doc.container().header().compressed_size_hint.unwrap() as usize
+                - doc.container().main_gzip().len();
+            doc.container().trailer()[padding..].to_vec()
         };
         assert_eq!(security(&generated), security(&expected));
         let bytes = generated.to_verified_bytes().unwrap();
-        let aligned = generated.header.compressed_size_hint.unwrap() as usize;
+        let aligned = generated.container().header().compressed_size_hint.unwrap() as usize;
         assert_eq!(aligned % 4, 0);
         let checksum: u32 = bytes[68..134]
             .iter()
-            .chain(generated.main_gzip.iter())
+            .chain(generated.container().main_gzip().iter())
             .map(|v| u32::from(*v))
             .sum::<u32>()
             + aligned as u32;

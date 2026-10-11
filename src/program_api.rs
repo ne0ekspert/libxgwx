@@ -81,6 +81,17 @@ pub struct Program<'a> {
 
 #[cfg(feature = "write")]
 impl<'a> ProgramEditor<'a> {
+    /// Select a program only when its native ObjectId matches a captured
+    /// identity. Empty or stale identities leave the document unchanged.
+    pub fn get_if(self, index: usize, expected_object_id: &str) -> Result<Program<'a>, XgwxError> {
+        let program = self.get(index)?;
+        if expected_object_id.is_empty() || program.object_id != expected_object_id {
+            return Err(XgwxError::ProgramReorder(
+                "selected program identity changed".into(),
+            ));
+        }
+        Ok(program)
+    }
     /// Select one editable program, binding its identity and document index.
     /// This consumes the collection borrow so `doc.program_mut().get(index)?`
     /// can be stored directly without an intermediate collection variable.
@@ -188,8 +199,14 @@ impl Program<'_> {
             index: to,
             attribute: "ObjectId",
         })?;
+        self.move_to_if(to, &target_id)
+    }
+    /// Move only if the destination still has the previously captured ObjectId.
+    /// The handle follows its selected program after a successful move.
+    pub fn move_to_if(&mut self, to: usize, expected_target_id: &str) -> Result<(), XgwxError> {
+        self.ensure_identity()?;
         self.doc
-            .move_program(self.index, to, &self.object_id, &target_id)?;
+            .move_program(self.index, to, &self.object_id, expected_target_id)?;
         self.index = to;
         Ok(())
     }

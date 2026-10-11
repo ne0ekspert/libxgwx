@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "support/mutation_support.rs"]
+mod mutation_support;
 use xgwx::XgwxDocument;
 
 #[test]
@@ -39,8 +42,11 @@ fn program_and_variable_editors_preserve_identity_and_reject_stale_snapshots() {
         update: false,
         declaration: None,
     };
-    doc.variable_mut()
-        .edit_text_variable(&program.object_id, &variable_patch)
+    doc.program_mut()
+        .get_if((&variable_patch).program_index, &program.object_id)
+        .and_then(|selected_program| {
+            mutation_support::edit_text_variable(selected_program, &variable_patch)
+        })
         .unwrap();
     let source_patch = TextProgramPatch {
         program_index: program.program_index,
@@ -50,18 +56,27 @@ fn program_and_variable_editors_preserve_identity_and_reject_stale_snapshots() {
         source: "Enabled := TRUE;\r\n".into(),
     };
     {
-        let mut editor = doc.program_mut();
-        editor.edit_text_program(&source_patch).unwrap();
+        let mut selected = doc.program_mut().get(source_patch.program_index).unwrap();
+        let mut editor = selected.text().unwrap();
+        let patch = xgwx::TextSourcePatch {
+            expected_source: source_patch.expected_source.clone(),
+            source: source_patch.source.clone(),
+        };
+        editor.update(&patch).unwrap();
         assert_eq!(
-            editor.text_programs()[0].source.as_deref(),
+            editor.source().unwrap().as_deref(),
             Some("Enabled := TRUE;\r\n")
         );
-        assert!(editor.edit_text_program(&source_patch).is_err());
+        assert!(editor.update(&patch).is_err());
     }
     let valid = doc.to_verified_bytes().unwrap();
     assert!(
-        doc.variable_mut()
-            .edit_text_variable(&program.object_id, &variable_patch)
+        doc.program_mut()
+            .get_if((&variable_patch).program_index, &program.object_id)
+            .and_then(|selected_program| mutation_support::edit_text_variable(
+                selected_program,
+                &variable_patch
+            ))
             .is_err()
     );
     assert_eq!(doc.to_verified_bytes().unwrap(), valid);

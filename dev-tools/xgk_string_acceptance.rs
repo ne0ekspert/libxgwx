@@ -1,4 +1,7 @@
 //! Generate a private quoted-string instruction acceptance case.
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use std::{env, error::Error, fs::OpenOptions, io::Write};
 use xgwx::XgwxDocument;
 fn main() -> Result<(), Box<dyn Error>> {
@@ -18,9 +21,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .find(|s| s.value == original)
             .ok_or("original instruction missing")?
             .offset;
-        document
-            .program_mut()
-            .update_ladder_cell_text(0, offset, original, replacement)?;
+        document.program_mut().get(0).and_then(|selected_program| {
+            mutation_support::update_cell_text(selected_program, offset, original, replacement)
+        })?;
     }
     OpenOptions::new()
         .write(true)

@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use xgwx::{SfcArrayBound, SfcDeclaration, SfcSequencePatch, SfcVariablePatch, XgwxDocument};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut doc = XgwxDocument::from_path("fixtures/sfc/declarations-string-native.xgwx")?;
@@ -26,22 +29,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("Interval", "TIME", "T#2s", false, vec![], false),
     ] {
         let expected_variables = doc.variable().sfc_variables(0)?;
-        doc.variable_mut().edit_sfc_variable(&SfcVariablePatch {
-            program_index: 0,
-            expected_variables,
-            name: name.into(),
-            data_type: ty.into(),
-            description: "Advanced declaration".into(),
-            remove: false,
-            update,
-            declaration: Some(SfcDeclaration {
-                initial_value: init.into(),
-                retain,
-                dimensions: bounds
-                    .into_iter()
-                    .map(|(lower, upper)| SfcArrayBound { lower, upper })
-                    .collect(),
-            }),
+        doc.program_mut().get(0).and_then(|selected_program| {
+            mutation_support::edit_sfc_variable(
+                selected_program,
+                &SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables,
+                    name: name.into(),
+                    data_type: ty.into(),
+                    description: "Advanced declaration".into(),
+                    remove: false,
+                    update,
+                    declaration: Some(SfcDeclaration {
+                        initial_value: init.into(),
+                        retain,
+                        dimensions: bounds
+                            .into_iter()
+                            .map(|(lower, upper)| SfcArrayBound { lower, upper })
+                            .collect(),
+                    }),
+                },
+            )
         })?;
     }
     let block = doc.program().sfc_programs().remove(0).blocks.remove(0);
@@ -54,12 +62,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             row.transition_code = Some("TRANS := Samples[0] > 0;".into());
         }
     }
-    doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
-        program_index: 0,
-        block_index: 0,
-        expected_entities: block.entities,
-        expected_rows: block.editable_rows,
-        rows,
+    doc.program_mut().get(0).and_then(|selected_program| {
+        mutation_support::replace_sfc_sequence(
+            selected_program,
+            &SfcSequencePatch {
+                program_index: 0,
+                block_index: 0,
+                expected_entities: block.entities,
+                expected_rows: block.editable_rows,
+                rows,
+            },
+        )
     })?;
     let out = std::env::args()
         .nth(1)

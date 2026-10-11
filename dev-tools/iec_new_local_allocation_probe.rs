@@ -16,11 +16,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         row.checked_add(4).ok_or("row overflow")?
     );
     edited
-        .variable_mut()
-        .insert_iec_local_symbol(6, "ZZZ_NEW_BOOL", "BOOL", "")?;
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .insert("ZZZ_NEW_BOOL", "BOOL", "")
+        })?;
     edited
-        .variable_mut()
-        .insert_iec_local_symbol(6, "ZZZ_NEW_INT", "INT", "")?;
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .insert("ZZZ_NEW_INT", "INT", "")
+        })?;
     edited
         .program_mut()
         .get(6)

@@ -32,6 +32,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     doc.module_mut().at(0, 1)?.delete()?;
     let bytes = doc.to_verified_bytes()?;
     let reopened = xgwx::XgwxDocument::parse(&bytes)?;
-    assert_eq!(reopened.module_summaries(), doc.module_summaries());
+    assert_eq!(reopened.module().summaries(), doc.module().summaries());
     Ok(())
 }

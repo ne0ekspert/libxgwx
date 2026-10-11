@@ -135,6 +135,23 @@ pub enum XgwxError {
         slot: u32,
     },
     AmbiguousConfiguration,
+    /// Requested document-wide configuration record is absent.
+    ConfigurationIndexNotFound {
+        /// Requested configuration index.
+        index: usize,
+    },
+    /// A document-wide parameter index is absent from the requested scope.
+    ParameterIndexNotFound {
+        /// Requested document-wide record index.
+        index: usize,
+    },
+    /// A read-only record index is absent from the selected scope.
+    RecordIndexNotFound {
+        /// Requested record family.
+        kind: &'static str,
+        /// Document-wide record index within that family.
+        index: usize,
+    },
     MissingConfiguration,
     MissingConfigurationAttribute {
         attribute: &'static str,
@@ -221,6 +238,10 @@ pub enum XgwxError {
     SfcEdit(String),
     TextProgramEdit(String),
     ProjectRename(String),
+    /// A selected document edit cannot safely use the current XML/tree state.
+    DocumentEdit(String),
+    /// A selected global variable cannot be safely inspected or edited.
+    GlobalVariableEdit(String),
     ProgramCreation(String),
     ProgramDeletion(String),
     ProgramReorder(String),
@@ -362,6 +383,15 @@ impl fmt::Display for XgwxError {
             Self::AmbiguousConfiguration => {
                 write!(f, "hardware editing requires exactly one Configuration")
             }
+            Self::ConfigurationIndexNotFound { index } => {
+                write!(f, "configuration at index {index} was not found")
+            }
+            Self::ParameterIndexNotFound { index } => {
+                write!(f, "parameter at index {index} was not found in this scope")
+            }
+            Self::RecordIndexNotFound { kind, index } => {
+                write!(f, "{kind} at index {index} was not found in this scope")
+            }
             Self::MissingConfiguration => write!(f, "workspace is missing a Configuration"),
             Self::MissingConfigurationAttribute { attribute } => {
                 write!(f, "workspace Configuration is missing {attribute}")
@@ -461,6 +491,10 @@ impl fmt::Display for XgwxError {
             Self::BrowserHardwareEdit(reason) => write!(f, "hardware edit rejected: {reason}"),
             Self::ProgramDeletion(reason) => write!(f, "program deletion rejected: {reason}"),
             Self::ProgramReorder(reason) => write!(f, "program reorder rejected: {reason}"),
+            Self::GlobalVariableEdit(reason) => {
+                write!(f, "global variable edit rejected: {reason}")
+            }
+            Self::DocumentEdit(reason) => write!(f, "document edit rejected: {reason}"),
             Self::ProjectRename(reason) => write!(f, "project rename rejected: {reason}"),
             Self::ProgramCreation(reason) => write!(f, "program creation rejected: {reason}"),
             Self::TextProgramEdit(reason) => write!(f, "text program edit rejected: {reason}"),

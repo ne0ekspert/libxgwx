@@ -93,7 +93,7 @@ mod writes {
             programs[0].as_ref().unwrap().data
         );
         let reopened = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-        assert_eq!(reopened.module_summaries(), doc.module_summaries());
+        assert_eq!(reopened.module().summaries(), doc.module().summaries());
     }
     #[test]
     fn failed_placement_and_slot_shrink_leave_document_unchanged() {
@@ -172,25 +172,12 @@ mod writes {
         }
     }
     #[test]
-    fn unsupported_base_layout_and_inconsistent_tree_are_rejected() {
+    fn unsupported_base_layout_is_rejected() {
         let mut doc = document(
             r#"<Project><Base Base="0" SlotCount="4"><Module Base="0" Slot="0" Comment="A"/></Base></Project>"#,
         );
         let before = doc.clone();
         assert!(doc.base_mut().get(0).is_err());
-        assert_eq!(doc, before);
-        doc.xml = doc.xml.replace("Comment=\"A\"", "Comment=\"B\"");
-        let before = doc.clone();
-        assert!(
-            doc.module_mut()
-                .get(0)
-                .unwrap()
-                .update(&ModulePatch {
-                    comment: Some("Changed".into()),
-                    ..Default::default()
-                })
-                .is_err()
-        );
         assert_eq!(doc, before);
     }
     #[test]

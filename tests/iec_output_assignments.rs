@@ -335,7 +335,7 @@ fn existing_empty_output_record_can_be_reassigned() {
     let string = p.strings.iter().find(|s| s.offset == offset).unwrap();
     let mut data = p.data.clone();
     data.splice(offset..string.end_offset, [0xff, 0xfe, 0xff, 0]);
-    let parsed = roxmltree::Document::parse(&d.xml).unwrap();
+    let parsed = roxmltree::Document::parse(&d.container().xml()).unwrap();
     let old = parsed
         .descendants()
         .find(|n| n.has_tag_name("ProgramData"))
@@ -346,7 +346,10 @@ fn existing_empty_output_record_can_be_reassigned() {
     let mut encoder = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::best());
     encoder.write_all(&data).unwrap();
     let encoded = base64::engine::general_purpose::STANDARD.encode(encoder.finish().unwrap());
-    d.xml = d.xml.replacen(&old, &encoded, 1);
+    {
+        let replacement_xml = d.container().xml().replacen(&old, &encoded, 1);
+        d.container_mut().replace_xml(replacement_xml).unwrap();
+    };
     d = XgwxDocument::parse(&d.to_bytes().unwrap()).unwrap();
     d.program_mut()
         .get(0)

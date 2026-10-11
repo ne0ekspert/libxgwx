@@ -8,7 +8,7 @@ fn generation_matches_native_save_as_symbols_and_preserves_programs() {
     use base64::Engine;
     use std::io::Read;
     fn symbols(doc: &XgwxDocument) -> Vec<u8> {
-        let xml = roxmltree::Document::parse(&doc.xml).unwrap();
+        let xml = roxmltree::Document::parse(&doc.container().xml()).unwrap();
         let node = xml
             .descendants()
             .find(|n| n.has_tag_name("Symbols"))
@@ -52,8 +52,14 @@ fn generation_matches_native_save_as_symbols_and_preserves_programs() {
 #[test]
 fn generate_preview_duplicate_overwrite_and_undo_bytes() {
     let mut doc = empty();
-    doc.insert_module(0, 0, "XGI-D21A").unwrap();
-    doc.insert_module(0, 2, "XGQ-TR4A/B").unwrap();
+    doc.base_mut()
+        .by_number(0)
+        .and_then(|mut selected_record| selected_record.insert_module(0, "XGI-D21A"))
+        .unwrap();
+    doc.base_mut()
+        .by_number(0)
+        .and_then(|mut selected_record| selected_record.insert_module(2, "XGQ-TR4A/B"))
+        .unwrap();
     let before = doc.to_bytes().unwrap();
     let plan = doc.variable().preview_io_variables().unwrap();
     assert_eq!(plan.len(), 40);
@@ -73,14 +79,14 @@ fn generate_preview_duplicate_overwrite_and_undo_bytes() {
     doc.variable_mut().generate_io_variables().unwrap();
     assert_eq!(doc.to_bytes().unwrap(), generated);
     doc.variable_mut()
-        .update_variable(
-            0,
-            &VariablePatch {
+        .get(0)
+        .and_then(|mut variable| {
+            variable.update(&VariablePatch {
                 name: Some("CustomInput".into()),
                 description: Some("Changed".into()),
                 ..Default::default()
-            },
-        )
+            })
+        })
         .unwrap();
     let rows = doc.variable().preview_io_variables().unwrap();
     assert_eq!(rows[0].action, "overwrite");
@@ -135,15 +141,15 @@ fn matching_source_overwrites_previous_mapping_and_preserves_other_symbols() {
     let before = doc.variable().variables().unwrap();
     // A matching I/O source is regenerated even if its name/address changed.
     doc.variable_mut()
-        .update_variable(
-            0,
-            &VariablePatch {
+        .get(0)
+        .and_then(|mut variable| {
+            variable.update(&VariablePatch {
                 name: Some("UserMemory".into()),
                 address_area: Some("M".into()),
                 address_number: Some(100),
                 ..Default::default()
-            },
-        )
+            })
+        })
         .unwrap();
     // Its source still matches the I/O point, so generation overwrites it.
     assert_eq!(
@@ -164,12 +170,15 @@ fn matching_source_overwrites_previous_mapping_and_preserves_other_symbols() {
 #[test]
 fn preview_uses_decimal_word_and_hexadecimal_bit_addresses_with_native_binary_metadata() {
     let mut doc = empty();
-    doc.insert_module(1, 0, "XGI-D22A/B").unwrap();
+    doc.base_mut()
+        .by_number(1)
+        .and_then(|mut selected_record| selected_record.insert_module(0, "XGI-D22A/B"))
+        .unwrap();
     let rows = doc.variable().preview_io_variables().unwrap();
     assert_eq!(rows[0].address, "P00120");
     assert_eq!(rows[15].address, "P0012F");
     doc.variable_mut().generate_io_variables().unwrap();
-    let xml = roxmltree::Document::parse(&doc.xml).unwrap();
+    let xml = roxmltree::Document::parse(&doc.container().xml()).unwrap();
     let symbols = xml
         .descendants()
         .find(|n| n.has_tag_name("Symbols"))

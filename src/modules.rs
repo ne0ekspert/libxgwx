@@ -8,7 +8,7 @@ use crate::{
 /// Common metadata for an installed hardware module, distinct from a PLC rack/base.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HardwareModule {
-    /// Owning PLC configuration in `XgwxDocument::configurations()` order.
+    /// Owning PLC configuration in `doc.configuration().list()` order.
     /// `None` means the hardware record is outside a Configuration element.
     pub configuration_index: Option<usize>,
     /// Installed hardware summary with its native attributes and current location.

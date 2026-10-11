@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use xgwx::{SfcSequencePatch, SfcVariablePatch, XgwxDocument};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut doc = XgwxDocument::from_path("fixtures/sfc/native-loop.xgwx")?;
@@ -15,15 +18,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("SetLatch", "SR"),
     ] {
         let expected_variables = doc.variable().sfc_variables(0)?;
-        doc.variable_mut().edit_sfc_variable(&SfcVariablePatch {
-            program_index: 0,
-            expected_variables,
-            name: name.into(),
-            data_type: ty.into(),
-            description: "".into(),
-            remove: false,
-            declaration: None,
-            update: false,
+        doc.program_mut().get(0).and_then(|selected_program| {
+            mutation_support::edit_sfc_variable(
+                selected_program,
+                &SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables,
+                    name: name.into(),
+                    data_type: ty.into(),
+                    description: "".into(),
+                    remove: false,
+                    declaration: None,
+                    update: false,
+                },
+            )
         })?;
     }
     for ty in [
@@ -47,15 +55,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "DATE_AND_TIME",
     ] {
         let expected_variables = doc.variable().sfc_variables(0)?;
-        doc.variable_mut().edit_sfc_variable(&SfcVariablePatch {
-            program_index: 0,
-            expected_variables,
-            name: format!("Value_{ty}"),
-            data_type: ty.into(),
-            description: "".into(),
-            remove: false,
-            declaration: None,
-            update: false,
+        doc.program_mut().get(0).and_then(|selected_program| {
+            mutation_support::edit_sfc_variable(
+                selected_program,
+                &SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables,
+                    name: format!("Value_{ty}"),
+                    data_type: ty.into(),
+                    description: "".into(),
+                    remove: false,
+                    declaration: None,
+                    update: false,
+                },
+            )
         })?;
     }
     let block = doc.program().sfc_programs().remove(0).blocks.remove(0);
@@ -66,12 +79,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     rows[4].title = "Value_BOOL".into();
     rows[2].title = "Ready".into();
     rows[2].transition_code = Some("TRANS := Count >= 10 AND Delay.Q;".into());
-    doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
-        program_index: 0,
-        block_index: 0,
-        expected_entities: block.entities,
-        expected_rows: block.editable_rows,
-        rows,
+    doc.program_mut().get(0).and_then(|selected_program| {
+        mutation_support::replace_sfc_sequence(
+            selected_program,
+            &SfcSequencePatch {
+                program_index: 0,
+                block_index: 0,
+                expected_entities: block.entities,
+                expected_rows: block.editable_rows,
+                rows,
+            },
+        )
     })?;
     std::fs::write(
         std::env::args()

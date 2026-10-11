@@ -42,13 +42,17 @@ impl XgwxDocument {
     }
 
     /// List document-bound base handles in document order.
-    /// Use [`Self::base_summaries`] for detached native summaries.
+    /// Use [`BaseView::summaries`] for detached native summaries.
     pub fn bases(&self) -> Vec<Base<'_>> {
         self.base().list()
     }
 }
 
 impl<'a> BaseView<'a> {
+    /// Detached native base summaries in document order.
+    pub fn summaries(self) -> Vec<BaseSummary> {
+        self.doc.base_summaries()
+    }
     /// List all bases as shared handles into this document.
     pub fn list(self) -> Vec<Base<'a>> {
         crate::modules::base_handles(self.doc)
@@ -86,7 +90,7 @@ impl<'a> Base<'a> {
         self.index
     }
 
-    /// Owning PLC index in [`XgwxDocument::configurations`] order, if present.
+    /// Owning PLC index in [`crate::ConfigurationView::list`] order, if present.
     pub fn configuration_index(&self) -> Option<usize> {
         self.configuration_index
     }

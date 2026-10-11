@@ -5,7 +5,7 @@ use std::{env, error::Error, io::Read};
 use xgwx::XgwxDocument;
 
 fn symbols(document: &XgwxDocument) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
-    let xml = roxmltree::Document::parse(&document.xml)?;
+    let xml = roxmltree::Document::parse(&document.container().xml())?;
     xml.descendants()
         .filter(|node| node.has_tag_name("Program"))
         .enumerate()

@@ -4,7 +4,7 @@ use std::{env, error::Error, io::Read};
 use xgwx::{VariablePatch, XgwxDocument};
 
 fn symbol_payloads(doc: &XgwxDocument) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
-    let xml = roxmltree::Document::parse(&doc.xml)?;
+    let xml = roxmltree::Document::parse(&doc.container().xml())?;
     xml.descendants()
         .filter(|node| node.has_tag_name("Symbols"))
         .map(|node| {
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 (2, "가변_이름", "길어진 변수 설명 😀".to_owned()),
                 (last, "LastVariableWithLongerName", "x".repeat(255)),
             ] {
-                doc.variable_mut().update_variable(index, &VariablePatch { name: Some(name.to_owned()), description: Some(description), ..VariablePatch::default() })?;
+                doc.variable_mut().get(index).and_then(|mut variable| variable.update(&VariablePatch { name: Some(name.to_owned()), description: Some(description), ..VariablePatch::default() }))?;
             }
             std::fs::write(output, doc.to_bytes()?)?;
             println!("generated {} variables", doc.variable().variables()?.len());

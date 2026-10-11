@@ -1,4 +1,7 @@
 //! Generate variable-length instruction edits for native XG5000 acceptance.
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use std::{error::Error, path::Path};
 use xgwx::XgwxDocument;
 fn main() -> Result<(), Box<dyn Error>> {
@@ -28,8 +31,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .find(|s| s.value == original)
             .ok_or("missing instruction")?
             .offset;
-        doc.program_mut()
-            .update_ladder_cell_text(0, offset, original, replacement)?;
+        doc.program_mut().get(0).and_then(|selected_program| {
+            mutation_support::update_cell_text(selected_program, offset, original, replacement)
+        })?;
         doc.write_to(path.join(format!("{name}.XGWX")))?;
     }
     println!("Generated F01 through F06 in {}", path.display());

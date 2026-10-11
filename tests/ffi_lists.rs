@@ -61,11 +61,11 @@ fn dedicated_lists_match_native_readers_and_reject_invalid_selectors() {
     for (selector, expected) in [
         (
             XGWX_LIST_MODULES,
-            serde_json::to_value(native.module_summaries()).unwrap(),
+            serde_json::to_value(native.module().summaries()).unwrap(),
         ),
         (
             XGWX_LIST_NETWORKS,
-            serde_json::to_value(native.networks()).unwrap(),
+            serde_json::to_value(native.network().list()).unwrap(),
         ),
         (
             XGWX_LIST_PROGRAMS,
@@ -77,7 +77,7 @@ fn dedicated_lists_match_native_readers_and_reject_invalid_selectors() {
         ),
         (
             XGWX_LIST_NETWORK_MODULES,
-            serde_json::to_value(native.network_modules()).unwrap(),
+            serde_json::to_value(native.network().module_summaries()).unwrap(),
         ),
     ] {
         assert_eq!(Value::Array(doc.list(selector)), expected);
@@ -126,7 +126,7 @@ fn edits_all_four_lists_without_touching_program_payloads() {
             .collect::<Vec<_>>()
     };
     assert_eq!(payloads(&original), payloads(&edited));
-    assert_eq!(original.trailer, edited.trailer);
+    assert_eq!(original.container().trailer(), edited.container().trailer());
 }
 
 #[cfg(feature = "write")]

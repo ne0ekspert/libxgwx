@@ -9,11 +9,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .ok_or("usage: sfc_declaration_inventory file.xgwx")?,
     )?;
     if std::env::args().nth(2).as_deref() == Some("--xml") {
-        println!("{}", doc.xml);
+        println!("{}", doc.container().xml());
         return Ok(());
     }
     let table = doc
-        .root
+        .container()
+        .root()
         .descendants_named("Program")
         .next()
         .ok_or("program")?

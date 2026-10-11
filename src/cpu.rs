@@ -9,10 +9,15 @@ use crate::XgwxError;
 #[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 #[cfg_attr(feature = "wasm", serde(rename_all = "camelCase"))]
 pub struct CpuCatalogEntry {
+    /// Cataloged native model name.
     pub model: &'static str,
+    /// CPU family used for compatibility validation.
     pub family: &'static str,
+    /// Native Configuration Type value.
     pub type_code: u32,
+    /// Maximum supported base count; valid base numbers are below this limit.
     pub max_base: u32,
+    /// Maximum physical slot count for a supported base.
     pub max_slot: u32,
 }
 
@@ -337,7 +342,7 @@ const XBM_DR16S: CpuHardwareProfile = CpuHardwareProfile {
 impl crate::XgwxDocument {
     /// Recognize the captured compact variant by CPU type and built-in module
     /// identity. `None` means unverified, not that the CPU has no fixed hardware.
-    pub fn cpu_hardware_profile(&self) -> Option<&'static CpuHardwareProfile> {
+    pub(crate) fn cpu_hardware_profile(&self) -> Option<&'static CpuHardwareProfile> {
         let configurations = self.configurations();
         if configurations.len() != 1 || configurations[0].type_code != Some(2) {
             return None;

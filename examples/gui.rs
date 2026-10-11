@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
     })?;
     let doc = XgwxDocument::from_path(&path)?;
-    let project = doc.project_info();
+    let project = doc.project().info();
     let app = LadderGui::new(
         path,
         project.name.unwrap_or_else(|| "<unnamed>".to_owned()),

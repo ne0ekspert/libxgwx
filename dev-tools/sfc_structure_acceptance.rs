@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use xgwx::{SfcRow, SfcSequencePatch, XgwxDocument};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut doc = XgwxDocument::from_path("fixtures/sfc/new-xgi-sfc.xgwx")?;
@@ -30,12 +33,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     let apply = |doc: &mut XgwxDocument, rows| {
         let expected = doc.program().sfc_programs()[0].blocks[0].entities.clone();
-        doc.program_mut().replace_sfc_sequence(&SfcSequencePatch {
-            expected_rows: None,
-            program_index: 0,
-            block_index: 0,
-            expected_entities: expected,
-            rows,
+        doc.program_mut().get(0).and_then(|selected_program| {
+            mutation_support::replace_sfc_sequence(
+                selected_program,
+                &SfcSequencePatch {
+                    expected_rows: None,
+                    program_index: 0,
+                    block_index: 0,
+                    expected_entities: expected,
+                    rows,
+                },
+            )
         })
     };
     apply(&mut doc, rows.clone())?;

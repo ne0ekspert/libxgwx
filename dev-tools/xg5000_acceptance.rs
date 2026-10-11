@@ -1,5 +1,8 @@
 //! Generate controlled edits and check their target values after XG5000 Save As.
 //! A successful host check alone does not establish XG5000 acceptance.
+#[cfg(feature = "write")]
+#[path = "fixture_patches.rs"]
+mod mutation_support;
 use std::{error::Error, fs, path::Path};
 use xgwx::{
     ModuleInputFilter, ModulePatch, NetworkModulePatch, NetworkPatch, ProgramPatch, VariablePatch,
@@ -71,55 +74,87 @@ fn documents(case: &str) -> Result<(XgwxDocument, XgwxDocument)> {
     // This derived baseline must itself pass XG5000 acceptance before insertion
     // can be attributed independently to insert_module.
     if case == "module-insert" {
-        source.delete_module(0, 2)?;
+        source
+            .module_mut()
+            .at(0, 2)
+            .and_then(|selected_record| selected_record.delete())?;
     }
     let mut edited = source.clone();
     match case {
         "noop" => {}
-        "filter" => edited.set_module_input_filter(0, 2, ModuleInputFilter::Ms5)?,
-        "module-comment" => edited.update_module(
-            0,
-            2,
-            &ModulePatch {
-                comment: Some("Acceptance & XML <test>".into()),
-                ..Default::default()
-            },
-        )?,
-        "module-replace" => edited.select_module(0, 2, "XGF-RD8A")?,
-        "module-delete" => edited.delete_module(0, 2)?,
-        "module-insert" => edited.insert_module(0, 2, "XGF-RD8A")?,
-        "network-replace" => edited.select_module(0, 2, "XGL-EDMF")?,
-        "network-name" => edited.update_network(
-            0,
-            &NetworkPatch {
-                name: Some("AcceptanceNetwork".into()),
-                ..Default::default()
-            },
-        )?,
-        "network-alias" => edited.update_network_module(
-            1,
-            11,
-            &NetworkModulePatch {
-                alias: Some("AcceptanceAlias".into()),
-                ..Default::default()
-            },
-        )?,
-        "cpu-same-family" => edited.select_cpu("XGK-CPUHN")?,
-        "compact-comment" => edited.update_module(
-            0,
-            0,
-            &ModulePatch {
-                comment: Some("CompactAcceptance".into()),
-                ..ModulePatch::default()
-            },
-        )?,
-        "program-name" => edited.program_mut().update_program(
-            0,
-            &ProgramPatch {
-                name: Some("AcceptanceProgram".into()),
-                ..Default::default()
-            },
-        )?,
+        "filter" => edited
+            .module_mut()
+            .at(0, 2)
+            .and_then(|mut selected_record| {
+                selected_record.set_input_filter(ModuleInputFilter::Ms5)
+            })?,
+        "module-comment" => edited
+            .module_mut()
+            .at(0, 2)
+            .and_then(|mut selected_record| {
+                selected_record.update(&ModulePatch {
+                    comment: Some("Acceptance & XML <test>".into()),
+                    ..Default::default()
+                })
+            })?,
+        "module-replace" => edited
+            .module_mut()
+            .at(0, 2)
+            .and_then(|mut selected_record| selected_record.select_model("XGF-RD8A"))?,
+        "module-delete" => edited
+            .module_mut()
+            .at(0, 2)
+            .and_then(|selected_record| selected_record.delete())?,
+        "module-insert" => edited
+            .base_mut()
+            .by_number(0)
+            .and_then(|mut selected_record| selected_record.insert_module(2, "XGF-RD8A"))?,
+        "network-replace" => edited
+            .module_mut()
+            .at(0, 2)
+            .and_then(|mut selected_record| selected_record.select_model("XGL-EDMF"))?,
+        "network-name" => edited
+            .network_mut()
+            .get(0)
+            .and_then(|mut selected_record| {
+                selected_record.update(&NetworkPatch {
+                    name: Some("AcceptanceNetwork".into()),
+                    ..Default::default()
+                })
+            })?,
+        "network-alias" => {
+            edited
+                .network_mut()
+                .module_at(1, 11)
+                .and_then(|mut selected_record| {
+                    selected_record.update(&NetworkModulePatch {
+                        alias: Some("AcceptanceAlias".into()),
+                        ..Default::default()
+                    })
+                })?
+        }
+        "cpu-same-family" => edited
+            .configuration_mut()
+            .get(0)
+            .and_then(|mut plc| plc.select_cpu("XGK-CPUHN"))?,
+        "compact-comment" => edited
+            .module_mut()
+            .at(0, 0)
+            .and_then(|mut selected_record| {
+                selected_record.update(&ModulePatch {
+                    comment: Some("CompactAcceptance".into()),
+                    ..ModulePatch::default()
+                })
+            })?,
+        "program-name" => edited
+            .program_mut()
+            .get(0)
+            .and_then(|mut selected_program| {
+                selected_program.update(&ProgramPatch {
+                    name: Some("AcceptanceProgram".into()),
+                    ..Default::default()
+                })
+            })?,
         "ladder-operand" => {
             let program = edited.program().ladder_programs().remove(0)?;
             let cell = program
@@ -127,17 +162,21 @@ fn documents(case: &str) -> Result<(XgwxDocument, XgwxDocument)> {
                 .iter()
                 .find(|cell| cell.value == "M00000")
                 .ok_or("baseline operand missing")?;
-            edited
-                .program_mut()
-                .update_ladder_cell_text(0, cell.offset, "M00000", "M00042")?;
+            edited.program_mut().get(0).and_then(|selected_program| {
+                mutation_support::update_cell_text(
+                    selected_program,
+                    cell.offset,
+                    "M00000",
+                    "M00042",
+                )
+            })?;
         }
-        "variable-name" => edited.variable_mut().update_variable(
-            0,
-            &VariablePatch {
+        "variable-name" => edited.variable_mut().get(0).and_then(|mut variable| {
+            variable.update(&VariablePatch {
                 name: Some("_0000_DI00".into()),
                 ..Default::default()
-            },
-        )?,
+            })
+        })?,
         _ => unreachable!(),
     }
     Ok((source, edited))
@@ -152,7 +191,8 @@ fn observation(case: &str, doc: &XgwxDocument) -> Result<String> {
             "{}\n{}\n{:?}",
             module_values(doc),
             network_values(doc),
-            doc.configurations()
+            doc.configuration()
+                .list()
                 .iter()
                 .map(|c| c.type_code)
                 .collect::<Vec<_>>()
@@ -194,7 +234,7 @@ fn observation(case: &str, doc: &XgwxDocument) -> Result<String> {
         ),
         "network-name" | "network-alias" => network_values(doc),
         "network-replace" => format!("{}\n{}\n{:#?}", module_values(doc), network_values(doc), {
-            let mut configs = doc.xgpd_config_infos();
+            let mut configs = doc.network().config_infos();
             configs.sort_by_key(|c| (c.kind.clone(), c.base, c.slot));
             for config in &mut configs {
                 config.attributes.sort_by(|a, b| a.name.cmp(&b.name));
@@ -206,7 +246,7 @@ fn observation(case: &str, doc: &XgwxDocument) -> Result<String> {
 }
 
 fn network_values(doc: &XgwxDocument) -> String {
-    let mut networks = doc.networks();
+    let mut networks = doc.network().list();
     for network in &mut networks {
         network.modules.sort_by_key(|m| (m.base, m.slot));
         network.attributes.sort_by(|a, b| a.name.cmp(&b.name));
@@ -237,8 +277,13 @@ fn normalize_runtime_name(name: &mut String) {
 }
 
 fn compact_module_values(doc: &XgwxDocument) -> String {
-    let mut modules = doc.module_summaries();
-    if let Some(profile) = doc.cpu_hardware_profile() {
+    let mut modules = doc.module().summaries();
+    if let Some(profile) = doc
+        .configuration()
+        .get(0)
+        .ok()
+        .and_then(|plc| plc.hardware_profile())
+    {
         // The unchanged 2026-09-09 native control changes only this built-in
         // SubType from 1 to 0. Never normalize other positions or variants.
         for module in &mut modules {
@@ -263,7 +308,8 @@ fn compact_module_values(doc: &XgwxDocument) -> String {
 fn module_values(doc: &XgwxDocument) -> String {
     format!(
         "{:?}",
-        doc.module_summaries()
+        doc.module()
+            .summaries()
             .iter()
             .map(|m| (
                 m.base, m.slot, m.id, m.sub_type, &m.name, &m.comment, &m.details
@@ -283,7 +329,10 @@ fn generate(directory: &Path) -> Result<()> {
         let bytes = edited.to_bytes()?;
         if *case == "filter" {
             let mut catalog_edit = source.clone();
-            catalog_edit.set_module_option(0, 2, "inputFilter", 0, 5)?;
+            catalog_edit
+                .module_mut()
+                .at(0, 2)
+                .and_then(|mut selected_record| selected_record.set_option("inputFilter", 0, 5))?;
             if catalog_edit.to_bytes()? != bytes {
                 return Err(
                     "typed and catalog input-filter writers produced different bytes".into(),

@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "support/mutation_support.rs"]
+mod mutation_support;
 use xgwx::XgwxDocument;
 const NATIVE: &[u8] = include_bytes!("../fixtures/sfc/native-loop.xgwx");
 
@@ -17,8 +20,18 @@ fn native_blank_sfc_has_one_empty_main_block() {
     let roundtrip =
         XgwxDocument::parse(include_bytes!("../fixtures/sfc/new-xgi-sfc-roundtrip.xgwx")).unwrap();
     assert_eq!(roundtrip.program().sfc_programs(), programs);
-    let original_locals = doc.root.descendants_named("LocalVar").next().unwrap();
-    let saved_locals = roundtrip.root.descendants_named("LocalVar").next().unwrap();
+    let original_locals = doc
+        .container()
+        .root()
+        .descendants_named("LocalVar")
+        .next()
+        .unwrap();
+    let saved_locals = roundtrip
+        .container()
+        .root()
+        .descendants_named("LocalVar")
+        .next()
+        .unwrap();
     // XG5000 reindents the parent, while preserving the symbol payloads verbatim.
     assert_eq!(saved_locals.attributes, original_locals.attributes);
     assert_eq!(saved_locals.children, original_locals.children);
@@ -68,11 +81,17 @@ fn condition_patch() -> xgwx::SfcEntityPatch {
 #[test]
 fn transition_updates_native_annotation_and_preserves_unrelated_xml() {
     let mut doc = XgwxDocument::parse(NATIVE).unwrap();
-    let old = doc.xml.clone();
+    let old = doc.container().xml().to_owned();
     doc.program_mut()
-        .edit_sfc_entity(&condition_patch())
+        .get((&condition_patch()).program_index)
+        .and_then(|selected_program| {
+            mutation_support::edit_sfc_entity(selected_program, &condition_patch())
+        })
         .unwrap();
-    assert_eq!(doc.xml, old.replace("Title=\"%MX0\"", "Title=\"%MX2\""));
+    assert_eq!(
+        doc.container().xml(),
+        old.replace("Title=\"%MX0\"", "Title=\"%MX2\"")
+    );
     let bytes = doc.to_verified_bytes().unwrap();
     let reparsed = XgwxDocument::parse(&bytes).unwrap();
     assert_eq!(
@@ -83,13 +102,17 @@ fn transition_updates_native_annotation_and_preserves_unrelated_xml() {
         reparsed.program().sfc_programs()[0].blocks[0].entities[8].properties["EntityStep"]["Title"],
         "%MX2"
     );
-    let after = doc.xml.clone();
+    let after = doc.container().xml().to_owned();
     assert!(
         doc.program_mut()
-            .edit_sfc_entity(&condition_patch())
+            .get((&condition_patch()).program_index)
+            .and_then(|selected_program| mutation_support::edit_sfc_entity(
+                selected_program,
+                &condition_patch()
+            ))
             .is_err()
     );
-    assert_eq!(doc.xml, after);
+    assert_eq!(doc.container().xml(), after);
 }
 
 #[cfg(feature = "write")]
@@ -105,12 +128,26 @@ fn stale_position_inconsistent_annotation_and_unknown_fields_are_atomic() {
             3 => p.entity_index = 0,
             4 => p.field = "comment".into(),
             _ => {
-                doc.xml = doc.xml.replacen("Title=\"%MX0\"", "Title=\"%MX3\"", 1);
+                {
+                    let replacement_xml =
+                        doc.container()
+                            .xml()
+                            .replacen("Title=\"%MX0\"", "Title=\"%MX3\"", 1);
+                    doc.container_mut().replace_xml(replacement_xml).unwrap();
+                };
             }
         }
-        let before = doc.xml.clone();
-        assert!(doc.program_mut().edit_sfc_entity(&p).is_err());
-        assert_eq!(doc.xml, before);
+        let before = doc.container().xml().to_owned();
+        assert!(
+            doc.program_mut()
+                .get((&p).program_index)
+                .and_then(|selected_program| mutation_support::edit_sfc_entity(
+                    selected_program,
+                    &p
+                ))
+                .is_err()
+        );
+        assert_eq!(doc.container().xml(), before);
     }
 }
 
@@ -125,7 +162,10 @@ fn step_comment_roundtrips_xml_metacharacters_and_newlines() {
     p.field = "comment".into();
     p.expected_value = "Ready for cycle".into();
     p.replacement = "Cycle & <ready> \"OK\"\n다음 단계".into();
-    doc.program_mut().edit_sfc_entity(&p).unwrap();
+    doc.program_mut()
+        .get((&p).program_index)
+        .and_then(|selected_program| mutation_support::edit_sfc_entity(selected_program, &p))
+        .unwrap();
     let reparsed = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
     assert_eq!(
         reparsed.program().sfc_programs()[0].blocks[0].entities[3].properties["EntityStep"]["Comment"],
@@ -170,10 +210,14 @@ fn native_save_as_retains_generated_chart_and_symbol_tables() {
     assert_eq!(roundtrip.program().sfc_programs(), expected);
     assert_eq!(
         roundtrip
-            .root
+            .container()
+            .root()
             .descendants_named("LocalVar")
             .collect::<Vec<_>>(),
-        doc.root.descendants_named("LocalVar").collect::<Vec<_>>()
+        doc.container()
+            .root()
+            .descendants_named("LocalVar")
+            .collect::<Vec<_>>()
     );
 }
 
@@ -183,7 +227,8 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
     use xgwx::{SfcRow, SfcSequencePatch};
     let mut doc = XgwxDocument::parse(include_bytes!("../fixtures/sfc/new-xgi-sfc.xgwx")).unwrap();
     let original_locals = doc
-        .root
+        .container()
+        .root()
         .descendants_named("LocalVar")
         .next()
         .unwrap()
@@ -249,7 +294,12 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
         expected_entities: vec![],
         rows: rows.clone(),
     };
-    doc.program_mut().replace_sfc_sequence(&patch).unwrap();
+    doc.program_mut()
+        .get((&patch).program_index)
+        .and_then(|selected_program| {
+            mutation_support::replace_sfc_sequence(selected_program, &patch)
+        })
+        .unwrap();
     let parsed = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
     let block = &parsed.program().sfc_programs()[0].blocks[0];
     assert_eq!(block.editable_rows.as_ref().unwrap(), &rows);
@@ -257,20 +307,39 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
     assert_eq!(block.entities[5].type_code, Some(2));
     assert_eq!(block.entities[6].properties["EntityStep"]["Title"], "%MX2");
     assert_eq!(
-        parsed.root.descendants_named("LocalVar").next().unwrap(),
+        parsed
+            .container()
+            .root()
+            .descendants_named("LocalVar")
+            .next()
+            .unwrap(),
         &original_locals
     );
-    let before = doc.xml.clone();
-    assert!(doc.program_mut().replace_sfc_sequence(&patch).is_err());
-    assert_eq!(doc.xml, before);
+    let before = doc.container().xml().to_owned();
+    assert!(
+        doc.program_mut()
+            .get((&patch).program_index)
+            .and_then(|selected_program| mutation_support::replace_sfc_sequence(
+                selected_program,
+                &patch
+            ))
+            .is_err()
+    );
+    assert_eq!(doc.container().xml(), before);
     let mut rows = rows;
     rows.swap(1, 2);
     doc.program_mut()
-        .replace_sfc_sequence(&SfcSequencePatch {
-            expected_rows: None,
-            expected_entities: block.entities.clone(),
-            rows: rows.clone(),
-            ..patch.clone()
+        .get(patch.program_index)
+        .and_then(|selected_program| {
+            mutation_support::replace_sfc_sequence(
+                selected_program,
+                &SfcSequencePatch {
+                    expected_rows: None,
+                    expected_entities: block.entities.clone(),
+                    rows: rows.clone(),
+                    ..patch.clone()
+                },
+            )
         })
         .unwrap();
     assert_eq!(
@@ -282,11 +351,17 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
     );
     let expected = doc.program().sfc_programs()[0].blocks[0].entities.clone();
     doc.program_mut()
-        .replace_sfc_sequence(&SfcSequencePatch {
-            expected_rows: None,
-            expected_entities: expected,
-            rows: vec![],
-            ..patch
+        .get(patch.program_index)
+        .and_then(|selected_program| {
+            mutation_support::replace_sfc_sequence(
+                selected_program,
+                &SfcSequencePatch {
+                    expected_rows: None,
+                    expected_entities: expected,
+                    rows: vec![],
+                    ..patch
+                },
+            )
         })
         .unwrap();
     assert!(
@@ -295,7 +370,11 @@ fn linear_chart_creation_reordering_and_deletion_preserve_symbols() {
             .is_empty()
     );
     assert_eq!(
-        doc.root.descendants_named("LocalVar").next().unwrap(),
+        doc.container()
+            .root()
+            .descendants_named("LocalVar")
+            .next()
+            .unwrap(),
         &original_locals
     );
 }
@@ -321,16 +400,20 @@ fn linear_chart_invalid_names_operands_targets_and_initial_steps_are_atomic() {
         }
         assert!(
             doc.program_mut()
-                .replace_sfc_sequence(&SfcSequencePatch {
-                    expected_rows: None,
-                    program_index: 0,
-                    block_index: 0,
-                    expected_entities: block.entities.clone(),
-                    rows
-                })
+                .get(0)
+                .and_then(|selected_program| mutation_support::replace_sfc_sequence(
+                    selected_program,
+                    &SfcSequencePatch {
+                        expected_rows: None,
+                        program_index: 0,
+                        block_index: 0,
+                        expected_entities: block.entities.clone(),
+                        rows
+                    }
+                ))
                 .is_err()
         );
-        assert_eq!(doc.xml, source.xml);
+        assert_eq!(doc.container().xml(), source.container().xml());
     }
 }
 
@@ -356,23 +439,30 @@ fn branches_program_references_and_unknown_native_data_fail_closed() {
         ),
     ] {
         let mut source = XgwxDocument::parse(NATIVE).unwrap();
-        assert!(source.xml.contains(before));
-        source.xml = source.xml.replacen(before, after, 1);
+        assert!(source.container().xml().contains(before));
+        {
+            let replacement_xml = source.container().xml().replacen(before, after, 1);
+            source.container_mut().replace_xml(replacement_xml).unwrap();
+        };
         let mut doc = XgwxDocument::parse(&source.to_bytes().unwrap()).unwrap();
         let block = &doc.program().sfc_programs()[0].blocks[0];
-        let original = doc.xml.clone();
+        let original = doc.container().xml().to_owned();
         assert!(
             doc.program_mut()
-                .replace_sfc_sequence(&SfcSequencePatch {
-                    expected_rows: None,
-                    program_index: 0,
-                    block_index: 0,
-                    expected_entities: block.entities.clone(),
-                    rows: vec![]
-                })
+                .get(0)
+                .and_then(|selected_program| mutation_support::replace_sfc_sequence(
+                    selected_program,
+                    &SfcSequencePatch {
+                        expected_rows: None,
+                        program_index: 0,
+                        block_index: 0,
+                        expected_entities: block.entities.clone(),
+                        rows: vec![]
+                    }
+                ))
                 .is_err()
         );
-        assert_eq!(doc.xml, original);
+        assert_eq!(doc.container().xml(), original);
     }
 }
 
@@ -402,7 +492,8 @@ fn native_structural_save_as_retains_rows_actions_initial_steps_and_symbols() {
             after[0].blocks[0].editable_rows
         );
         let local = |doc: &XgwxDocument| {
-            doc.root
+            doc.container()
+                .root()
                 .descendants_named("LocalVar")
                 .next()
                 .unwrap()
@@ -450,7 +541,12 @@ fn action_qualifiers_times_and_invalid_candidates_are_atomic() {
             expected_entities: doc.program().sfc_programs()[0].blocks[0].entities.clone(),
             rows: rows.clone(),
         };
-        doc.program_mut().replace_sfc_sequence(&patch).unwrap();
+        doc.program_mut()
+            .get((&patch).program_index)
+            .and_then(|selected_program| {
+                mutation_support::replace_sfc_sequence(selected_program, &patch)
+            })
+            .unwrap();
         let parsed = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
         let programs = parsed.program().sfc_programs();
         let block = &programs[0].blocks[0];
@@ -480,7 +576,15 @@ fn action_qualifiers_times_and_invalid_candidates_are_atomic() {
                 expected_entities: doc.program().sfc_programs()[0].blocks[0].entities.clone(),
                 rows: invalid,
             };
-            assert!(doc.program_mut().replace_sfc_sequence(&patch).is_err());
+            assert!(
+                doc.program_mut()
+                    .get((&patch).program_index)
+                    .and_then(|selected_program| mutation_support::replace_sfc_sequence(
+                        selected_program,
+                        &patch
+                    ))
+                    .is_err()
+            );
             assert_eq!(doc, before);
         }
     }
@@ -501,8 +605,18 @@ fn native_action_qualifier_save_as_retains_all_nine_types_times_and_symbols() {
         after[0].blocks[0].editable_rows
     );
     assert!(after[0].blocks[0].editable_rows.is_some());
-    let a = original.root.descendants_named("LocalVar").next().unwrap();
-    let b = saved.root.descendants_named("LocalVar").next().unwrap();
+    let a = original
+        .container()
+        .root()
+        .descendants_named("LocalVar")
+        .next()
+        .unwrap();
+    let b = saved
+        .container()
+        .root()
+        .descendants_named("LocalVar")
+        .next()
+        .unwrap();
     assert_eq!(a.attributes, b.attributes);
     assert_eq!(a.children, b.children);
     let actions: Vec<_> = after[0].blocks[0]
@@ -560,12 +674,18 @@ fn native_st_programs_decode_and_generated_sources_roundtrip() {
     );
     rows[1].action_code = Some("Count := ADD(Count, 2);\r\nDelay(IN := TRUE, PT := T#1s);".into());
     doc.program_mut()
-        .replace_sfc_sequence(&SfcSequencePatch {
-            expected_rows: block.editable_rows.clone(),
-            program_index: 0,
-            block_index: 0,
-            expected_entities: block.entities.clone(),
-            rows: rows.clone(),
+        .get(0)
+        .and_then(|selected_program| {
+            mutation_support::replace_sfc_sequence(
+                selected_program,
+                &SfcSequencePatch {
+                    expected_rows: block.editable_rows.clone(),
+                    program_index: 0,
+                    block_index: 0,
+                    expected_entities: block.entities.clone(),
+                    rows: rows.clone(),
+                },
+            )
         })
         .unwrap();
     let result = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
@@ -609,16 +729,22 @@ fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion
     ] {
         let name = format!("Var_{ty}");
         let expected = doc.variable().sfc_variables(0).unwrap();
-        doc.variable_mut()
-            .edit_sfc_variable(&SfcVariablePatch {
-                program_index: 0,
-                expected_variables: expected,
-                name: name.clone(),
-                data_type: ty.into(),
-                description: "typed declaration".into(),
-                remove: false,
-                declaration: None,
-                update: false,
+        doc.program_mut()
+            .get(0)
+            .and_then(|selected_program| {
+                mutation_support::edit_sfc_variable(
+                    selected_program,
+                    &SfcVariablePatch {
+                        program_index: 0,
+                        expected_variables: expected,
+                        name: name.clone(),
+                        data_type: ty.into(),
+                        description: "typed declaration".into(),
+                        remove: false,
+                        declaration: None,
+                        update: false,
+                    },
+                )
             })
             .unwrap();
         assert!(
@@ -633,31 +759,41 @@ fn sfc_typed_declarations_preserve_system_records_and_reject_referenced_deletion
     let bytes = doc.to_verified_bytes().unwrap();
     for name in ["Count", "Delay", "TRANS", "GOTO_INIT"] {
         assert!(
-            doc.variable_mut()
-                .edit_sfc_variable(&SfcVariablePatch {
-                    program_index: 0,
-                    expected_variables: expected.clone(),
-                    name: name.into(),
-                    data_type: "DINT".into(),
-                    description: "".into(),
-                    remove: true,
-                    declaration: None,
-                    update: false,
-                })
+            doc.program_mut()
+                .get(0)
+                .and_then(|selected_program| mutation_support::edit_sfc_variable(
+                    selected_program,
+                    &SfcVariablePatch {
+                        program_index: 0,
+                        expected_variables: expected.clone(),
+                        name: name.into(),
+                        data_type: "DINT".into(),
+                        description: "".into(),
+                        remove: true,
+                        declaration: None,
+                        update: false,
+                    }
+                ))
                 .is_err()
         );
         assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
     }
-    doc.variable_mut()
-        .edit_sfc_variable(&SfcVariablePatch {
-            program_index: 0,
-            expected_variables: expected,
-            name: "Var_WORD".into(),
-            data_type: "WORD".into(),
-            description: "".into(),
-            remove: true,
-            declaration: None,
-            update: false,
+    doc.program_mut()
+        .get(0)
+        .and_then(|selected_program| {
+            mutation_support::edit_sfc_variable(
+                selected_program,
+                &SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables: expected,
+                    name: "Var_WORD".into(),
+                    data_type: "WORD".into(),
+                    description: "".into(),
+                    remove: true,
+                    declaration: None,
+                    update: false,
+                },
+            )
         })
         .unwrap();
     assert!(
@@ -693,13 +829,26 @@ fn native_st_save_as_retains_typed_variables_blocks_and_bool_references() {
         expected_rows: Some(rows.clone()),
         rows: edited.clone(),
     };
-    doc.program_mut().replace_sfc_sequence(&patch).unwrap();
+    doc.program_mut()
+        .get((&patch).program_index)
+        .and_then(|selected_program| {
+            mutation_support::replace_sfc_sequence(selected_program, &patch)
+        })
+        .unwrap();
     assert_eq!(
         doc.program().sfc_programs()[0].blocks[0].editable_rows,
         Some(edited)
     );
     let bytes = doc.to_verified_bytes().unwrap();
-    assert!(doc.program_mut().replace_sfc_sequence(&patch).is_err());
+    assert!(
+        doc.program_mut()
+            .get((&patch).program_index)
+            .and_then(|selected_program| mutation_support::replace_sfc_sequence(
+                selected_program,
+                &patch
+            ))
+            .is_err()
+    );
     assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
 }
 
@@ -720,23 +869,30 @@ fn sfc_st_unknown_metadata_and_post_scan_actions_are_guarded() {
     ] {
         let mut source = XgwxDocument::from_path("fixtures/sfc/native-st-programs.xgwx").unwrap();
         assert!(
-            source.xml.contains(before),
+            source.container().xml().contains(before),
             "missing capture pattern {before}"
         );
-        source.xml = source.xml.replacen(before, after, 1);
+        {
+            let replacement_xml = source.container().xml().replacen(before, after, 1);
+            source.container_mut().replace_xml(replacement_xml).unwrap();
+        };
         let mut doc = XgwxDocument::parse(&source.to_bytes().unwrap()).unwrap();
         let program = doc.program().sfc_programs().remove(0);
         assert!(program.blocks[0].editable_rows.is_none());
         let bytes = doc.to_verified_bytes().unwrap();
         assert!(
             doc.program_mut()
-                .replace_sfc_sequence(&xgwx::SfcSequencePatch {
-                    program_index: 0,
-                    block_index: 0,
-                    expected_entities: program.blocks[0].entities.clone(),
-                    expected_rows: None,
-                    rows: vec![]
-                })
+                .get(0)
+                .and_then(|selected_program| mutation_support::replace_sfc_sequence(
+                    selected_program,
+                    &xgwx::SfcSequencePatch {
+                        program_index: 0,
+                        block_index: 0,
+                        expected_entities: program.blocks[0].entities.clone(),
+                        expected_rows: None,
+                        rows: vec![]
+                    }
+                ))
                 .is_err()
         );
         assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
@@ -757,17 +913,23 @@ fn sfc_cpu_conversion_updates_native_defaults_preserving_programs_and_reserved_d
     ];
     for (from, _, _, _, _) in profiles {
         let mut seed = source.clone();
-        seed.select_cpu(from).unwrap();
+        seed.configuration_mut()
+            .get(0)
+            .and_then(|mut plc| plc.select_cpu(from))
+            .unwrap();
         // Exercise all 30 model changes plus the six no-op selections.
         for (to, fixture, code, size, end) in profiles {
             let mut doc = seed.clone();
-            doc.select_cpu(to).unwrap();
+            doc.configuration_mut()
+                .get(0)
+                .and_then(|mut plc| plc.select_cpu(to))
+                .unwrap();
             assert_eq!(
-                doc.root.attribute("WksNodeCount"),
+                doc.container().root().attribute("WksNodeCount"),
                 Some(if code == 111 { "19" } else { "18" })
             );
             assert_eq!(
-                doc.configurations()[0].type_code,
+                doc.configuration().list()[0].type_code,
                 Some(code),
                 "{from} -> {to}"
             );
@@ -777,15 +939,20 @@ fn sfc_cpu_conversion_updates_native_defaults_preserving_programs_and_reserved_d
             );
             let native = XgwxDocument::from_path(format!("fixtures/sfc/{fixture}.xgwx")).unwrap();
             assert_eq!(
-                doc.configurations()[0].attribute,
+                doc.configuration().list()[0].attribute,
                 Some(if from == to {
-                    seed.configurations()[0].attribute.unwrap()
+                    seed.configuration().list()[0].attribute.unwrap()
                 } else {
-                    (seed.configurations()[0].attribute.unwrap() & !0x88000)
-                        | (native.configurations()[0].attribute.unwrap() & 0x8000)
+                    (seed.configuration().list()[0].attribute.unwrap() & !0x88000)
+                        | (native.configuration().list()[0].attribute.unwrap() & 0x8000)
                 })
             );
-            let basic = doc.root.descendants_named("XGIBasicParam").next().unwrap();
+            let basic = doc
+                .container()
+                .root()
+                .descendants_named("XGIBasicParam")
+                .next()
+                .unwrap();
             for key in [
                 "M_AREA_SIZE_0",
                 "M_AREA_SIZE_1",
@@ -798,27 +965,39 @@ fn sfc_cpu_conversion_updates_native_defaults_preserving_programs_and_reserved_d
                 assert_eq!(basic.attribute(key), Some(end));
             }
             assert_eq!(
-                doc.root.descendants_named("Safety_Comm").count(),
+                doc.container()
+                    .root()
+                    .descendants_named("Safety_Comm")
+                    .count(),
                 usize::from(code == 111)
             );
             assert_eq!(
-                doc.root.descendants_named("MotionParamInfo").count(),
+                doc.container()
+                    .root()
+                    .descendants_named("MotionParamInfo")
+                    .count(),
                 usize::from(code == 111)
             );
             assert_eq!(basic.attribute("OUTPUT_PARAMETER_RESERVED_0"), Some("2578"));
             doc = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
-            doc.select_cpu(from).unwrap();
-            let flags = seed.configurations()[0].attribute.unwrap();
+            doc.configuration_mut()
+                .get(0)
+                .and_then(|mut plc| plc.select_cpu(from))
+                .unwrap();
+            let flags = seed.configuration().list()[0].attribute.unwrap();
             let expected = if from == to {
-                seed.xml.clone()
+                seed.container().xml().to_owned()
             } else {
-                seed.xml.replacen(
+                seed.container().xml().replacen(
                     &format!("Attribute=\"{flags}\""),
                     &format!("Attribute=\"{}\"", flags & !0x80000),
                     1,
                 )
             };
-            assert!(doc.xml == expected, "{from} -> {to} -> {from}");
+            assert!(
+                doc.container().xml() == expected,
+                "{from} -> {to} -> {from}"
+            );
         }
     }
 }
@@ -829,33 +1008,57 @@ fn sfc_cpu_conversion_rejects_custom_parameters_hardware_and_unknown_models_atom
     let source = XgwxDocument::parse(NATIVE).unwrap();
     for xml in [
         source
-            .xml
+            .container()
+            .xml()
             .replace("SCAN_WD_TIME_0=\"500\"", "SCAN_WD_TIME_0=\"600\""),
-        source.xml.replace("CPUType=\"43009\"", "CPUType=\"1\""),
-        source.xml.replace(
+        source
+            .container()
+            .xml()
+            .replace("CPUType=\"43009\"", "CPUType=\"1\""),
+        source.container().xml().replace(
             "OUTPUT_PARAMETER_RESERVED_0=\"2578\"",
             "OUTPUT_PARAMETER_RESERVED_0=\"123\"",
         ),
-        source.xml.replace("SlotCount=\"12\"", "SlotCount=\"10\""),
-        source.xml.replace(
+        source
+            .container()
+            .xml()
+            .replace("SlotCount=\"12\"", "SlotCount=\"10\""),
+        source.container().xml().replace(
             "<Base Base=\"7\" SlotCount=\"12\">",
             "<Base Base=\"7\" SlotCount=\"12\"><Module Base=\"7\" Slot=\"0\" Id=\"1\" />",
         ),
-        source.xml.replace(
+        source.container().xml().replace(
             "</Parameters>",
             "<Parameter Type=\"UNKNOWN\"/></Parameters>",
         ),
     ] {
         let mut candidate = source.clone();
-        candidate.xml = xml;
+        {
+            let replacement_xml = xml;
+            candidate
+                .container_mut()
+                .replace_xml(replacement_xml)
+                .unwrap();
+        };
         let mut doc = XgwxDocument::parse(&candidate.to_bytes().unwrap()).unwrap();
         let before = doc.clone();
-        assert!(doc.select_cpu("XGI-CPUS").is_err());
+        assert!(
+            doc.configuration_mut()
+                .get(0)
+                .and_then(|mut plc| plc.select_cpu("XGI-CPUS"))
+                .is_err()
+        );
         assert_eq!(doc, before);
     }
     let mut doc = source.clone();
     for target in ["XGI-CPUS/P", "XGK-CPUSN", "XGB-XBMS"] {
-        assert!(doc.select_cpu(target).is_err(), "{target}");
+        assert!(
+            doc.configuration_mut()
+                .get(0)
+                .and_then(|mut plc| plc.select_cpu(target))
+                .is_err(),
+            "{target}"
+        );
         assert_eq!(doc, source);
     }
 }
@@ -875,8 +1078,11 @@ fn native_cpu_save_as_preserves_st_sources_and_declarations_in_all_models() {
         ("cpu-cpuun-roundtrip", 111, "XGI-CPUE"),
     ] {
         let mut native = XgwxDocument::from_path(format!("fixtures/sfc/{file}.xgwx")).unwrap();
-        assert_eq!(native.configurations()[0].type_code, Some(code));
-        assert_ne!(native.configurations()[0].attribute.unwrap() & 0x80000, 0);
+        assert_eq!(native.configuration().list()[0].type_code, Some(code));
+        assert_ne!(
+            native.configuration().list()[0].attribute.unwrap() & 0x80000,
+            0
+        );
         let actual = native.program().sfc_programs().remove(0);
         assert_eq!(actual.variables, expected.variables);
         assert_eq!(
@@ -884,8 +1090,15 @@ fn native_cpu_save_as_preserves_st_sources_and_declarations_in_all_models() {
             expected.blocks[0].editable_rows
         );
         assert_eq!(actual.variables_error, None);
-        native.select_cpu(opposite).unwrap();
-        assert_eq!(native.configurations()[0].attribute.unwrap() & 0x80000, 0);
+        native
+            .configuration_mut()
+            .get(0)
+            .and_then(|mut plc| plc.select_cpu(opposite))
+            .unwrap();
+        assert_eq!(
+            native.configuration().list()[0].attribute.unwrap() & 0x80000,
+            0
+        );
         assert_eq!(native.program().sfc_programs().remove(0), actual);
         native.to_verified_bytes().unwrap();
     }
@@ -895,32 +1108,53 @@ fn native_cpu_save_as_preserves_st_sources_and_declarations_in_all_models() {
 #[test]
 fn sfc_cpuun_migration_preserves_custom_flags_and_rejects_custom_ethernet_or_motion() {
     let mut doc = XgwxDocument::parse(NATIVE).unwrap();
-    let original_flags = doc.configurations()[0].attribute.unwrap();
-    doc.xml = doc.xml.replace(
-        &format!("Attribute=\"{original_flags}\""),
-        &format!("Attribute=\"{}\"", original_flags ^ 1),
-    );
+    let original_flags = doc.configuration().list()[0].attribute.unwrap();
+    {
+        let replacement_xml = doc.container().xml().replace(
+            &format!("Attribute=\"{original_flags}\""),
+            &format!("Attribute=\"{}\"", original_flags ^ 1),
+        );
+        doc.container_mut().replace_xml(replacement_xml).unwrap();
+    };
     doc = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
-    doc.select_cpu("XGI-CPUUN").unwrap();
+    doc.configuration_mut()
+        .get(0)
+        .and_then(|mut plc| plc.select_cpu("XGI-CPUUN"))
+        .unwrap();
     assert_eq!(
-        doc.configurations()[0].attribute.unwrap() & !0x88000,
+        doc.configuration().list()[0].attribute.unwrap() & !0x88000,
         (original_flags ^ 1) & !0x88000
     );
     for xml in [
-        doc.xml
+        doc.container()
+            .xml()
             .replace("IPAddress=\"1861920960\"", "IPAddress=\"1\""),
-        doc.xml.replace("Addr=\"100\"", "Addr=\"101\""),
-        doc.xml.replace(
+        doc.container()
+            .xml()
+            .replace("Addr=\"100\"", "Addr=\"101\""),
+        doc.container().xml().replace(
             "QlpoOTFBWSZTWeHQde4AAADAAMAAAAGgACGYGYT4WF3JFOFCQ4dB17g=",
             "UNKNOWN",
         ),
     ] {
-        assert_ne!(xml, doc.xml);
+        assert_ne!(xml, doc.container().xml());
         let mut changed = doc.clone();
-        changed.xml = xml;
+        {
+            let replacement_xml = xml;
+            changed
+                .container_mut()
+                .replace_xml(replacement_xml)
+                .unwrap();
+        };
         let mut changed = XgwxDocument::parse(&changed.to_bytes().unwrap()).unwrap();
         let original = changed.clone();
-        assert!(changed.select_cpu("XGI-CPUE").is_err());
+        assert!(
+            changed
+                .configuration_mut()
+                .get(0)
+                .and_then(|mut plc| plc.select_cpu("XGI-CPUE"))
+                .is_err()
+        );
         assert_eq!(changed, original);
     }
 }
@@ -931,16 +1165,27 @@ fn sfc_cpuun_workspace_node_count_changes_are_checked_and_atomic() {
     for (code, count, target) in [(106, "4294967295", "XGI-CPUUN"), (111, "0", "XGI-CPUE")] {
         let mut source = XgwxDocument::parse(NATIVE).unwrap();
         source
-            .select_cpu(if code == 106 { "XGI-CPUE" } else { "XGI-CPUUN" })
+            .configuration_mut()
+            .get(0)
+            .and_then(|mut plc| plc.select_cpu(if code == 106 { "XGI-CPUE" } else { "XGI-CPUUN" }))
             .unwrap();
-        let old = source.root.attribute("WksNodeCount").unwrap();
-        source.xml = source.xml.replace(
-            &format!("WksNodeCount=\"{old}\""),
-            &format!("WksNodeCount=\"{count}\""),
-        );
+        let old = source.container().root().attribute("WksNodeCount").unwrap();
+        {
+            let replacement_xml = source.container().xml().replace(
+                &format!("WksNodeCount=\"{old}\""),
+                &format!("WksNodeCount=\"{count}\""),
+            );
+            source.container_mut().replace_xml(replacement_xml).unwrap();
+        };
         let mut source = XgwxDocument::parse(&source.to_bytes().unwrap()).unwrap();
         let before = source.clone();
-        assert!(source.select_cpu(target).is_err());
+        assert!(
+            source
+                .configuration_mut()
+                .get(0)
+                .and_then(|mut plc| plc.select_cpu(target))
+                .is_err()
+        );
         assert_eq!(source, before);
     }
 }
@@ -949,12 +1194,19 @@ fn sfc_cpuun_workspace_node_count_changes_are_checked_and_atomic() {
 #[test]
 fn native_cpuun_to_cpue_change_clears_validation_state_before_checking() {
     let native = XgwxDocument::from_path("fixtures/sfc/cpu-cpuun-to-cpue-native.xgwx").unwrap();
-    assert_eq!(native.configurations()[0].type_code, Some(106));
-    assert_eq!(native.configurations()[0].attribute.unwrap() & 0x88000, 0);
-    let mut checked = XgwxDocument::from_path("fixtures/sfc/cpu-cpuun-roundtrip.xgwx").unwrap();
-    checked.select_cpu("XGI-CPUE").unwrap();
+    assert_eq!(native.configuration().list()[0].type_code, Some(106));
     assert_eq!(
-        checked.configurations()[0].attribute,
-        native.configurations()[0].attribute
+        native.configuration().list()[0].attribute.unwrap() & 0x88000,
+        0
+    );
+    let mut checked = XgwxDocument::from_path("fixtures/sfc/cpu-cpuun-roundtrip.xgwx").unwrap();
+    checked
+        .configuration_mut()
+        .get(0)
+        .and_then(|mut plc| plc.select_cpu("XGI-CPUE"))
+        .unwrap();
+    assert_eq!(
+        checked.configuration().list()[0].attribute,
+        native.configuration().list()[0].attribute
     );
 }

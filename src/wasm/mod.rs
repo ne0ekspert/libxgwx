@@ -274,7 +274,9 @@ pub fn cpu_catalog_wasm() -> Result<JsValue, JsValue> {
 pub fn select_xgwx_cpu_wasm(bytes: &[u8], model: &str) -> Result<Vec<u8>, JsValue> {
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.select_cpu(model)
+    doc.configuration_mut()
+        .get(0)
+        .and_then(|mut configuration| configuration.select_cpu(model))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -704,7 +706,9 @@ pub fn update_xgwx_variable_wasm(
         .map_err(|error| JsValue::from_str(&format!("invalid variable patch: {error}")))?;
     let mut doc =
         XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.update_variable(variable_index, &patch)
+    doc.variable_mut()
+        .get(variable_index)
+        .and_then(|mut variable| variable.update(&patch))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.to_verified_bytes()
         .map_err(|error| JsValue::from_str(&error.to_string()))
@@ -2540,8 +2544,8 @@ struct WasmCpuSummary {
 impl WasmDocumentSummary {
     fn from_document(doc: &XgwxDocument) -> Self {
         let mut warnings = Vec::new();
-        let project = doc.project_info();
-        let configurations = doc.configurations();
+        let project = doc.project().info();
+        let configurations = doc.configuration().list();
         let cpu = configurations.first().map(|configuration| {
             let entry = configuration.type_code.and_then(crate::cpu::cpu_for_type);
             WasmCpuSummary {
@@ -2555,9 +2559,9 @@ impl WasmDocumentSummary {
         let bases = doc.bases();
         let modules = doc.module_summaries();
         let programs = doc.programs();
-        let parameters = doc.parameters();
-        let safety_comm = doc.safety_comm();
-        let position_parameters = doc.position_parameters();
+        let parameters = doc.parameter().summaries();
+        let safety_comm = doc.safety().first().map(|record| record.summary());
+        let position_parameters = doc.parameter().position();
         let variable_summaries = match doc.variables() {
             Ok(variables) => Some(variables),
             Err(error) => {
@@ -2626,7 +2630,8 @@ impl WasmDocumentSummary {
         let (ladder, ladder_errors) = decode_browser_ladder(doc, programs.len(), &mut warnings);
         let ladder_program_count = ladder.len();
         let hsc = doc
-            .hsc_parameters()
+            .parameter()
+            .hsc()
             .into_iter()
             .filter_map(|result| match result {
                 Ok(parameter) => Some(WasmHscSummary::from_parameter(parameter)),
@@ -2636,8 +2641,8 @@ impl WasmDocumentSummary {
                 }
             })
             .collect::<Vec<_>>();
-        let pid_cal = doc.pid_cal_parameters();
-        let pid_tune = doc.pid_tune_parameters();
+        let pid_cal = doc.parameter().pid().calculation();
+        let pid_tune = doc.parameter().pid().tuning();
         let cnet_configs = doc.cnet_config_infos();
         let fenet_configs = doc.fenet_config_infos();
         let xgpd_configs = doc.xgpd_config_infos();
@@ -2690,7 +2695,11 @@ impl WasmDocumentSummary {
                 })
                 .collect(),
             hardware: WasmHardwareSummary {
-                cpu_profile: doc.cpu_hardware_profile(),
+                cpu_profile: doc
+                    .configuration()
+                    .get(0)
+                    .ok()
+                    .and_then(|configuration| configuration.hardware_profile()),
                 typed_modules: doc
                     .modules()
                     .into_iter()
@@ -2763,7 +2772,8 @@ fn decode_browser_ladder(
     let mut decoded_bytes = 0usize;
     let mut item_count = 0usize;
     let cpu_model = doc
-        .configurations()
+        .configuration()
+        .list()
         .first()
         .and_then(|configuration| configuration.type_code)
         .and_then(crate::cpu::cpu_for_type)
@@ -2890,7 +2900,7 @@ mod tests {
     fn browser_summary_preserves_parameter_details() {
         let doc =
             XgwxDocument::from_path("fixtures/XGB_Enet02.xgwx").expect("fixture should parse");
-        let parameter_count = doc.parameters().len();
+        let parameter_count = doc.parameter().summaries().len();
         let summary = WasmDocumentSummary::from_document(&doc);
 
         assert_eq!(summary.parameters.len(), parameter_count);

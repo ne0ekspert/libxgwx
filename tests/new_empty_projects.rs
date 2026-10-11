@@ -86,13 +86,21 @@ fn native_blank_projects_accept_network_module_in_first_slot() {
             .project_type
             == Some(2)
         {
-            let original = doc.xml.clone();
-            assert!(doc.insert_module(0, 0, "XGL-EFMT(B)").is_err());
-            assert_eq!(doc.xml, original);
+            let original = doc.container().xml().to_owned();
+            assert!(
+                doc.base_mut()
+                    .by_number(0)
+                    .and_then(|mut selected_record| selected_record.insert_module(0, "XGL-EFMT(B)"))
+                    .is_err()
+            );
+            assert_eq!(doc.container().xml(), original);
             continue;
         }
         let before = doc.program().ladder_programs().remove(0).unwrap().data;
-        doc.insert_module(0, 0, "XGL-EFMT(B)").unwrap();
+        doc.base_mut()
+            .by_number(0)
+            .and_then(|mut selected_record| selected_record.insert_module(0, "XGL-EFMT(B)"))
+            .unwrap();
         let reparsed = XgwxDocument::parse(&doc.to_bytes().unwrap()).unwrap();
         assert_eq!(
             reparsed.program().ladder_programs().remove(0).unwrap().data,
@@ -100,7 +108,8 @@ fn native_blank_projects_accept_network_module_in_first_slot() {
         );
         assert_eq!(
             reparsed
-                .networks()
+                .network()
+                .list()
                 .iter()
                 .flat_map(|n| &n.modules)
                 .filter(|m| m.base == Some(0) && m.slot == Some(0) && m.id == Some(23041))
@@ -108,9 +117,12 @@ fn native_blank_projects_accept_network_module_in_first_slot() {
             1
         );
         assert_eq!(reparsed.network().fenet_config_infos().len(), 1);
-        doc.delete_module(0, 0).unwrap();
+        doc.module_mut()
+            .at(0, 0)
+            .and_then(|selected_record| selected_record.delete())
+            .unwrap();
         assert!(doc.network().fenet_config_infos().is_empty());
-        assert!(doc.networks().iter().all(|n| n.modules.is_empty()));
+        assert!(doc.network().list().iter().all(|n| n.modules.is_empty()));
     }
 }
 

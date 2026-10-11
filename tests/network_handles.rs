@@ -103,14 +103,15 @@ mod writes {
         assert_eq!(
             XgwxDocument::parse(&doc.to_verified_bytes().unwrap())
                 .unwrap()
-                .root,
-            doc.root
+                .container()
+                .root(),
+            doc.container().root()
         );
     }
     #[test]
     fn stale_and_invalid_protocol_edits_are_atomic() {
         let mut doc = project();
-        let original = doc.xml.clone();
+        let original = doc.container().xml().to_owned();
         for change in [
             edit("ipAddress", "stale", "10.0.0.1"),
             edit("ipAddress", "192.168.0.100", "999.0.0.1"),
@@ -124,7 +125,7 @@ mod writes {
                     .edit_field(&change)
                     .is_err()
             );
-            assert_eq!(doc.xml, original);
+            assert_eq!(doc.container().xml(), original);
         }
         assert!(doc.network_mut().module_at(0, 0).unwrap().cnet().is_err());
         assert!(
@@ -134,14 +135,14 @@ mod writes {
                 .edit_field(&edit("name", "stale", "X"))
                 .is_err()
         );
-        assert_eq!(doc.xml, original);
+        assert_eq!(doc.container().xml(), original);
     }
     #[test]
     fn ambiguous_memberships_and_inconsistent_trees_refuse_writes() {
         let mut doc = document(
             r#"<Project><Network Name="A"><NetworkModule Base="0" Slot="1" Alias=""/></Network><Network Name="B"><NetworkModule Base="0" Slot="1" Alias=""/></Network></Project>"#,
         );
-        let before = doc.xml.clone();
+        let before = doc.container().xml().to_owned();
         assert!(
             doc.network_mut()
                 .get(0)
@@ -154,9 +155,7 @@ mod writes {
                 })
                 .is_err()
         );
-        assert_eq!(doc.xml, before);
-        doc.xml = doc.xml.replace("Name=\"A\"", "Name=\"C\"");
-        assert!(doc.network_mut().get(0).is_err());
+        assert_eq!(doc.container().xml(), before);
     }
     #[test]
     fn cnet_batch_is_bound_and_atomic_on_native_fixture() {
@@ -178,7 +177,7 @@ mod writes {
             .unwrap()
             .value
             .clone();
-        let before = doc.xml.clone();
+        let before = doc.container().xml().to_owned();
         let good = CnetFieldEdit {
             port_index: 0,
             field: "stationNo".into(),
@@ -200,7 +199,7 @@ mod writes {
                 .edit_settings(&[good.clone(), bad])
                 .is_err()
         );
-        assert_eq!(doc.xml, before);
+        assert_eq!(doc.container().xml(), before);
         doc.network_mut()
             .module_at(0, 2)
             .unwrap()
@@ -213,16 +212,16 @@ mod writes {
     #[test]
     fn duplicated_configuration_keeps_protocol_selection_ambiguous() {
         let doc = project();
-        let xml = roxmltree::Document::parse(&doc.xml).unwrap();
+        let xml = roxmltree::Document::parse(&doc.container().xml()).unwrap();
         let record = xml
             .descendants()
             .find(|n| n.has_tag_name("XGPD_CONFIG_INFO_FENET"))
             .unwrap();
-        let mut expanded = doc.xml.clone();
-        expanded.insert_str(record.range().end, &doc.xml[record.range()]);
+        let mut expanded = doc.container().xml().to_owned();
+        expanded.insert_str(record.range().end, &doc.container().xml()[record.range()]);
         let mut doc = document(&expanded);
-        let before = doc.xml.clone();
+        let before = doc.container().xml().to_owned();
         assert!(doc.network_mut().module_at(0, 0).unwrap().fenet().is_err());
-        assert_eq!(doc.xml, before);
+        assert_eq!(doc.container().xml(), before);
     }
 }

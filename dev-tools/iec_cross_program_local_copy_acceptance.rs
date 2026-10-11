@@ -38,8 +38,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut collision = document.clone();
     collision
-        .variable_mut()
-        .insert_iec_local_symbol(6, "COLLIDE", "BOOL", "")?;
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .insert("COLLIDE", "BOOL", "")
+        })?;
     let collision_index = collision
         .variable()
         .iec_local_symbols()
@@ -47,13 +52,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .iter()
         .position(|item| item.name == "COLLIDE")
         .ok_or("collision symbol missing")?;
-    collision.variable_mut().update_iec_local_symbol_address(
-        6,
-        collision_index,
-        "COLLIDE",
-        "",
-        "%MX8",
-    )?;
+    collision
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .update_address(collision_index, "COLLIDE", "", "%MX8")
+        })?;
     let collision_before = collision.to_bytes()?;
     if collision
         .program_mut()
@@ -70,8 +76,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut incompatible = document.clone();
     incompatible
-        .variable_mut()
-        .insert_iec_local_symbol(6, "ON", "INT", "")?;
+        .program_mut()
+        .get(6)
+        .and_then(|mut selected_program| selected_program.variable_mut().insert("ON", "INT", ""))?;
     let incompatible_before = incompatible.to_bytes()?;
     if incompatible
         .program_mut()
@@ -101,12 +108,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             .iter()
             .find(|item| item.name == name)
             .ok_or("source local missing")?;
-        document.variable_mut().insert_iec_local_symbol(
-            6,
-            name,
-            "BOOL",
-            source_symbol.description.as_deref().unwrap_or(""),
-        )?;
+        document
+            .program_mut()
+            .get(6)
+            .and_then(|mut selected_program| {
+                selected_program.variable_mut().insert(
+                    name,
+                    "BOOL",
+                    source_symbol.description.as_deref().unwrap_or(""),
+                )
+            })?;
         let index = document
             .variable()
             .iec_local_symbols()
@@ -115,8 +126,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             .position(|item| item.name == name)
             .ok_or("new symbol missing")?;
         document
-            .variable_mut()
-            .update_iec_local_symbol_address(6, index, name, "", address)?;
+            .program_mut()
+            .get(6)
+            .and_then(|mut selected_program| {
+                selected_program
+                    .variable_mut()
+                    .update_address(index, name, "", address)
+            })?;
     }
     document
         .program_mut()

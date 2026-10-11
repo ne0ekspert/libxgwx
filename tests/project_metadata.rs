@@ -5,26 +5,30 @@ use xgwx::XgwxDocument;
 fn rename_project_checks_expected_name_and_preserves_every_other_byte() {
     let bytes = include_bytes!("../fixtures/empty-projects/new-xgk.xgwx");
     let mut doc = XgwxDocument::parse(bytes).unwrap();
-    let before = doc.xml.clone();
+    let before = doc.container().xml().to_owned();
     for (expected, name) in [
         ("stale", "Machine"),
         ("NewProject", "  "),
         ("NewProject", "bad\nname"),
     ] {
-        assert!(doc.rename_project(expected, name).is_err());
-        assert_eq!(doc.xml, before);
+        assert!(doc.project_mut().rename_if(expected, name).is_err());
+        assert_eq!(doc.container().xml(), before);
     }
-    doc.rename_project("NewProject", "NewProject").unwrap();
+    doc.project_mut()
+        .rename_if("NewProject", "NewProject")
+        .unwrap();
     assert_eq!(doc.to_verified_bytes().unwrap(), bytes);
-    doc.rename_project("NewProject", "공장 & <Line 1>").unwrap();
-    assert_eq!(doc.project_name(), Some("공장 & <Line 1>"));
+    doc.project_mut()
+        .rename_if("NewProject", "공장 & <Line 1>")
+        .unwrap();
+    assert_eq!(doc.project().name(), Some("공장 & <Line 1>"));
     assert_eq!(
-        doc.xml,
+        doc.container().xml(),
         before.replacen("NewProject", "공장 &amp; &lt;Line 1&gt;", 1)
     );
     let serialized = doc.to_verified_bytes().unwrap();
     assert_eq!(
-        XgwxDocument::parse(&serialized).unwrap().project_name(),
+        XgwxDocument::parse(&serialized).unwrap().project().name(),
         Some("공장 & <Line 1>")
     );
 }

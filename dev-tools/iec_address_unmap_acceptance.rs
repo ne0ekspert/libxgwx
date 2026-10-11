@@ -15,8 +15,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let source_bytes = fs::read(source)?;
     let mut generated = XgwxDocument::parse(&source_bytes)?;
     generated
-        .variable_mut()
-        .update_iec_local_symbol_address(0, 5, "ON", "%MX8", "")?;
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .update_address(5, "ON", "%MX8", "")
+        })?;
     let generated_bytes = generated.to_bytes()?;
     let native = XgwxDocument::from_path(native)?;
     assert_equivalent(&generated, &native, "native unmap")?;
@@ -29,8 +34,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut restored = XgwxDocument::parse(&generated_bytes)?;
     restored
-        .variable_mut()
-        .update_iec_local_symbol_address(0, 5, "ON", "", "%MX8")?;
+        .program_mut()
+        .get(0)
+        .and_then(|mut selected_program| {
+            selected_program
+                .variable_mut()
+                .update_address(5, "ON", "", "%MX8")
+        })?;
     let restored = XgwxDocument::parse(&restored.to_bytes()?)?;
     let original = XgwxDocument::parse(&source_bytes)?;
     if restored

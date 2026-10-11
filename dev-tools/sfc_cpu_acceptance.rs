@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = XgwxDocument::from_path(input)?;
     let source_model = xgwx::cpu_catalog()
         .iter()
-        .find(|cpu| Some(cpu.type_code) == source.configurations()[0].type_code)
+        .find(|cpu| Some(cpu.type_code) == source.configuration().list()[0].type_code)
         .unwrap()
         .model;
     for (model, stem) in [
@@ -22,14 +22,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("XGI-CPUUN", "CPUUNGEN"),
     ] {
         let mut doc = source.clone();
-        doc.select_cpu(model)?;
+        doc.configuration_mut()
+            .get(0)
+            .and_then(|mut plc| plc.select_cpu(model))?;
         std::fs::write(format!("{directory}/{stem}.xgwx"), doc.to_verified_bytes()?)?;
-        doc.select_cpu(source_model)?;
+        doc.configuration_mut()
+            .get(0)
+            .and_then(|mut plc| plc.select_cpu(source_model))?;
         assert_eq!(
             doc.program().sfc_programs(),
             source.program().sfc_programs()
         );
-        let mut expected_configurations = source.configurations();
+        let mut expected_configurations = source.configuration().list();
         if model != source_model {
             let flags = expected_configurations[0].attribute.unwrap();
             expected_configurations[0].attribute = Some(flags & !0x80000);
@@ -40,21 +44,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap()
                 .value = (flags & !0x80000).to_string();
         }
-        assert_eq!(doc.configurations(), expected_configurations);
+        assert_eq!(doc.configuration().list(), expected_configurations);
         assert_eq!(
-            doc.root.attribute("WksNodeCount"),
-            source.root.attribute("WksNodeCount")
+            doc.container().root().attribute("WksNodeCount"),
+            source.container().root().attribute("WksNodeCount")
         );
         // Native Save As reindents CPUUN-only default sections. Recreating
         // them can normalize that whitespace while preserving their settings.
         if source_model != "XGI-CPUUN" {
             assert!(
-                doc.xml
+                doc.container().xml()
                     == if model == source_model {
-                        source.xml.clone()
+                        source.container().xml().to_owned()
                     } else {
-                        let flags = source.configurations()[0].attribute.unwrap();
-                        source.xml.replacen(
+                        let flags = source.configuration().list()[0].attribute.unwrap();
+                        source.container().xml().replacen(
                             &format!("Attribute=\"{flags}\""),
                             &format!("Attribute=\"{}\"", flags & !0x80000),
                             1,

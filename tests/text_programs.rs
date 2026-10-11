@@ -1,3 +1,6 @@
+#[cfg(feature = "write")]
+#[path = "support/mutation_support.rs"]
+mod mutation_support;
 use xgwx::XgwxDocument;
 const BLANK: &[u8] = include_bytes!("../fixtures/text-programs/native-blank.xgwx");
 #[test]
@@ -37,7 +40,12 @@ fn edits_preserve_other_programs_and_metadata_and_reject_stale_or_unknown_layout
             expected_source: String::new(),
             source: source.into(),
         };
-        doc.program_mut().edit_text_program(&patch).unwrap();
+        doc.program_mut()
+            .get((&patch).program_index)
+            .and_then(|selected_program| {
+                mutation_support::edit_text_program(selected_program, &patch)
+            })
+            .unwrap();
         let saved = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
         assert_eq!(
             saved
@@ -63,11 +71,12 @@ fn edits_preserve_other_programs_and_metadata_and_reject_stale_or_unknown_layout
                 .remove(text.program_index)
                 .unwrap()
         );
-        assert_eq!(doc.trailer, original.trailer);
+        assert_eq!(doc.container().trailer(), original.container().trailer());
         for (i, (a, b)) in saved
-            .root
+            .container()
+            .root()
             .descendants_named("Program")
-            .zip(original.root.descendants_named("Program"))
+            .zip(original.container().root().descendants_named("Program"))
             .enumerate()
         {
             if i != text.program_index {
@@ -75,7 +84,15 @@ fn edits_preserve_other_programs_and_metadata_and_reject_stale_or_unknown_layout
             }
         }
         let unchanged = doc.clone();
-        assert!(doc.program_mut().edit_text_program(&patch).is_err());
+        assert!(
+            doc.program_mut()
+                .get((&patch).program_index)
+                .and_then(|selected_program| mutation_support::edit_text_program(
+                    selected_program,
+                    &patch
+                ))
+                .is_err()
+        );
         assert_eq!(doc, unchanged);
         for bad in [
             TextProgramPatch {
@@ -96,22 +113,43 @@ fn edits_preserve_other_programs_and_metadata_and_reject_stale_or_unknown_layout
             },
         ] {
             let mut rejected = original.clone();
-            assert!(rejected.program_mut().edit_text_program(&bad).is_err());
+            assert!(
+                rejected
+                    .program_mut()
+                    .get((&bad).program_index)
+                    .and_then(|selected_program| mutation_support::edit_text_program(
+                        selected_program,
+                        &bad
+                    ))
+                    .is_err()
+            );
             assert_eq!(rejected, original);
         }
         let mut reverse = patch.clone();
         reverse.expected_source = source.into();
         reverse.source.clear();
-        doc.program_mut().edit_text_program(&reverse).unwrap();
+        doc.program_mut()
+            .get((&reverse).program_index)
+            .and_then(|selected_program| {
+                mutation_support::edit_text_program(selected_program, &reverse)
+            })
+            .unwrap();
         assert_eq!(
             doc.program().text_programs(),
             original.program().text_programs()
         );
     }
     let mut unknown = original.clone();
-    unknown.xml = unknown
-        .xml
-        .replace("<Bookmarks>", "<Bookmarks><Bookmark Line=\"1\"/>");
+    {
+        let replacement_xml = unknown
+            .container()
+            .xml()
+            .replace("<Bookmarks>", "<Bookmarks><Bookmark Line=\"1\"/>");
+        unknown
+            .container_mut()
+            .replace_xml(replacement_xml)
+            .unwrap();
+    };
     // Reparse a modified container so the XML tree and source agree.
     unknown = xgwx::XgwxDocument::parse(&unknown.to_bytes().unwrap()).unwrap();
     assert!(
@@ -131,7 +169,7 @@ fn native_templates_create_st_and_il_with_fresh_identities() {
             XgwxDocument::parse(include_bytes!("../fixtures/empty-projects/new-xgi.xgwx")).unwrap();
         let before = doc.clone();
         doc.program_mut()
-            .create_program(&NewProgram {
+            .create(&NewProgram {
                 name: "AddedText".into(),
                 language: language.into(),
                 object_id: "abcd0001-1234-4567-89ab-0123456789ab".into(),
@@ -173,13 +211,20 @@ fn source_declarations_use_iec_records_and_protect_references() {
         };
         let unchanged = doc.clone();
         assert!(
-            doc.variable_mut()
-                .edit_text_variable("stale", &patch)
+            doc.program_mut()
+                .get_if((&patch).program_index, "stale")
+                .and_then(|selected_program| mutation_support::edit_text_variable(
+                    selected_program,
+                    &patch
+                ))
                 .is_err()
         );
         assert_eq!(doc, unchanged);
-        doc.variable_mut()
-            .edit_text_variable(&text.object_id, &patch)
+        doc.program_mut()
+            .get_if((&patch).program_index, &text.object_id)
+            .and_then(|selected_program| {
+                mutation_support::edit_text_variable(selected_program, &patch)
+            })
             .unwrap();
         let current = doc
             .program()
@@ -196,12 +241,18 @@ fn source_declarations_use_iec_records_and_protect_references() {
             "LD 1\nST Count"
         };
         doc.program_mut()
-            .edit_text_program(&TextProgramPatch {
-                program_index: index,
-                expected_object_id: text.object_id.clone(),
-                expected_language: text.language,
-                expected_source: String::new(),
-                source: source.into(),
+            .get(index)
+            .and_then(|selected_program| {
+                mutation_support::edit_text_program(
+                    selected_program,
+                    &TextProgramPatch {
+                        program_index: index,
+                        expected_object_id: text.object_id.clone(),
+                        expected_language: text.language,
+                        expected_source: String::new(),
+                        source: source.into(),
+                    },
+                )
             })
             .unwrap();
         let mut remove = patch;
@@ -209,8 +260,12 @@ fn source_declarations_use_iec_records_and_protect_references() {
         remove.remove = true;
         let unchanged = doc.clone();
         assert!(
-            doc.variable_mut()
-                .edit_text_variable(&text.object_id, &remove)
+            doc.program_mut()
+                .get_if((&remove).program_index, &text.object_id)
+                .and_then(|selected_program| mutation_support::edit_text_variable(
+                    selected_program,
+                    &remove
+                ))
                 .is_err()
         );
         assert_eq!(doc, unchanged);
