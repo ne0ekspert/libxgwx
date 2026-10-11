@@ -50,6 +50,12 @@ conversion. The writer now rejects it; the current generator replaces it with
 `compact-comment`. CPU verification now also compares retained hardware and
 network records. See [CPU hardware validation](cpu-hardware-validation.md).
 
+## Object API run: 2026-10-11
+
+The [current object API acceptance report](xg5000-object-api-20261011.md)
+records 14 successful native program checks and 13 retained target values.
+The default-network rename remains a native persistence failure.
+
 ## Run: 2026-09-08
 
 - Library baseline: `c6414f441e577e728011e66aae75e2fa2242da5b` plus this
