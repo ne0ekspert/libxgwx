@@ -10,6 +10,22 @@ The parser handles the container layout observed in LS XG5000 workspace files:
 
 Unknown binary sections are preserved so callers can inspect them later.
 
+## Known limitations
+
+### Default-network names are not preserved by XG5000
+
+In native tests with XG5000 **4.82.1.0**, changing the tested default network's
+XML name from `기본 네트워크` to `AcceptanceNetwork` did not change its displayed
+name. XG5000 restored `기본 네트워크` when saving the workspace. The library's
+network editor can update that XML field, but a successful local edit or parser
+round trip does not establish that XG5000 will preserve the new name.
+
+This result applies to the tested default network with
+`Type="NETWORK ITEM:UNKNOWN"`. It does not establish that all network types have
+fixed names or that renaming through XG5000's own UI is supported. See the
+[native acceptance report](https://github.com/ne0ekspert/libxgwx/blob/master/docs/xg5000-object-api-20261011.md)
+for the observed behavior and test scope.
+
 ## Usage
 
 Add the package with `cargo add libxgwx`; import it as `xgwx`. Optional features
