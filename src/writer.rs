@@ -969,8 +969,8 @@ impl XgwxDocument {
     /// This updates the authoritative `<Configuration Type>` value while
     /// preserving the existing basic parameters, programs, hardware, and
     /// network configuration. XGK changes require retained hardware to fit.
-    /// Captured XGI model changes support validated SFC, ST and IL projects with default
-    /// parameters and empty I/O tables. Other model changes require
+    /// Captured XGI model changes support IEC LD, SFC, ST and IL projects with default
+    /// parameters and compatible rack modules. Other model changes require
     /// a migration and are rejected. Selecting the current type is a no-op.
     pub(crate) fn select_cpu(&mut self, model: &str) -> Result<(), XgwxError> {
         let entry = crate::cpu::find_cpu(model)?;
@@ -1055,9 +1055,17 @@ impl XgwxDocument {
         let charts = self.sfc_programs();
         let sources = self.text_programs();
         let program_count = self.programs().len();
+        let ladders = self
+            .programs()
+            .into_iter()
+            .zip(self.ladder_programs())
+            .filter(|(program, _)| program.kind == Some(0))
+            .filter_map(|(_, ladder)| ladder.ok())
+            .filter(|p| p.project_type == Some(2) && p.version.as_deref() == Some("LD VER 1.1"))
+            .count();
         if self.configurations().len() != 1
             || program_count == 0
-            || charts.len() + sources.len() != program_count
+            || charts.len() + sources.len() + ladders != program_count
             || charts.iter().any(|p| {
                 p.variables_error.is_some()
                     || !p.blocks.iter().any(|b| b.main && b.editable_rows.is_some())
@@ -1067,13 +1075,51 @@ impl XgwxDocument {
                 .any(|p| !p.editable || p.variables_error.is_some())
         {
             return Err(unsupported(
-                "the workspace must contain only supported SFC, ST or IEC IL programs in one configuration",
+                "the workspace must contain only supported IEC LD, SFC, ST or IEC IL programs in one configuration",
             ));
         }
-        if !self.module_summaries().is_empty() || !self.network_modules().is_empty() {
-            return Err(unsupported(
-                "configured I/O and network modules require a hardware migration",
-            ));
+        // XGI uses the same rack module records as XGK. Retain all hardware,
+        // checking actual occupied slots (native defaults list eight empty bases
+        // even on CPUE). Never silently drop expansion modules on a downgrade.
+        for module in self.module_summaries() {
+            let base = module
+                .base
+                .ok_or_else(|| unsupported("module has no base"))?;
+            let slot = module
+                .slot
+                .ok_or_else(|| unsupported("module has no slot"))?;
+            let entry = crate::xgk_module_catalog()
+                .iter()
+                .find(|e| module.id == Some(e.id) && module.sub_type == Some(e.sub_type))
+                .ok_or(XgwxError::ModuleCatalogMismatch { base, slot })?;
+            Self::validate_cpu_position(target, base, slot, entry.slot_span)?;
+        }
+        let io = self
+            .root
+            .descendants_named("Parameter")
+            .filter(|p| p.attribute("Type") == Some("IO PARAMETER"))
+            .collect::<Vec<_>>();
+        if io.len() != 1
+            || io[0]
+                .children
+                .iter()
+                .filter(|p| p.name == "BaseInfo")
+                .count()
+                != 1
+        {
+            return Err(unsupported("missing or ambiguous I/O base information"));
+        }
+        let mut bases = std::collections::HashSet::new();
+        for base in self.base_summaries() {
+            let number = base
+                .base
+                .ok_or_else(|| unsupported("missing base number"))?;
+            let slots = base
+                .slot_count
+                .ok_or_else(|| unsupported("missing base slot count"))?;
+            if !bases.insert(number) || number >= 8 || ![4, 6, 8, 10, 12].contains(&slots) {
+                return Err(unsupported("invalid or ambiguous I/O base information"));
+            }
         }
         let profiles = defaults
             .iter()
@@ -1127,6 +1173,11 @@ impl XgwxDocument {
                 element.attributes.retain(|a| {
                     !(0..5).any(|i| a.name == format!("OUTPUT_PARAMETER_RESERVED_{i}"))
                 });
+            }
+            if element.name == "Parameter" && element.attribute("Type") == Some("IO PARAMETER") {
+                element
+                    .children
+                    .retain(|child| child.name != "Module" && child.name != "BaseInfo");
             }
             element.attributes.sort_by(|a, b| a.name.cmp(&b.name));
             element.children = element.children.into_iter().map(normalized).collect();
@@ -1279,6 +1330,7 @@ impl XgwxDocument {
         }
         let mut candidate = self.clone();
         candidate.apply_xml_replacements(replacements)?;
+        candidate.to_verified_bytes()?;
         *self = candidate;
         Ok(())
     }
@@ -1291,7 +1343,7 @@ impl XgwxDocument {
         base: u32,
         slot_count: u32,
     ) -> Result<(), XgwxError> {
-        let cpu = self.require_xgk_hardware()?;
+        let cpu = self.require_rack_hardware()?;
         if ![4, 6, 8, 10, 12].contains(&slot_count) {
             return Err(XgwxError::InvalidBaseSlotCount { base, slot_count });
         }
@@ -1359,7 +1411,7 @@ impl XgwxDocument {
         slot: u32,
         model: &str,
     ) -> Result<(), XgwxError> {
-        self.require_xgk_hardware()?;
+        self.require_rack_hardware()?;
         let entry = crate::catalog::find_xgk_module(model)?;
         let mut changed = self.clone();
         changed.validate_empty_module_placement(base, slot, entry.slot_span)?;
@@ -1454,7 +1506,7 @@ impl XgwxDocument {
         slot: u32,
         model: &str,
     ) -> Result<(), XgwxError> {
-        self.require_xgk_hardware()?;
+        self.require_rack_hardware()?;
         let entry = crate::catalog::find_xgk_module(model)?;
         let mut changed = self.clone();
         changed.validate_module_placement(base, slot, entry.slot_span)?;
@@ -1535,9 +1587,9 @@ impl XgwxDocument {
         crate::cpu::cpu_for_type(type_code).ok_or(XgwxError::UnsupportedCpuHardware { type_code })
     }
 
-    fn require_xgk_hardware(&self) -> Result<&'static CpuCatalogEntry, XgwxError> {
+    fn require_rack_hardware(&self) -> Result<&'static CpuCatalogEntry, XgwxError> {
         let cpu = self.hardware_cpu()?;
-        if cpu.family != "XGK" {
+        if !matches!(cpu.family, "XGK" | "XGI") || cpu.type_code == 110 {
             return Err(XgwxError::UnsupportedCpuHardware {
                 type_code: cpu.type_code,
             });
@@ -1551,7 +1603,7 @@ impl XgwxDocument {
         }) {
             return Err(XgwxError::FixedCpuModule { base, slot });
         }
-        self.require_xgk_hardware()?;
+        self.require_rack_hardware()?;
         Ok(())
     }
 
@@ -1623,7 +1675,7 @@ impl XgwxDocument {
                 conflicting_slot,
             });
         }
-        Self::validate_cpu_position(self.require_xgk_hardware()?, base, slot, slot_span)?;
+        Self::validate_cpu_position(self.require_rack_hardware()?, base, slot, slot_span)?;
         Ok(())
     }
 
@@ -1688,7 +1740,7 @@ impl XgwxDocument {
                 conflicting_slot,
             });
         }
-        Self::validate_cpu_position(self.require_xgk_hardware()?, base, slot, slot_span)?;
+        Self::validate_cpu_position(self.require_rack_hardware()?, base, slot, slot_span)?;
         Ok(())
     }
 
@@ -1762,7 +1814,7 @@ impl XgwxDocument {
         base: u32,
         slot: u32,
     ) -> Result<(&'static ModuleCatalogEntry, String), XgwxError> {
-        self.require_xgk_hardware()?;
+        self.require_rack_hardware()?;
         let matches = self
             .module_summaries()
             .into_iter()
@@ -1807,7 +1859,7 @@ impl XgwxDocument {
             self.validate_hardware_identity_edit(base, slot)?;
         }
         if patch.details.is_some() {
-            self.require_xgk_hardware()?;
+            self.require_rack_hardware()?;
         }
         if let Some(details) = &patch.details {
             validate_module_details(details)?;
@@ -1897,7 +1949,7 @@ impl XgwxDocument {
         slot: u32,
         filter: ModuleInputFilter,
     ) -> Result<(), XgwxError> {
-        self.require_xgk_hardware()?;
+        self.require_rack_hardware()?;
         let matches = self
             .module_summaries()
             .into_iter()

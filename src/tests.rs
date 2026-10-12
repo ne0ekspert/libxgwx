@@ -15326,7 +15326,7 @@ fn browser_hardware_edits_are_bounded_and_atomic() {
         assert!(doc.edit_browser_hardware(&p).is_err());
         assert_eq!(doc.to_verified_bytes().unwrap(), original);
     }
-    let unverified = doc.xml.replace("Type=\"17\"", "Type=\"100\"");
+    let unverified = doc.xml.replace("Type=\"17\"", "Type=\"110\"");
     let mut other = doc.clone();
     other.xml = unverified.clone();
     other.root = parse_xml(&unverified).unwrap();

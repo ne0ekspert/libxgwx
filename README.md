@@ -574,10 +574,14 @@ and slot limits; cross-family and compact-model conversions are rejected.
 The CPU catalog also recognizes XGI models, including
 `XGI-CPUE` (configuration type `106`). An XGI configuration can select its
 existing model without changing the file. XGI-CPUE, CPUS, CPUH, CPUU, CPUU/D and CPUUN can switch between models
-for validated SFC projects with captured default parameters and empty I/O tables.
+for IEC LD, SFC, ST and IL projects with captured default parameters and
+compatible configured rack modules.
 Changes update model flags and default M memory ranges while preserving source.
 CPUUN additionally creates/removes its default local Ethernet and empty motion
-sections. CPUS/P, custom parameters and configured hardware require migration.
+sections. CPUS/P and custom parameters still require migration. Configured
+modules, comments and settings are preserved; modules outside the target CPU
+limits reject the change. XGI rack module selection, insertion, deletion and
+verified options use the shared catalog.
 XGI supports LD, SFC, and ST programs; the `ProgramData` version identifies
 the language of an individual program. See [XGI CPU support](docs/xgi-cpu.md).
 The XGK module catalog cannot edit compact hardware. The captured XBM-DR16S

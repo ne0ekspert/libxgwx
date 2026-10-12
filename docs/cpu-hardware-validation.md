@@ -10,9 +10,10 @@ other XGB variants remain unverified and are not assigned this layout.
 - XGK-to-XGK changes require retained bases and catalog modules to fit the
   target CPU's base and slot limits. Unknown module identities are rejected.
 - Cross-family and compact-model changes require migration and are rejected.
-- XGK catalog selection, insertion, option reading/writing, and the typed input
-  filter writer require an XGK configuration. Numeric module IDs alone cannot
-  establish compatibility.
+- Shared rack catalog selection, insertion, deletion, base sizing, option
+  reading/writing and input filters support XGK and standard XGI configurations.
+  CPUS/P uses a different base and remains guarded. Numeric module IDs alone
+  cannot establish compatibility with compact CPUs.
 - Compact hardware deletion and identity changes are rejected. Comments remain
   editable. Raw compact `Details` writes are rejected until their variant's
   settings encoding is verified; this does not mean the native settings are
@@ -77,8 +78,8 @@ results and SHA-256 checksums are retained locally under
 
 ## SFC CPU changes, 2026-10-08
 
-`select_cpu` supports switches among XGI-CPUE, CPUS, CPUH, CPUU, CPUU/D and
-CPUUN for supported SFC-only workspaces with captured default parameters and
+The initial native capture validated switches among XGI-CPUE, CPUS, CPUH,
+CPUU, CPUU/D and CPUUN for supported SFC-only workspaces with captured default parameters and
 empty I/O tables. All 30 directional changes and six no-op selections are
 covered by Rust and WASM tests, including ST source and declaration preservation.
 
@@ -103,8 +104,9 @@ Native XG5000 4.82.1 warns that CPU changes reset all parameters. The writer
 therefore rejects custom or unknown parameters rather than resetting them.
 Only captured sets of the five `OUTPUT_PARAMETER_RESERVED_0..4` fields are
 accepted; their bytes are preserved and their meaning remains unverified.
-Configured I/O/network modules, CPUS/P, cross-family changes and unsupported
-SFC layouts remain unavailable.
+That initial implementation guarded configured I/O/network modules. The rack
+editing extension below removes that restriction for compatible catalog modules.
+CPUS/P, cross-family changes and unsupported SFC layouts remain unavailable.
 
 `fixtures/sfc/cpu-*-native.xgwx` captures native PLC Properties changes and
 model defaults. `sfc_cpu_acceptance` generates all six models from the typed
@@ -122,3 +124,19 @@ again. Recreating CPUUN-only default sections in a native-saved project
 can normalize parameter whitespace; source code and settings remain intact.
 Acceptance is offline in XG5000 4.82.1, with no PLC connected. Configured hardware,
 custom parameter migration and PLC execution are outside this validation.
+
+## XGI ladder conversion and rack editing
+
+CPU conversion also preserves IEC LD programs and configured catalog modules.
+Module comments, Details, network records and physical base sizes remain intact.
+Occupied modules must fit the destination CPU; unused native base placeholders
+are preserved even when they exceed the CPU's available expansion-base count.
+Unknown module identities, malformed base information, custom CPU parameters and
+cross-family conversions remain rejected atomically.
+
+`tests/xgi_hardware_conversion.rs` covers all six standard XGI models, saved
+ladder/module preservation, input filters, base sizing, replacement/deletion,
+communication-module preservation, overlap and downgrade rejection. The bundled
+VS Code WASM and rack controls use the same writers. This extends local
+regression coverage; it does not add native XG5000 Check Program/Save As or live
+PLC acceptance evidence for these new combinations.

@@ -1019,10 +1019,6 @@ fn sfc_cpu_conversion_rejects_custom_parameters_hardware_and_unknown_models_atom
             "OUTPUT_PARAMETER_RESERVED_0=\"2578\"",
             "OUTPUT_PARAMETER_RESERVED_0=\"123\"",
         ),
-        source
-            .container()
-            .xml()
-            .replace("SlotCount=\"12\"", "SlotCount=\"10\""),
         source.container().xml().replace(
             "<Base Base=\"7\" SlotCount=\"12\">",
             "<Base Base=\"7\" SlotCount=\"12\"><Module Base=\"7\" Slot=\"0\" Id=\"1\" />",

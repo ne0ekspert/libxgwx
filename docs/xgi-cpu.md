@@ -100,9 +100,13 @@ up to 255 UTF-16 units, while leaving unclassified text read only.
 The [LS ELECTRIC manual](https://www.ls-electric.com/upload/customer/download/a51ea074-ffef-434c-b369-ccbf446a03cc/MANUAL_XGI_CPU_ENG.pdf) lists Ladder Diagram, SFC, and Structured Text as XGI programming languages. CPU family alone does not determine the language of a program.
 
 `select_cpu` recognizes the current XGI model as a no-op. XGI-CPUE, CPUS, CPUH,
-CPUU, CPUU/D and CPUUN changes support validated SFC projects with captured
-default parameters and empty I/O tables; see [SFC CPU validation](cpu-hardware-validation.md#sfc-cpu-changes-2026-10-08).
-Other XGI models, custom parameters and configured modules remain guarded. On 2026-09-17, the
+CPUU, CPUU/D and CPUUN changes support IEC LD, SFC, ST and IL projects with captured
+default parameters and compatible configured rack modules; see [SFC CPU validation](cpu-hardware-validation.md#sfc-cpu-changes-2026-10-08).
+CPUS/P and custom parameters remain guarded. Configured rack modules are
+preserved and checked against the destination CPU limits. Module selection,
+insertion, deletion, base sizing and captured options also support standard XGI
+racks through the shared catalog. These additions have local round-trip and
+editor regression coverage; new native XG5000 acceptance is pending. On 2026-09-17, the
 installed XG5000 4.82.1 Windows VM opened a guest-local copy of the supplied
 project. Its project tree identified `LSPLC(XGI-CPUE)`, and the `조명` source
 program opened as IEC LD. XG5000 rendered contacts, coils, branches, comments,
