@@ -16,6 +16,158 @@ fn shared_selection_reads_the_chosen_program_and_rejects_missing_indices() {
     ));
 }
 
+#[test]
+fn selected_reads_match_collection_snapshots_in_document_order() {
+    for path in [
+        "fixtures/elements-io.xgwx",
+        "fixtures/text-programs/native-blank.xgwx",
+        "fixtures/text-programs/native-source.xgwx",
+        "fixtures/text-programs/native-roundtrip.xgwx",
+        "fixtures/sfc/native-loop.xgwx",
+        "fixtures/sfc/native-st-programs.xgwx",
+        "fixtures/sfc/multi-action-branch-native.xgwx",
+        "fixtures/sfc/declarations-array-initial-native.xgwx",
+    ] {
+        let doc = XgwxDocument::from_path(path).unwrap();
+        let summaries = doc.program().list();
+        let texts = doc.program().text_programs();
+        let charts = doc.program().sfc_programs();
+        let locals = doc.variable().locals();
+        assert_eq!(locals.len(), summaries.len(), "{path}");
+        for (index, summary) in summaries.iter().enumerate() {
+            let program = doc.program().get(index).unwrap();
+            assert_eq!(program.index(), index, "{path}");
+            assert_eq!(&program.summary(), summary, "{path}: program {index}");
+            match &locals[index] {
+                Ok(expected) => assert_eq!(
+                    &program.variables().unwrap(),
+                    expected,
+                    "{path}: locals {index}"
+                ),
+                Err(expected) => assert_eq!(
+                    program.variables().unwrap_err().to_string(),
+                    expected.to_string(),
+                    "{path}: locals error {index}"
+                ),
+            }
+            match texts.iter().find(|text| text.program_index == index) {
+                Some(expected) => {
+                    assert_eq!(&program.text().unwrap(), expected, "{path}: text {index}")
+                }
+                None => assert!(matches!(
+                    program.text(),
+                    Err(xgwx::XgwxError::TextProgramEdit(reason))
+                        if reason == "selected program is not standalone ST/IL"
+                )),
+            }
+            match charts.iter().find(|chart| chart.program_index == index) {
+                Some(expected) => {
+                    assert_eq!(&program.sfc().unwrap(), expected, "{path}: SFC {index}")
+                }
+                None => assert!(matches!(
+                    program.sfc(),
+                    Err(xgwx::XgwxError::SfcEdit(reason))
+                        if reason == "selected program is not SFC"
+                )),
+            }
+        }
+        for index in [summaries.len(), usize::MAX] {
+            assert!(matches!(
+                doc.program().get(index),
+                Err(xgwx::XgwxError::ProgramNotFound { index: missing })
+                    if missing == index
+            ));
+        }
+    }
+}
+
+#[cfg(feature = "write")]
+fn replace_program_descendant(
+    doc: &mut XgwxDocument,
+    program_index: usize,
+    path: &[&str],
+    replacement: &str,
+) {
+    let mut xml = doc.container().xml().to_owned();
+    let range = {
+        let parsed = roxmltree::Document::parse(&xml).unwrap();
+        let mut node = parsed
+            .descendants()
+            .filter(|node| node.has_tag_name("Program"))
+            .nth(program_index)
+            .unwrap();
+        for name in path {
+            node = node
+                .descendants()
+                .find(|node| node.has_tag_name(*name))
+                .unwrap();
+        }
+        node.range()
+    };
+    xml.replace_range(range, replacement);
+    doc.container_mut().replace_xml(xml).unwrap();
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn selected_reads_ignore_unrelated_malformed_symbols_and_unknown_bodies() {
+    let mut doc = XgwxDocument::from_path("fixtures/text-programs/native-blank.xgwx").unwrap();
+    let selected_chart = doc.program().get(1).unwrap().sfc().unwrap();
+    let selected_text = doc.program().get(2).unwrap().text().unwrap();
+    let selected_locals = doc.program().get(2).unwrap().variables().unwrap();
+    let selected_declarations = doc.program().get(2).unwrap().declarations().unwrap();
+    let selected_summary = doc.program().get(2).unwrap().summary();
+
+    replace_program_descendant(
+        &mut doc,
+        0,
+        &["LocalVar", "Symbols"],
+        "<Symbols Count=\"1\" Compressed=\"0\">!invalid base64!</Symbols>",
+    );
+    replace_program_descendant(
+        &mut doc,
+        0,
+        &["Body"],
+        "<Body><SFC_ProgramList><SFC_ProgramProperty LanguageType=\"99\" Language=\"99\" PragramName=\"Unknown\"><EntityGrid RowSize=\"1\" ColSize=\"1\"><EntityProperty Type=\"999\" Row=\"0\" Col=\"0\"><UnknownEntity Value=\"preserved\"/></EntityProperty></EntityGrid></SFC_ProgramProperty></SFC_ProgramList></Body>",
+    );
+    replace_program_descendant(
+        &mut doc,
+        3,
+        &["Body", "ST_Program", "CodeList"],
+        "<CodeList CodeCount=\"1\" Compressed=\"0\">!invalid base64!</CodeList>",
+    );
+
+    let chart = doc.program().get(1).unwrap();
+    assert_eq!(chart.sfc().unwrap(), selected_chart);
+    let text = doc.program().get(2).unwrap();
+    assert_eq!(text.summary(), selected_summary);
+    assert_eq!(text.text().unwrap(), selected_text);
+    assert_eq!(text.variables().unwrap(), selected_locals);
+    assert_eq!(text.declarations().unwrap(), selected_declarations);
+
+    let locals = doc.variable().locals();
+    assert_eq!(
+        doc.program()
+            .get(0)
+            .unwrap()
+            .variables()
+            .unwrap_err()
+            .to_string(),
+        locals[0].as_ref().unwrap_err().to_string()
+    );
+    let unknown_chart = doc.program().get(0).unwrap().sfc().unwrap();
+    assert!(unknown_chart.variables_error.is_some());
+    assert_eq!(unknown_chart.blocks[0].entities[0].type_code, Some(999));
+    assert_eq!(
+        unknown_chart.blocks[0].entities[0].properties["UnknownEntity"]["Value"],
+        "preserved"
+    );
+    assert!(unknown_chart.blocks[0].editable_rows.is_none());
+    let unknown_text = doc.program().get(3).unwrap().text().unwrap();
+    assert_eq!(unknown_text.source, None);
+    assert!(!unknown_text.editable);
+}
+
 #[cfg(feature = "write")]
 #[test]
 fn handle_follows_program_through_metadata_updates_move_and_consuming_delete() {

@@ -1,6 +1,7 @@
 import { createNetworkEditor } from './network-edit.js';
 import { createHardwareEditor } from "./hardware-edit.js";
 import { createLadderEditor } from "./ladder-edit.js";
+import { validatedEditCache } from './edit-validation.js';
 // The browser exposes a bounded metadata editor, backed by the Rust writer.
 export function createEditor(api) {
   const panel = document.querySelector('#editing');
@@ -8,9 +9,10 @@ export function createEditor(api) {
   let supportError = "", revision = 0, draftRevision = 0;
   let original, current, summary, file, history = [], draft = false;
   let programIndex = 0, variableIndex = 0, redo = [], variablePropertiesOpen=false;
-  const networkEditor=createNetworkEditor({revision:()=>revision,probe:patch=>api.editNetwork(current,patch),apply:applyNetwork,onDraft:()=>{draftRevision++;updateToolbar();}});
+  const networkCandidate=validatedEditCache(api.editNetwork),hardwareCandidate=validatedEditCache(api.editHardware);
+  const networkEditor=createNetworkEditor({revision:()=>revision,probe:patch=>networkCandidate(current,patch),apply:applyNetwork,onDraft:()=>{draftRevision++;updateToolbar();}});
   const hardwareEditor=createHardwareEditor({catalog:api.hardwareCatalog, options:(base,slot)=>api.hardwareOptions(current,base,slot),
-    revision:()=>revision, probe:patch=>api.editHardware(current,patch), apply:applyHardware,
+    revision:()=>revision, probe:patch=>hardwareCandidate(current,patch), apply:applyHardware,
     onDraft:()=>{draftRevision++;updateToolbar();}});
   const ladderEditor = createLadderEditor({ getRevision:() => revision, onDraft:() => {draftRevision++; updateToolbar();},
     networkView:(node,parsed,readonly)=>networkEditor.render(node,parsed,readonly),networkCanSelect:node=>networkEditor.canSelect(node),hardwareView:(base,parsed,readonly)=>hardwareEditor.render(base,parsed,readonly), hardwareCanSelect:base=>hardwareEditor.canSelectBase(base), selectVariable, selectVariableTable:index=>selectVariable(index,true), programSelected, apply:applyLadder, message:api.setStatus, ladderMarkup:api.ladderMarkup, bindLadder:api.bindLadder });
@@ -73,7 +75,7 @@ export function createEditor(api) {
     try{
       if(supportError||expectedRevision!==revision)throw new Error(supportError||'The workspace changed; cancel and reopen this network field.');
       if(draft||ladderEditor.hasDraft()||hardwareEditor.hasDraft())throw new Error('Apply or cancel the other pending edit first.');
-      const bytes=api.editNetwork(current,patch),next=api.parse(bytes),expected=structuredClone(summary);
+      const bytes=networkCandidate(current,patch),next=api.parse(bytes),expected=structuredClone(summary);
       expected.networks=next.networks;expected.header.compressedSizeHint=next.header.compressedSizeHint;expected.header.trailerBytes=next.header.trailerBytes;
       if(JSON.stringify(expected)!==JSON.stringify(next)||!api.verify(bytes))throw new Error('Non-target workspace data changed; export rejected.');
       if(equal(bytes,current)){networkEditor.clearDraft();refresh();api.setStatus('No network change to apply.');return;}
@@ -84,7 +86,7 @@ export function createEditor(api) {
     try {
       if(supportError||expectedRevision!==revision)throw new Error(supportError||'The workspace changed; cancel and reopen this hardware field.');
       if(ladderEditor.hasDraft()||draft||networkEditor.hasDraft())throw new Error('Apply or cancel the other pending edit first.');
-      const bytes=api.editHardware(current,patch),next=api.parse(bytes),expected=structuredClone(summary);
+      const bytes=hardwareCandidate(current,patch),next=api.parse(bytes),expected=structuredClone(summary);
       expected.hardware=next.hardware;expected.parameters=next.parameters;
       expected.header.compressedSizeHint=next.header.compressedSizeHint;expected.header.trailerBytes=next.header.trailerBytes;
       if(JSON.stringify(expected)!==JSON.stringify(next)||!api.verify(bytes))throw new Error('Non-target workspace data changed; export rejected.');
@@ -112,6 +114,7 @@ export function createEditor(api) {
   }
   function refresh() { const activeId=document.activeElement?.id;const recordKey=document.activeElement?.dataset.ladderKey;const hardwareSlot=document.activeElement?.dataset.hardwareSlot;const variableEdit=document.activeElement?.dataset.variableEdit;const settingKey=document.activeElement?.dataset.settingKey;renderForms(); updateToolbar();const focus=activeId?document.getElementById(activeId):recordKey?panel.querySelector(`[data-ladder-key="${recordKey}"]`):hardwareSlot!==undefined?panel.querySelector(`[data-hardware-slot="${hardwareSlot}"]`):variableEdit!==undefined?panel.querySelector(`[data-variable-edit="${variableEdit}"]`):settingKey?panel.querySelector(`[data-setting-key="${settingKey}"]`):null;(focus?.disabled ? panel.querySelector("#network-field")||panel.querySelector("#hardware-field") : focus)?.focus({preventScroll:true}); }
   function renderForms() {
+    networkEditor.cancelValidation();hardwareEditor.cancelValidation();
     panel.replaceChildren();
     if (!summary) { const p = document.createElement('p'); p.textContent = 'Open an .xgwx file to edit its PLC programs.'; panel.append(p); return; }
     const workspace=ladderEditor.render(summary,!!supportError);panel.append(workspace);

@@ -27,6 +27,10 @@ jobs:
       - run: cargo test --features write
       - run: cargo check --no-default-features
       - run: cargo check --manifest-path dev-tools/Cargo.toml --bins
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test web/*.test.mjs
 
   package:
     runs-on: ubuntu-latest
@@ -110,7 +114,7 @@ jobs:
         run: wasm-pack build --target web --out-dir web/dist/pkg --out-name libxgwx --features wasm,write --no-default-features
       - name: Copy static demo assets
         run: |
-          cp web/index.html web/landing.css web/landing.js web/editor.html web/styles.css web/app.js web/editing.js web/ladder-edit.js web/project-settings.js web/hardware-edit.js web/network-edit.js web/global-variables.js web/dist/
+          cp web/index.html web/landing.css web/landing.js web/editor.html web/styles.css web/app.js web/editing.js web/edit-validation.js web/ladder-edit.js web/project-settings.js web/hardware-edit.js web/network-edit.js web/global-variables.js web/dist/
           cp web/sitemap.xml web/favicon.svg web/social-card.png web/dist/
           test -f web/dist/pkg/libxgwx.js
           test -f web/dist/pkg/libxgwx_bg.wasm

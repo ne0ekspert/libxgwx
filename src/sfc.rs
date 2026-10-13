@@ -77,86 +77,94 @@ impl XgwxDocument {
             .descendants_named("Program")
             .enumerate()
             .filter_map(|(program_index, program)| {
-                let list = program.descendants_named("SFC_ProgramList").next()?;
-                let variables = self.sfc_variables(program_index);
-                let bool_names = variables
-                    .as_ref()
-                    .map(|vars| {
-                        vars.iter()
-                            .filter(|v| {
-                                !v.system
-                                    && v.data_type == "BOOL"
-                                    && v.declaration
-                                        .as_ref()
-                                        .is_none_or(|d| d.dimensions.is_empty())
-                            })
-                            .map(|v| v.name.to_lowercase())
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                let sources = st_sources(list);
-                let blocks = list
-                    .descendants_named("SFC_ProgramProperty")
-                    .enumerate()
-                    .map(|(block_index, block)| {
-                        let grid = block.descendants_named("EntityGrid").next();
-                        let entities = grid
-                            .into_iter()
-                            .flat_map(|g| g.descendants_named("EntityProperty"))
-                            .enumerate()
-                            .map(|(entity_index, entity)| SfcEntity {
-                                entity_index,
-                                type_code: number(entity, "Type"),
-                                row: number(entity, "Row"),
-                                column: number(entity, "Col"),
-                                properties: entity
-                                    .children
-                                    .iter()
-                                    .map(|p| {
-                                        (
-                                            p.name.clone(),
-                                            p.attributes
-                                                .iter()
-                                                .map(|a| (a.name.clone(), a.value.clone()))
-                                                .collect(),
-                                        )
-                                    })
-                                    .collect(),
-                            })
-                            .collect();
-                        let mut result = SfcBlock {
-                            block_index,
-                            name: block.attribute("PragramName").unwrap_or("").to_owned(),
-                            main: block.attribute("MainBlock") == Some("1"),
-                            language_type: number(block, "LanguageType"),
-                            language: number(block, "Language"),
-                            rows: grid.and_then(|g| number(g, "RowSize")).unwrap_or(0),
-                            columns: grid.and_then(|g| number(g, "ColSize")).unwrap_or(0),
-                            entities,
-                            editable_rows: None,
-                        };
-                        if sources.is_some() && linear_container_supported(block) {
-                            result.editable_rows = result
-                                .linear_rows(sources.as_ref().unwrap(), &bool_names, false)
-                                .or_else(|| {
-                                    branches::decode_rows(
-                                        &result,
-                                        sources.as_ref().unwrap(),
-                                        &bool_names,
-                                    )
-                                });
-                        }
-                        result
-                    })
-                    .collect();
-                Some(SfcProgram {
-                    program_index,
-                    blocks,
-                    variables_error: variables.as_ref().err().map(ToString::to_string),
-                    variables: variables.unwrap_or_default(),
-                })
+                self.sfc_program_from_element(program_index, program)
             })
             .collect()
+    }
+
+    pub(crate) fn sfc_program(&self, program_index: usize) -> Option<SfcProgram> {
+        self.sfc_program_from_element(program_index, self.program_element(program_index)?)
+    }
+
+    fn sfc_program_from_element(
+        &self,
+        program_index: usize,
+        program: &XmlElement,
+    ) -> Option<SfcProgram> {
+        let list = program.descendants_named("SFC_ProgramList").next()?;
+        let variables = self.sfc_variables_from_program(program);
+        let bool_names = variables
+            .as_ref()
+            .map(|vars| {
+                vars.iter()
+                    .filter(|v| {
+                        !v.system
+                            && v.data_type == "BOOL"
+                            && v.declaration
+                                .as_ref()
+                                .is_none_or(|d| d.dimensions.is_empty())
+                    })
+                    .map(|v| v.name.to_lowercase())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let sources = st_sources(list);
+        let blocks = list
+            .descendants_named("SFC_ProgramProperty")
+            .enumerate()
+            .map(|(block_index, block)| {
+                let grid = block.descendants_named("EntityGrid").next();
+                let entities = grid
+                    .into_iter()
+                    .flat_map(|g| g.descendants_named("EntityProperty"))
+                    .enumerate()
+                    .map(|(entity_index, entity)| SfcEntity {
+                        entity_index,
+                        type_code: number(entity, "Type"),
+                        row: number(entity, "Row"),
+                        column: number(entity, "Col"),
+                        properties: entity
+                            .children
+                            .iter()
+                            .map(|p| {
+                                (
+                                    p.name.clone(),
+                                    p.attributes
+                                        .iter()
+                                        .map(|a| (a.name.clone(), a.value.clone()))
+                                        .collect(),
+                                )
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                let mut result = SfcBlock {
+                    block_index,
+                    name: block.attribute("PragramName").unwrap_or("").to_owned(),
+                    main: block.attribute("MainBlock") == Some("1"),
+                    language_type: number(block, "LanguageType"),
+                    language: number(block, "Language"),
+                    rows: grid.and_then(|g| number(g, "RowSize")).unwrap_or(0),
+                    columns: grid.and_then(|g| number(g, "ColSize")).unwrap_or(0),
+                    entities,
+                    editable_rows: None,
+                };
+                if sources.is_some() && linear_container_supported(block) {
+                    result.editable_rows = result
+                        .linear_rows(sources.as_ref().unwrap(), &bool_names, false)
+                        .or_else(|| {
+                            branches::decode_rows(&result, sources.as_ref().unwrap(), &bool_names)
+                        });
+                }
+                result
+            })
+            .collect();
+        Some(SfcProgram {
+            program_index,
+            blocks,
+            variables_error: variables.as_ref().err().map(ToString::to_string),
+            variables: variables.unwrap_or_default(),
+        })
     }
 }
 
@@ -821,10 +829,8 @@ impl XgwxDocument {
     ) -> Result<(), crate::XgwxError> {
         use crate::XgwxError;
         let fail = |s: &str| XgwxError::SfcEdit(s.into());
-        let programs = self.sfc_programs();
-        let program = programs
-            .iter()
-            .find(|p| p.program_index == patch.program_index)
+        let program = self
+            .sfc_program(patch.program_index)
             .ok_or_else(|| fail("SFC program is absent"))?;
         let block = program
             .blocks
@@ -1277,10 +1283,15 @@ impl XgwxDocument {
         program_index: usize,
     ) -> Result<Vec<SfcVariable>, crate::XgwxError> {
         let program = self
-            .root
-            .descendants_named("Program")
-            .nth(program_index)
+            .program_element(program_index)
             .ok_or_else(|| crate::XgwxError::SfcEdit("program is absent".into()))?;
+        self.sfc_variables_from_program(program)
+    }
+
+    pub(crate) fn sfc_variables_from_program(
+        &self,
+        program: &XmlElement,
+    ) -> Result<Vec<SfcVariable>, crate::XgwxError> {
         let table = program
             .descendants_named("LocalVar")
             .next()
@@ -1294,7 +1305,7 @@ impl XgwxDocument {
         }
         let metadata = declarations::metadata(&bytes)?;
         Ok(self
-            .sfc_symbols(program_index)?
+            .sfc_symbols_from_program(program)?
             .into_iter()
             .map(|s| SfcVariable {
                 system: program
@@ -1318,17 +1329,22 @@ impl XgwxDocument {
             })
             .collect())
     }
+    #[cfg(feature = "write")]
     fn sfc_symbols(
         &self,
         program_index: usize,
     ) -> Result<Vec<crate::IecLocalSymbol>, crate::XgwxError> {
+        let fail = || crate::XgwxError::SfcEdit("unsupported SFC variable table".into());
+        let program = self.program_element(program_index).ok_or_else(fail)?;
+        self.sfc_symbols_from_program(program)
+    }
+
+    fn sfc_symbols_from_program(
+        &self,
+        program: &XmlElement,
+    ) -> Result<Vec<crate::IecLocalSymbol>, crate::XgwxError> {
         use base64::Engine;
         let fail = || crate::XgwxError::SfcEdit("unsupported SFC variable table".into());
-        let program = self
-            .root
-            .descendants_named("Program")
-            .nth(program_index)
-            .ok_or_else(fail)?;
         let is_sfc = program
             .descendants_named("SFC_ProgramList")
             .next()
@@ -1589,11 +1605,7 @@ impl XgwxDocument {
     fn sfc_variable_referenced(&self, index: usize, name: &str) -> Result<bool, crate::XgwxError> {
         let fail =
             || crate::XgwxError::SfcEdit("cannot check references in this program language".into());
-        if let Some(text) = self
-            .text_programs()
-            .into_iter()
-            .find(|p| p.program_index == index)
-        {
+        if let Some(text) = self.text_program(index) {
             if !text.editable {
                 return Err(fail());
             }
@@ -1602,11 +1614,7 @@ impl XgwxDocument {
                 .split(|c: char| !c.is_alphanumeric() && c != '_')
                 .any(|v| v.eq_ignore_ascii_case(name)));
         }
-        let sfc = self
-            .sfc_programs()
-            .into_iter()
-            .find(|p| p.program_index == index)
-            .ok_or_else(fail)?;
+        let sfc = self.sfc_program(index).ok_or_else(fail)?;
         if sfc.blocks.iter().any(|b| {
             b.entities.iter().any(|e| {
                 e.properties

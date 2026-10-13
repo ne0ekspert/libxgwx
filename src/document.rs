@@ -123,6 +123,15 @@ impl XgwxDocument {
             .collect()
     }
 
+    pub(crate) fn program_element(&self, index: usize) -> Option<&XmlElement> {
+        self.root.descendants_named("Program").nth(index)
+    }
+
+    pub(crate) fn program_summary(&self, index: usize) -> Option<ProgramSummary> {
+        self.program_element(index)
+            .map(ProgramSummary::from_element)
+    }
+
     /// Decode the global variable symbol table.
     ///
     /// XG5000 stores `<Symbols>` as base64, usually bzip2-compressed, binary
@@ -140,17 +149,16 @@ impl XgwxDocument {
     pub(crate) fn iec_local_symbols(&self) -> Vec<Result<Vec<IecLocalSymbol>, XgwxError>> {
         self.root
             .descendants_named("Program")
-            .map(|program| {
-                match program
-                    .descendants_named("LocalVar")
-                    .next()
-                    .and_then(|local| local.descendants_named("Symbols").next())
-                {
-                    Some(symbols) => IecLocalSymbol::from_symbols_element(symbols),
-                    None => Ok(Vec::new()),
-                }
-            })
+            .map(decode_program_local_symbols)
             .collect()
+    }
+
+    pub(crate) fn iec_local_symbols_for_program(
+        &self,
+        index: usize,
+    ) -> Option<Result<Vec<IecLocalSymbol>, XgwxError>> {
+        self.program_element(index)
+            .map(decode_program_local_symbols)
     }
 
     /// Decode ladder `<ProgramData>` payloads for all `<Program>` elements.
@@ -171,9 +179,7 @@ impl XgwxDocument {
         &self,
         index: usize,
     ) -> Option<Result<LadderProgramData, XgwxError>> {
-        self.root
-            .descendants_named("Program")
-            .nth(index)
+        self.program_element(index)
             .map(LadderProgramData::from_program_element)
     }
 
@@ -349,5 +355,16 @@ impl XgwxDocument {
     pub(crate) fn project_name(&self) -> Option<&str> {
         let name = self.root.text.trim();
         (!name.is_empty()).then_some(name)
+    }
+}
+
+fn decode_program_local_symbols(program: &XmlElement) -> Result<Vec<IecLocalSymbol>, XgwxError> {
+    match program
+        .descendants_named("LocalVar")
+        .next()
+        .and_then(|local| local.descendants_named("Symbols").next())
+    {
+        Some(symbols) => IecLocalSymbol::from_symbols_element(symbols),
+        None => Ok(Vec::new()),
     }
 }

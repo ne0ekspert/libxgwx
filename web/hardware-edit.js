@@ -1,12 +1,14 @@
 // Existing field writers only. Unknown module encodings remain read-only.
+import { deferredValidation } from './edit-validation.js';
 const make=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 export function createHardwareEditor(api){
- let selectedBase,selectedSlot=0,action,key,index=0,pending=false,value,revision,view;
+ let selectedBase,selectedSlot=0,action,key,index=0,pending=false,value,revision,view,validation;
  const dirty=()=>pending;
- function clear(){pending=false;value=undefined;api.onDraft();}
+ function clear(){validation?.cancel();pending=false;value=undefined;api.onDraft();}
  function leave(){return !pending||window.confirm('Discard unapplied hardware change?');}
  function render(base,summary,readonly){
   if(selectedBase!==base.base){if(!leave())return view;clear();selectedBase=base.base;selectedSlot=(summary.hardware.modules.find(m=>m.base===base.base)?.slot)??0;action=undefined;}
+  validation?.cancel();
   const modules=summary.hardware.modules.filter(m=>m.base===base.base),catalog=api.catalog();
   const entry=m=>{const matches=catalog.filter(c=>c.id===m.id&&c.subType===m.subType);return matches.length===1?matches[0]:undefined;};
   const count=base.slotCount,knownCount=Number.isInteger(count)&&count>=0;
@@ -73,12 +75,12 @@ export function createHardwareEditor(api){
   const patch=()=>({operation:action,base:base.base,slot:action==='slotCount'?null:startSlot,expectedValue:action==='slotCount'||action==='comment'?old:module.details,replacement:value,key:action==='option'?key:null,index:action==='option'?index:null});
   const form=make('form');form.id='hardware-change-form';const label=make('label',action==='comment'?'Module comment':'New value');const field=make(action==='comment'?'input':'select');field.id=action==='slotCount'?'hardware-base-size':'hardware-replacement';field.setAttribute('aria-label',label.textContent);if(action==='comment'){field.type='text';field.maxLength=4096;}else{if(!allowed.some(c=>c.value===old)){const n=make('option',`${old} (current)`);n.value=old;field.append(n);}for(const c of allowed){const n=make('option',c.label);n.value=c.value;field.append(n);}}field.value=value;label.append(field);form.append(label);
   const message=make('p',undefined,'edit-help');message.setAttribute('role','status');const actions=make('div',undefined,'edit-actions');const apply=make('button','Apply hardware change');apply.id='apply-hardware-change';apply.type='submit';const cancel=make('button','Cancel hardware change');cancel.type='button';cancel.addEventListener('click',()=>{clear();replace();});actions.append(apply,cancel);form.append(actions,message);
-  function validate(){let error=readonly?'This workspace is read-only.':'';if(!error){try{api.probe(patch());}catch(e){error=String(e);}}message.textContent=error||'Changes apply to the downloaded workspace copy.';apply.disabled=!!error||!pending;field.disabled=readonly||/CPU type|catalog.*mismatch|ambiguous|field is absent|missing.*attribute/i.test(error);}
-  field.addEventListener(action==='comment'?'input':'change',()=>{value=field.value;pending=value!==old;api.onDraft();validate();});
-  form.addEventListener('submit',e=>{e.preventDefault();if(!pending||apply.disabled)return;api.apply(patch(),revision);});if(action==='slotCount'){baseControls.replaceChildren(make('h3','Base size · slot count'));label.firstChild.textContent='Configured slots';field.setAttribute('aria-label','Base size · slot count');apply.textContent='Apply base size';baseControls.append(form);}else info.append(form);view.append(info);validate();
+  const check=deferredValidation(()=>{if(readonly)throw new Error('This workspace is read-only.');api.probe(patch());},(error,checking)=>{message.textContent=checking?'Checking change…':error||'Changes apply to the downloaded workspace copy.';apply.disabled=checking||!!error||!pending;field.disabled=readonly||/CPU type|catalog.*mismatch|ambiguous|field is absent|missing.*attribute/i.test(error);},{isCurrent:()=>form.isConnected});validation=check;
+  field.addEventListener(action==='comment'?'input':'change',()=>{value=field.value;pending=value!==old;api.onDraft();if(action==='comment')check.schedule();else check.run();});
+  form.addEventListener('submit',e=>{e.preventDefault();if(!pending||apply.disabled)return;api.apply(patch(),revision);});if(action==='slotCount'){baseControls.replaceChildren(make('h3','Base size · slot count'));label.firstChild.textContent='Configured slots';field.setAttribute('aria-label','Base size · slot count');apply.textContent='Apply base size';baseControls.append(form);}else info.append(form);view.append(info);check.run();
   view.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();clear();replace();view.querySelector(`[data-hardware-slot="${selectedSlot}"]`)?.focus();}});
   function replace(){const previous=view;const next=render(base,summary,readonly);previous.replaceWith(next);next.querySelector(action==='slotCount'?'#hardware-base-size':'#hardware-field')?.focus({preventScroll:true});}
   return view;
  }
- return {render,canSelectBase(base){if(base===selectedBase)return true;if(!leave())return false;clear();return true;},hasDraft:dirty,canLeave:leave,clearDraft:clear,reset(){selectedBase=undefined;selectedSlot=0;action=undefined;clear();}};
+ return {render,cancelValidation:()=>validation?.cancel(),canSelectBase(base){if(base===selectedBase)return true;if(!leave())return false;clear();return true;},hasDraft:dirty,canLeave:leave,clearDraft:clear,reset(){selectedBase=undefined;selectedSlot=0;action=undefined;clear();}};
 }

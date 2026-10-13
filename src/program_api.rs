@@ -12,7 +12,7 @@ pub struct ProgramRef<'a> {
 impl<'a> ProgramView<'a> {
     /// Select one program without cloning the document.
     pub fn get(self, index: usize) -> Result<ProgramRef<'a>, XgwxError> {
-        if self.doc.programs().get(index).is_none() {
+        if self.doc.program_element(index).is_none() {
             return Err(XgwxError::ProgramNotFound { index });
         }
         Ok(ProgramRef {
@@ -29,7 +29,9 @@ impl ProgramRef<'_> {
     }
     /// Read current program metadata as a detached owned snapshot.
     pub fn summary(&self) -> ProgramSummary {
-        self.doc.programs().remove(self.index)
+        self.doc
+            .program_summary(self.index)
+            .expect("selected program exists")
     }
     /// Decode the selected native ladder payload without borrowing its bytes.
     pub fn ladder(&self) -> Result<LadderProgramData, XgwxError> {
@@ -39,28 +41,20 @@ impl ProgramRef<'_> {
     }
     /// Read standalone ST/IL source for this program; reject other languages.
     pub fn text(&self) -> Result<TextProgram, XgwxError> {
-        self.doc
-            .text_programs()
-            .into_iter()
-            .find(|p| p.program_index == self.index)
-            .ok_or_else(|| {
-                XgwxError::TextProgramEdit("selected program is not standalone ST/IL".into())
-            })
+        self.doc.text_program(self.index).ok_or_else(|| {
+            XgwxError::TextProgramEdit("selected program is not standalone ST/IL".into())
+        })
     }
     /// Read the native SFC charts for this program; reject programs without SFC blocks.
     pub fn sfc(&self) -> Result<SfcProgram, XgwxError> {
         self.doc
-            .sfc_programs()
-            .into_iter()
-            .find(|p| p.program_index == self.index)
+            .sfc_program(self.index)
             .ok_or_else(|| XgwxError::SfcEdit("selected program is not SFC".into()))
     }
     /// Decode this program's local IEC symbol table.
     pub fn variables(&self) -> Result<Vec<IecLocalSymbol>, XgwxError> {
         self.doc
-            .iec_local_symbols()
-            .into_iter()
-            .nth(self.index)
+            .iec_local_symbols_for_program(self.index)
             .ok_or(XgwxError::ProgramNotFound { index: self.index })?
     }
     /// Decode this program's local declarations, including native system records.
@@ -98,9 +92,7 @@ impl<'a> ProgramEditor<'a> {
     pub fn get(self, index: usize) -> Result<Program<'a>, XgwxError> {
         let summary = self
             .doc
-            .programs()
-            .into_iter()
-            .nth(index)
+            .program_summary(index)
             .ok_or(XgwxError::ProgramNotFound { index })?;
         let object_id = summary.object_id.filter(|id| !id.is_empty()).ok_or(
             XgwxError::MissingProgramAttribute {
@@ -123,13 +115,11 @@ impl<'a> ProgramEditor<'a> {
 #[cfg(feature = "write")]
 impl Program<'_> {
     fn ensure_identity(&self) -> Result<(), XgwxError> {
-        let summary = self
+        let program = self
             .doc
-            .programs()
-            .into_iter()
-            .nth(self.index)
+            .program_element(self.index)
             .ok_or(XgwxError::ProgramNotFound { index: self.index })?;
-        if summary.object_id.as_deref() != Some(self.object_id.as_str()) {
+        if program.attribute("ObjectId") != Some(self.object_id.as_str()) {
             return Err(XgwxError::ProgramReorder(
                 "selected program identity changed".into(),
             ));
@@ -191,9 +181,7 @@ impl Program<'_> {
         self.ensure_identity()?;
         let target = self
             .doc
-            .programs()
-            .into_iter()
-            .nth(to)
+            .program_summary(to)
             .ok_or(XgwxError::ProgramNotFound { index: to })?;
         let target_id = target.object_id.ok_or(XgwxError::MissingProgramAttribute {
             index: to,

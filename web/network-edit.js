@@ -1,10 +1,12 @@
 import { settingDetails } from './project-settings.js';
+import { deferredValidation } from './edit-validation.js';
 const make=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 export function createNetworkEditor(api){
- let selected,field,value,pending=false,revision,view;
- const clear=()=>{pending=false;value=undefined;api.onDraft();};
+ let selected,field,value,pending=false,revision,view,validation;
+ const clear=()=>{validation?.cancel();pending=false;value=undefined;api.onDraft();};
  const canSelect=node=>{if(selected===node.key)return true;if(pending&&!window.confirm('Discard unapplied network metadata change?'))return false;clear();selected=node.key;field=undefined;return true;};
  function render(node,summary,readonly){
+  validation?.cancel();
   const target=node.networkTarget;
   const network=target?summary.networks[target.networkIndex]:undefined;
   const data=target?.moduleIndex!==undefined?network.modules[target.moduleIndex]:network;
@@ -25,12 +27,12 @@ export function createNetworkEditor(api){
    const form=make('form');const label=make('label','New value');const input=make('input');input.id='network-replacement';input.type='text';input.maxLength=4096;input.value=value;label.append(input);form.append(label);
    const actions=make('div',undefined,'edit-actions');const apply=make('button','Apply network change');apply.id='apply-network-change';apply.type='submit';const cancel=make('button','Cancel network change');cancel.type='button';cancel.addEventListener('click',()=>{clear();replace();});actions.append(apply,cancel);form.append(actions);
    const message=make('p',undefined,'edit-help');message.setAttribute('role','status');form.append(message);
-   function validate(){let error=readonly?'This workspace is read-only.':'';if(!error){try{api.probe(patch());}catch(e){error=String(e);}}message.textContent=error||'Only this existing metadata attribute changes in the downloaded file.';input.disabled=!!error&&(/absent|ambiguous|read-only/.test(error));apply.disabled=!!error||!pending;}
-   input.addEventListener('input',()=>{value=input.value;pending=value!==old;api.onDraft();validate();});form.addEventListener('submit',e=>{e.preventDefault();if(pending&&!apply.disabled)api.apply(patch(),revision);});edit.append(form);view.insertBefore(edit,limitation);validate();
+   const check=deferredValidation(()=>{if(readonly)throw new Error('This workspace is read-only.');api.probe(patch());},(error,checking)=>{message.textContent=checking?'Checking change…':error||'Only this existing metadata attribute changes in the downloaded file.';input.disabled=!!error&&(/absent|ambiguous|read-only/.test(error));apply.disabled=checking||!!error||!pending;},{isCurrent:()=>form.isConnected});validation=check;
+   input.addEventListener('input',()=>{value=input.value;pending=value!==old;api.onDraft();check.schedule();});form.addEventListener('submit',e=>{e.preventDefault();if(pending&&!apply.disabled)api.apply(patch(),revision);});edit.append(form);view.insertBefore(edit,limitation);check.run();
   }
   view.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();clear();replace();}});
   function replace(){const previous=view;previous.replaceWith(render(node,summary,readonly));view.querySelector('#network-field')?.focus({preventScroll:true});}
   return view;
  }
- return {render,canSelect,hasDraft:()=>pending,clearDraft:clear,reset(){selected=undefined;field=undefined;clear();}};
+ return {render,cancelValidation:()=>validation?.cancel(),canSelect,hasDraft:()=>pending,clearDraft:clear,reset(){selected=undefined;field=undefined;clear();}};
 }

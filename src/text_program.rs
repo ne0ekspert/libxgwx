@@ -56,23 +56,81 @@ fn source(body: &XmlElement) -> Option<String> {
 impl XgwxDocument {
     /// Read standalone source. Unknown layouts remain visible but cannot be written.
     pub(crate) fn text_programs(&self) -> Vec<TextProgram> {
+        let (supported, languages) = self.text_program_capabilities();
+        self.root
+            .descendants_named("Program")
+            .enumerate()
+            .filter_map(|(program_index, program)| {
+                self.text_program_from_element(program_index, program, supported, &languages)
+            })
+            .collect()
+    }
+
+    pub(crate) fn text_program(&self, program_index: usize) -> Option<TextProgram> {
+        let program = self.program_element(program_index)?;
+        let (supported, languages) = self.text_program_capabilities();
+        self.text_program_from_element(program_index, program, supported, &languages)
+    }
+
+    fn text_program_capabilities(&self) -> (bool, Vec<&'static str>) {
         let configurations = self.configurations();
+        let languages = self.program_languages();
         let supported = configurations.len() == 1
             && configurations[0]
                 .type_code
                 .and_then(crate::cpu::cpu_for_type)
-                .is_some_and(|_| self.program_languages().contains(&"ST"));
-        self.root.descendants_named("Program").enumerate().filter_map(|(program_index, program)| {
-            let language = match program.attribute("Kind") { Some("4") => "ST", Some("9") => "IL", _ => return None };
-            let body = program.children.iter().find(|n| n.name == "Body");
-            let source = body.and_then(source);
-            let editable = supported && self.program_languages().contains(&language) && program.attribute("Encrytption").unwrap_or("").is_empty()
-                && program.attribute("ObjectId").is_some_and(|id| !id.is_empty())
-                && body.is_some_and(|b| b.children.len() == 1 && crate::sfc::read_st_source(b).is_some() && ["CodeList", "Bookmarks", "Breakpoints"].iter().all(|name| b.children[0].children.iter().filter(|n| n.name == *name).count() == 1));
-            let (variables, variables_error) = match self.sfc_variables(program_index) { Ok(v) => (v, None), Err(e) => (Vec::new(), Some(e.to_string())) };
-            Some(TextProgram { variables, variables_error, program_index, object_id: program.attribute("ObjectId").unwrap_or("").into(), language: language.into(), source, editable,
-                reason: (!editable).then(|| "This source layout, encryption, or bookmark/breakpoint metadata is not supported for editing.".into()) })
-        }).collect()
+                .is_some_and(|_| languages.contains(&"ST"));
+        (supported, languages)
+    }
+
+    fn text_program_from_element(
+        &self,
+        program_index: usize,
+        program: &XmlElement,
+        supported: bool,
+        languages: &[&str],
+    ) -> Option<TextProgram> {
+        let language = match program.attribute("Kind") {
+            Some("4") => "ST",
+            Some("9") => "IL",
+            _ => return None,
+        };
+        let body = program.children.iter().find(|n| n.name == "Body");
+        let source = body.and_then(source);
+        let editable = supported
+            && languages.contains(&language)
+            && program.attribute("Encrytption").unwrap_or("").is_empty()
+            && program
+                .attribute("ObjectId")
+                .is_some_and(|id| !id.is_empty())
+            && body.is_some_and(|b| {
+                b.children.len() == 1
+                    && crate::sfc::read_st_source(b).is_some()
+                    && ["CodeList", "Bookmarks", "Breakpoints"].iter().all(|name| {
+                        b.children[0]
+                            .children
+                            .iter()
+                            .filter(|n| n.name == *name)
+                            .count()
+                            == 1
+                    })
+            });
+        let (variables, variables_error) = match self.sfc_variables_from_program(program) {
+            Ok(v) => (v, None),
+            Err(e) => (Vec::new(), Some(e.to_string())),
+        };
+        Some(TextProgram {
+            variables,
+            variables_error,
+            program_index,
+            object_id: program.attribute("ObjectId").unwrap_or("").into(),
+            language: language.into(),
+            source,
+            editable,
+            reason: (!editable).then(|| {
+                "This source layout, encryption, or bookmark/breakpoint metadata is not supported for editing.".into()
+            }),
+        })
     }
 }
 
@@ -104,9 +162,7 @@ impl XgwxDocument {
         use std::io::Write;
         let fail = |reason: &str| XgwxError::TextProgramEdit(reason.into());
         let program = self
-            .text_programs()
-            .into_iter()
-            .find(|p| p.program_index == patch.program_index)
+            .text_program(patch.program_index)
             .ok_or_else(|| fail("select a standalone ST or IL program"))?;
         if !program.editable {
             return Err(fail(program.reason.as_deref().unwrap()));
@@ -156,11 +212,7 @@ impl XgwxDocument {
         );
         let mut candidate = self.clone();
         candidate.apply_xml_replacements(vec![(code.range(), xml)])?;
-        let actual = candidate
-            .text_programs()
-            .into_iter()
-            .find(|p| p.program_index == patch.program_index)
-            .unwrap();
+        let actual = candidate.text_program(patch.program_index).unwrap();
         if actual.source.as_deref() != Some(&patch.source) {
             return Err(fail("source did not round trip"));
         }
@@ -178,13 +230,9 @@ impl XgwxDocument {
         expected_object_id: &str,
         patch: &crate::SfcVariablePatch,
     ) -> Result<(), XgwxError> {
-        let text = self
-            .text_programs()
-            .into_iter()
-            .find(|p| p.program_index == patch.program_index)
-            .ok_or_else(|| {
-                XgwxError::TextProgramEdit("select a standalone ST or IL program".into())
-            })?;
+        let text = self.text_program(patch.program_index).ok_or_else(|| {
+            XgwxError::TextProgramEdit("select a standalone ST or IL program".into())
+        })?;
         if !text.editable || expected_object_id.is_empty() || text.object_id != expected_object_id {
             return Err(XgwxError::TextProgramEdit(
                 "program identity changed or layout is unsupported".into(),
