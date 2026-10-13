@@ -80,22 +80,6 @@ fn native_blank_projects_accept_network_module_in_first_slot() {
         include_bytes!("../fixtures/empty-projects/new-xgi.xgwx").as_slice(),
     ] {
         let mut doc = XgwxDocument::parse(source).unwrap();
-        if doc.program().ladder_programs()[0]
-            .as_ref()
-            .unwrap()
-            .project_type
-            == Some(2)
-        {
-            let original = doc.container().xml().to_owned();
-            assert!(
-                doc.base_mut()
-                    .by_number(0)
-                    .and_then(|mut selected_record| selected_record.insert_module(0, "XGL-EFMT(B)"))
-                    .is_err()
-            );
-            assert_eq!(doc.container().xml(), original);
-            continue;
-        }
         let before = doc.program().ladder_programs().remove(0).unwrap().data;
         doc.base_mut()
             .by_number(0)
