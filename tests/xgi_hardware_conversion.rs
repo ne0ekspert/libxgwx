@@ -163,3 +163,106 @@ fn malformed_xgi_base_information_rejects_conversion_without_mutation() {
         assert_eq!(doc, before);
     }
 }
+
+#[test]
+fn opaque_native_basic_metadata_is_preserved_across_cpu_conversions() {
+    let seed = create_project("XGI-CPUE", "LD").unwrap();
+    let mut root = seed.container().root().clone();
+    fn replace_metadata(node: &mut xgwx::XmlElement) {
+        if node.name == "XGIBasicParam" {
+            for attribute in &mut node.attributes {
+                if attribute.name.starts_with("OUTPUT_PARAMETER_RESERVED_") {
+                    let index: u32 = attribute.name.rsplit('_').next().unwrap().parse().unwrap();
+                    attribute.value = (12345 + index * 111).to_string();
+                } else if attribute.name == "check_sum" {
+                    attribute.value = "2147483648".into();
+                }
+            }
+        }
+        for child in &mut node.children {
+            replace_metadata(child);
+        }
+    }
+    replace_metadata(&mut root);
+    let mut source = seed.clone();
+    // Preserve XML spelling; editing the container does not modify any program.
+    let mut xml = seed.container().xml().to_owned();
+    let old = seed
+        .container()
+        .root()
+        .descendants_named("XGIBasicParam")
+        .next()
+        .unwrap();
+    let new = root.descendants_named("XGIBasicParam").next().unwrap();
+    for attribute in &new.attributes {
+        if old.attribute(&attribute.name) != Some(attribute.value.as_str()) {
+            xml = xml.replace(
+                &format!(
+                    "{}=\"{}\"",
+                    attribute.name,
+                    old.attribute(&attribute.name).unwrap()
+                ),
+                &format!("{}=\"{}\"", attribute.name, attribute.value),
+            );
+        }
+    }
+    source.container_mut().replace_xml(xml).unwrap();
+    for model in [
+        "XGI-CPUS",
+        "XGI-CPUH",
+        "XGI-CPUU",
+        "XGI-CPUU/D",
+        "XGI-CPUUN",
+    ] {
+        let mut doc = source.clone();
+        select(&mut doc, model);
+        let basic = doc
+            .container()
+            .root()
+            .descendants_named("XGIBasicParam")
+            .next()
+            .unwrap();
+        for name in (0..5)
+            .map(|i| format!("OUTPUT_PARAMETER_RESERVED_{i}"))
+            .chain(std::iter::once("check_sum".into()))
+        {
+            assert_eq!(basic.attribute(&name), new.attribute(&name));
+        }
+        assert_eq!(ladders(&doc), ladders(&source));
+        doc.to_verified_bytes().unwrap();
+        select(&mut doc, "XGI-CPUE");
+        let flags = source.configuration().list()[0].attribute.unwrap();
+        assert_eq!(
+            doc.container().xml(),
+            source.container().xml().replacen(
+                &format!("Attribute=\"{flags}\""),
+                &format!("Attribute=\"{}\"", flags & !0x80000),
+                1
+            )
+        );
+    }
+}
+
+#[test]
+fn malformed_basic_metadata_and_functional_custom_settings_remain_atomic() {
+    let source = create_project("XGI-CPUE", "LD").unwrap();
+    for (old, new) in [
+        ("check_sum=\"0\"", "check_sum=\"4294967296\""),
+        ("check_sum=\"0\"", "check_sum=\"invalid\""),
+        ("SCAN_WD_TIME_0=\"500\"", "SCAN_WD_TIME_0=\"600\""),
+    ] {
+        let mut doc = source.clone();
+        let xml = source.container().xml().replace(old, new);
+        assert_ne!(xml, source.container().xml());
+        doc.container_mut().replace_xml(xml).unwrap();
+        let before = doc.clone();
+        assert!(
+            doc.configuration_mut()
+                .get(0)
+                .unwrap()
+                .select_cpu("XGI-CPUS")
+                .is_err()
+        );
+        assert_eq!(doc, before);
+    }
+}

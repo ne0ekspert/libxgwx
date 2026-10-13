@@ -1140,38 +1140,35 @@ impl XgwxDocument {
             .find(|(code, _)| *code == target.type_code)
             .unwrap()
             .1;
-        let reserved = |root: &XmlElement| {
-            root.descendants_named("XGIBasicParam").next().map(|p| {
-                (0..5)
-                    .map(|i| {
-                        p.attribute(&format!("OUTPUT_PARAMETER_RESERVED_{i}"))
-                            .map(str::to_owned)
-                    })
-                    .collect::<Vec<_>>()
-            })
-        };
-        let blank = parse_xml(include_str!("project_defaults/xgi.xml"))?;
-        let loop_reserved = Some(
-            ["2578", "45", "0", "0", "0"]
-                .map(|v| Some(v.to_owned()))
-                .to_vec(),
-        );
-        if !profiles
-            .iter()
-            .any(|(_, root)| reserved(&self.root) == reserved(root))
-            && reserved(&self.root) != loop_reserved
-            && reserved(&self.root) != reserved(&blank)
+        // Native files contain varying reserved values and checksums even when
+        // every functional setting matches a captured default. Validate their
+        // representation, but preserve them rather than requiring a fixture's
+        // exact opaque values.
+        let basic_metadata = self
+            .root
+            .descendants_named("XGIBasicParam")
+            .next()
+            .ok_or_else(|| unsupported("missing XGI basic parameters"))?;
+        for name in (0..5)
+            .map(|i| format!("OUTPUT_PARAMETER_RESERVED_{i}"))
+            .chain(std::iter::once("check_sum".to_owned()))
         {
-            return Err(unsupported("unknown reserved basic-parameter values"));
+            if basic_metadata
+                .attribute(&name)
+                .and_then(|v| v.parse::<u32>().ok())
+                .is_none()
+            {
+                return Err(unsupported("invalid reserved basic-parameter metadata"));
+            }
         }
         fn normalized(mut element: XmlElement) -> XmlElement {
             element.text = element.text.trim().into();
-            // The captured blank, loop and CPU-change defaults differ in these reserved
-            // fields. Accept only those encodings above and preserve them;
-            // their meaning is not established by the CPU conversion capture.
+            // Opaque native metadata is retained exactly by the writer and
+            // does not establish whether the functional settings are defaults.
             if element.name == "XGIBasicParam" {
                 element.attributes.retain(|a| {
-                    !(0..5).any(|i| a.name == format!("OUTPUT_PARAMETER_RESERVED_{i}"))
+                    a.name != "check_sum"
+                        && !(0..5).any(|i| a.name == format!("OUTPUT_PARAMETER_RESERVED_{i}"))
                 });
             }
             if element.name == "Parameter" && element.attribute("Type") == Some("IO PARAMETER") {

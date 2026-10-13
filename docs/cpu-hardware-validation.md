@@ -102,8 +102,11 @@ No customized Ethernet or motion configuration is discarded.
 
 Native XG5000 4.82.1 warns that CPU changes reset all parameters. The writer
 therefore rejects custom or unknown parameters rather than resetting them.
-Only captured sets of the five `OUTPUT_PARAMETER_RESERVED_0..4` fields are
-accepted; their bytes are preserved and their meaning remains unverified.
+The initial implementation accepted only captured sets of the five
+`OUTPUT_PARAMETER_RESERVED_0..4` fields. CPU conversion now accepts any valid
+unsigned 32-bit values for those fields and `check_sum`, preserving the original
+attribute text. They are excluded from the comparison of functional defaults;
+their meaning and any native checksum recalculation remain unverified.
 That initial implementation guarded configured I/O/network modules. The rack
 editing extension below removes that restriction for compatible catalog modules.
 CPUS/P, cross-family changes and unsupported SFC layouts remain unavailable.
@@ -131,7 +134,7 @@ CPU conversion also preserves IEC LD programs and configured catalog modules.
 Module comments, Details, network records and physical base sizes remain intact.
 Occupied modules must fit the destination CPU; unused native base placeholders
 are preserved even when they exceed the CPU's available expansion-base count.
-Unknown module identities, malformed base information, custom CPU parameters and
+Unknown module identities, malformed base information, custom functional CPU parameters and
 cross-family conversions remain rejected atomically.
 
 `tests/xgi_hardware_conversion.rs` covers all six standard XGI models, saved
@@ -140,3 +143,11 @@ communication-module preservation, overlap and downgrade rejection. The bundled
 VS Code WASM and rack controls use the same writers. This extends local
 regression coverage; it does not add native XG5000 Check Program/Save As or live
 PLC acceptance evidence for these new combinations.
+
+The metadata regression recreates a native file with varying reserved fields and
+nonzero `check_sum`. All five conversions from CPUE save/reparse and reverse
+without changing that metadata or ladder data. Malformed and overflowing
+metadata, custom watchdog settings and existing hardware guards still reject
+atomically. An additional local run against the user-supplied IEC project
+preserved all seven ladder payloads, every local/global record and the original
+file. Native XG5000 acceptance of this metadata variation remains pending.

@@ -1017,7 +1017,7 @@ fn sfc_cpu_conversion_rejects_custom_parameters_hardware_and_unknown_models_atom
             .replace("CPUType=\"43009\"", "CPUType=\"1\""),
         source.container().xml().replace(
             "OUTPUT_PARAMETER_RESERVED_0=\"2578\"",
-            "OUTPUT_PARAMETER_RESERVED_0=\"123\"",
+            "OUTPUT_PARAMETER_RESERVED_0=\"4294967296\"",
         ),
         source.container().xml().replace(
             "<Base Base=\"7\" SlotCount=\"12\">",
