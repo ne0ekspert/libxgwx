@@ -146,6 +146,16 @@ impl VariableView<'_> {
     pub fn preview_io_variables(&self) -> Result<Vec<IoVariableGenerationRow>, XgwxError> {
         self.doc.preview_io_variables()
     }
+    /// Preview selected I/O rows without changing full-project address allocation.
+    /// Omitted selectors mean all; a slot alone selects it on every base.
+    #[cfg(feature = "write")]
+    pub fn preview_io_variables_for(
+        &self,
+        base: Option<u32>,
+        slot: Option<u32>,
+    ) -> Result<Vec<IoVariableGenerationRow>, XgwxError> {
+        crate::io_variables::plan_for(self.doc, base, slot)
+    }
     /// Short form of [`Self::variables`].
     pub fn globals(&self) -> Result<Vec<VariableSummary>, XgwxError> {
         self.variables()
@@ -244,6 +254,26 @@ impl VariableEditor<'_> {
     #[cfg(feature = "write")]
     pub fn generate_io_variables(&mut self) -> Result<(), XgwxError> {
         self.doc.generate_io_variables()
+    }
+    /// Preview selected I/O rows while retaining full-project address allocation.
+    /// Omitted base/slot selects all bases/slots; a slot alone selects it on every base.
+    #[cfg(feature = "write")]
+    pub fn preview_io_variables_for(
+        &self,
+        base: Option<u32>,
+        slot: Option<u32>,
+    ) -> Result<Vec<IoVariableGenerationRow>, XgwxError> {
+        crate::io_variables::plan_for(self.doc, base, slot)
+    }
+    /// Generate only selected I/O rows, retaining unrelated symbols and full-project allocation.
+    /// Missing bases and out-of-capacity slots are rejected. Omitted selectors mean all.
+    #[cfg(feature = "write")]
+    pub fn generate_io_variables_for(
+        &mut self,
+        base: Option<u32>,
+        slot: Option<u32>,
+    ) -> Result<(), XgwxError> {
+        self.doc.generate_io_variables_for(base, slot)
     }
 
     /// Short form of [`Self::variables`].

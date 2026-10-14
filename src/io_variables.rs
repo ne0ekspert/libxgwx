@@ -243,3 +243,27 @@ pub(crate) fn symbol_record(row: &IoVariableGenerationRow) -> Vec<u8> {
     string(&mut out, "[0:0]");
     out
 }
+
+// Preserve full-project allocation before selecting rows; scope must not renumber addresses.
+pub(crate) fn plan_for(
+    doc: &XgwxDocument,
+    base: Option<u32>,
+    slot: Option<u32>,
+) -> Result<Vec<IoVariableGenerationRow>, XgwxError> {
+    let bases = doc.base_summaries();
+    if base.is_some_and(|selected| !bases.iter().any(|b| b.base == Some(selected))) {
+        return Err(invalid("selected I/O base does not exist"));
+    }
+    if slot.is_some_and(|selected| {
+        !bases.iter().any(|b| {
+            base.is_none_or(|wanted| b.base == Some(wanted))
+                && b.slot_count.is_some_and(|count| selected < count)
+        })
+    }) {
+        return Err(invalid("selected I/O slot is outside the base capacity"));
+    }
+    Ok(plan(doc)?
+        .into_iter()
+        .filter(|row| base.is_none_or(|b| row.base == b) && slot.is_none_or(|s| row.slot == s))
+        .collect())
+}

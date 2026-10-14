@@ -15393,3 +15393,63 @@ fn browser_network_metadata_is_bounded_and_atomic() {
     let next = XgwxDocument::parse(&bytes).unwrap();
     assert_eq!(next.xml, doc.xml);
 }
+
+#[test]
+#[cfg(feature = "write")]
+fn scoped_io_keeps_native_allocation_and_unselected_records() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
+    let mut doc = XgwxDocument::from_path(root.join("empty-projects/new-xgk.xgwx")).unwrap();
+    for slot in [0, 1] {
+        doc.base_mut()
+            .by_number(0)
+            .unwrap()
+            .insert_module(slot, "XGI-D24A/B")
+            .unwrap();
+    }
+    let full = doc.variable().preview_io_variables().unwrap();
+    let selected = doc
+        .variable()
+        .preview_io_variables_for(None, Some(1))
+        .unwrap();
+    assert_eq!(
+        selected,
+        full.into_iter().filter(|r| r.slot == 1).collect::<Vec<_>>()
+    );
+    doc.variable_mut()
+        .generate_io_variables_for(Some(0), Some(0))
+        .unwrap();
+    let retained = doc.variable().variables().unwrap();
+    doc.variable_mut()
+        .generate_io_variables_for(Some(0), Some(1))
+        .unwrap();
+    let after = doc.variable().variables().unwrap();
+    assert_eq!(after.len(), 64);
+    assert!(retained.iter().all(|v| after.contains(v)));
+    assert!(
+        doc.variable_mut()
+            .generate_io_variables_for(Some(999), None)
+            .is_err()
+    );
+    doc.to_verified_bytes().unwrap();
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn empty_iec_table_accepts_first_primitive_without_whitespace_patch() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
+    let mut doc = XgwxDocument::from_path(root.join("empty-projects/new-xgi.xgwx")).unwrap();
+    let before = doc.program().ladder_program(0).unwrap().unwrap().data;
+    doc.program_mut()
+        .get(0)
+        .and_then(|mut p| p.variable_mut().insert("FirstLocal", "BOOL", "Ready"))
+        .unwrap();
+    assert_eq!(
+        doc.variable().iec_local_symbols().remove(0).unwrap()[0].name,
+        "FirstLocal"
+    );
+    assert_eq!(
+        doc.program().ladder_program(0).unwrap().unwrap().data,
+        before
+    );
+    doc.to_verified_bytes().unwrap();
+}

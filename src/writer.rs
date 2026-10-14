@@ -2364,7 +2364,15 @@ impl XgwxDocument {
     /// Generate digital I/O variables, replacing duplicate names or addresses.
     /// Unrelated symbol records and every program payload remain untouched.
     pub(crate) fn generate_io_variables(&mut self) -> Result<(), XgwxError> {
-        let rows = self.preview_io_variables()?;
+        self.generate_io_variables_for(None, None)
+    }
+
+    pub(crate) fn generate_io_variables_for(
+        &mut self,
+        base: Option<u32>,
+        slot: Option<u32>,
+    ) -> Result<(), XgwxError> {
+        let rows = crate::io_variables::plan_for(self, base, slot)?;
         if rows.iter().all(|r| r.action == "unchanged") {
             return Ok(());
         }
@@ -3656,15 +3664,20 @@ impl XgwxDocument {
                 index: insertion_index,
             });
         }
-        let text_node = table
-            .children()
-            .find(|node| node.is_text())
-            .ok_or(XgwxError::MissingSymbols)?;
-        let original_text = text_node.text().unwrap_or_default();
+        let text_node = table.children().find(|node| node.is_text());
+        if text_node.is_none() && (!symbols.is_empty() || table.children().any(|n| n.is_element()))
+        {
+            return Err(XgwxError::MissingSymbols);
+        }
+        let original_text = text_node.and_then(|n| n.text()).unwrap_or_default();
         let compressed = table
             .attribute("Compressed")
             .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"));
-        let payload = decode_base64_payload(original_text, compressed)?.data;
+        let payload = if symbols.is_empty() && original_text.trim().is_empty() {
+            Vec::new()
+        } else {
+            decode_base64_payload(original_text, compressed)?.data
+        };
         let insertion_offset = symbols
             .get(insertion_index)
             .map_or(payload.len(), |symbol| symbol.record_offset);
@@ -3704,13 +3717,38 @@ impl XgwxDocument {
         updated.extend_from_slice(&record);
         updated.extend_from_slice(&payload[insertion_offset..]);
         let replacement_text = encode_payload_text(original_text, compressed, &updated)?;
-        self.apply_xml_replacements(vec![
-            (
-                count_attribute.range_value(),
-                (symbols.len() + 1).to_string(),
-            ),
-            (text_node.range(), replacement_text),
-        ])
+        let replacements = if let Some(text_node) = text_node {
+            vec![
+                (
+                    count_attribute.range_value(),
+                    (symbols.len() + 1).to_string(),
+                ),
+                (text_node.range(), replacement_text),
+            ]
+        } else {
+            let mut raw = self.xml[table.range()].to_owned();
+            let count_range = count_attribute.range_value();
+            raw.replace_range(
+                count_range.start - table.range().start..count_range.end - table.range().start,
+                "1",
+            );
+            if raw.ends_with("/>") {
+                let tag = raw[1..]
+                    .split(|c: char| c.is_whitespace() || c == '/' || c == '>')
+                    .next()
+                    .unwrap()
+                    .to_owned();
+                raw.truncate(raw.len() - 2);
+                raw.push('>');
+                raw.push_str(&replacement_text);
+                raw.push_str(&format!("</{tag}>"));
+            } else {
+                let start = raw.find('>').ok_or(XgwxError::MissingSymbols)? + 1;
+                raw.insert_str(start, &replacement_text);
+            }
+            vec![(table.range(), raw)]
+        };
+        self.apply_xml_replacements(replacements)
     }
 
     /// Allocate a newly inserted primitive local using the width of a
