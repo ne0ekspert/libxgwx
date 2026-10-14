@@ -3670,9 +3670,15 @@ impl XgwxDocument {
             return Err(XgwxError::MissingSymbols);
         }
         let original_text = text_node.and_then(|n| n.text()).unwrap_or_default();
-        let compressed = table
-            .attribute("Compressed")
-            .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"));
+        // Native empty tables omit their encoding metadata. Materialize the
+        // compressed typed table when adding the first symbol, as XG5000 does.
+        let initialize_table = symbols.is_empty()
+            && original_text.trim().is_empty()
+            && table.attribute("Compressed").is_none();
+        let compressed = initialize_table
+            || table
+                .attribute("Compressed")
+                .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"));
         let payload = if symbols.is_empty() && original_text.trim().is_empty() {
             Vec::new()
         } else {
@@ -3717,7 +3723,7 @@ impl XgwxDocument {
         updated.extend_from_slice(&record);
         updated.extend_from_slice(&payload[insertion_offset..]);
         let replacement_text = encode_payload_text(original_text, compressed, &updated)?;
-        let replacements = if let Some(text_node) = text_node {
+        let replacements = if let Some(text_node) = text_node.filter(|_| !initialize_table) {
             vec![
                 (
                     count_attribute.range_value(),
@@ -3732,6 +3738,24 @@ impl XgwxDocument {
                 count_range.start - table.range().start..count_range.end - table.range().start,
                 "1",
             );
+            if initialize_table {
+                let end = raw.find('>').ok_or(XgwxError::MissingSymbols)?;
+                let position = if raw[..end].ends_with('/') {
+                    end - 1
+                } else {
+                    end
+                };
+                let mut attributes = String::from(" Compressed=\"1\"");
+                if !table.attributes().any(|a| {
+                    a.name() == "dt" && a.namespace() == Some("urn:schemas-microsoft-com:datatypes")
+                }) {
+                    attributes.push_str(" dt:dt=\"bin.base64\"");
+                    if !raw[..end].contains("xmlns:dt=") {
+                        attributes.push_str(" xmlns:dt=\"urn:schemas-microsoft-com:datatypes\"");
+                    }
+                }
+                raw.insert_str(position, &attributes);
+            }
             if raw.ends_with("/>") {
                 let tag = raw[1..]
                     .split(|c: char| c.is_whitespace() || c == '/' || c == '>')

@@ -27,3 +27,9 @@ Local capture evidence is under
 `VMs/xg5000-win10/captures/iec-full-edit-audit-20261004/variable-*`.
 The native test used names up to 27 units; the binary writer's 255-unit name
 limit is covered locally, not by a separate native name-length boundary test.
+
+- `first-local-native.xgwx`: XG5000 4.82.1 created the first local `Enable`
+  declaration (`VAR`, `BOOL`, empty description) in the public blank XGI project
+  on 2026-10-14, then saved it as a separate file. Native empty tables materialize
+  `Compressed="1"` and typed `bin.base64` metadata with their first symbol.
+  This fixture validates table serialization; its ladder is intentionally empty.

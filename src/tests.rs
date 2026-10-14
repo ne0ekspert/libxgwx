@@ -15453,3 +15453,37 @@ fn empty_iec_table_accepts_first_primitive_without_whitespace_patch() {
     );
     doc.to_verified_bytes().unwrap();
 }
+
+#[test]
+#[cfg(feature = "write")]
+fn first_iec_local_table_matches_native_encoding_and_record() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
+    let native = XgwxDocument::from_path(root.join("variables/first-local-native.xgwx")).unwrap();
+    let mut generated = XgwxDocument::from_path(root.join("empty-projects/new-xgi.xgwx")).unwrap();
+    generated
+        .program_mut()
+        .get(0)
+        .and_then(|mut p| p.variable_mut().insert("Enable", "BOOL", ""))
+        .unwrap();
+    fn local_record(doc: &XgwxDocument) -> Vec<u8> {
+        let xml = roxmltree::Document::parse(&doc.xml).unwrap();
+        let symbols = xml
+            .descendants()
+            .find(|n| n.has_tag_name("LocalVar"))
+            .unwrap()
+            .descendants()
+            .find(|n| n.has_tag_name("Symbols"))
+            .unwrap();
+        assert_eq!(symbols.attribute("Count"), Some("1"));
+        assert_eq!(symbols.attribute("Compressed"), Some("1"));
+        assert_eq!(
+            symbols.attribute(("urn:schemas-microsoft-com:datatypes", "dt")),
+            Some("bin.base64")
+        );
+        decode_base64_payload(symbols.text().unwrap(), true)
+            .unwrap()
+            .data
+    }
+    assert_eq!(local_record(&generated), local_record(&native));
+    generated.to_verified_bytes().unwrap();
+}
