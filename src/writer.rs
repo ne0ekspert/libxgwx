@@ -7247,7 +7247,7 @@ impl XgwxDocument {
     }
 
     /// Replace a captured IEC LD function input/output expression (`FF 46`).
-    /// Classified symbols and literals are checked against the decoded pin type;
+    /// Operands must resolve to a known type compatible with the decoded pin type;
     /// output pins also require a writable destination.
     pub(crate) fn update_iec_ld_function_operand(
         &mut self,
@@ -7407,6 +7407,10 @@ impl XgwxDocument {
                     });
                 }
             }
+        } else {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "IEC function operand requires a known scalar expression or device address",
+            });
         }
         self.replace_iec_ld_text(program_index, offset, expected, replacement)
     }

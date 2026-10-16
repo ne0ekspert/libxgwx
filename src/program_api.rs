@@ -1038,7 +1038,7 @@ impl IecLdEditor<'_> {
         )
     }
     /// Replace a captured IEC LD function input/output expression (`FF 46`).
-    /// Classified symbols and literals are checked against the decoded pin type;
+    /// Operands must resolve to a known type compatible with the decoded pin type;
     /// output pins also require a writable destination.
     pub fn update_function_operand(
         &mut self,
