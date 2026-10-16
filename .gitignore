@@ -26,3 +26,9 @@
 # Native CPU-family text-program acceptance fixtures
 !fixtures/text-cpus/*.xgwx
 !fixtures/text-programs/cpu/*.xgwx
+
+# Native EOPCT OPC UA acceptance fixtures
+!fixtures/networks/eopct-tags-native.xgwx
+!fixtures/networks/eopct-scalars-native.xgwx
+!fixtures/networks/eopct-generated-resaved.xgwx
+!fixtures/networks/eopct-integers-resaved.xgwx

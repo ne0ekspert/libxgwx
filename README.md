@@ -903,3 +903,43 @@ block indices; native block selectors can repeat. Unowned blocks remain in the
 collection's `blocks()` list. Safety and trend lists retain all records, while
 `first()` preserves the old optional-first reader behavior. Trend `sections()`
 retains unknown and repeated children. No new native writer layouts are assumed.
+
+### EOPCT OPC UA editing (`write`)
+
+EOPCT options are native Ethernet configuration records, separate from the
+hardware module's `Details`. The network namespace exposes decoded settings
+and the XGK EtherNet/IP / OPC UA export-tag list:
+
+```rust,no_run
+use xgwx::{OpcUaFieldEdit, OpcUaTag, OpcUaTagPatch, XgwxDocument};
+let mut doc = XgwxDocument::from_path("project.xgwx")?;
+doc.network_mut().module_at(0, 0)?.opcua()?.edit_settings(&[
+    OpcUaFieldEdit {
+        field: "port".into(), expected_value: "4840".into(), replacement: "4841".into(),
+    },
+])?;
+let expected_tags = doc.network().opcua_tags(0)?;
+doc.network_mut().edit_opcua_tag(&OpcUaTagPatch {
+    configuration_index: 0,
+    expected_tags,
+    index: None, // Some(index) updates; tag: None deletes that existing tag.
+    tag: Some(OpcUaTag {
+        name: "TankLevel".into(), data_type: "WORD".into(),
+        address_area: "D".into(), address_number: 100, comment: "Tank level".into(),
+    }),
+})?;
+std::fs::write("edited.xgwx", doc.to_verified_bytes()?)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Server edits validate captured values and interval relationships atomically;
+IP/port edits synchronize the derived endpoint. XGK scalar tag edits preserve
+unselected native records and use the complete prior list as a stale guard.
+P/M/K/L addresses use native bit offsets; D uses word offsets. Initial support
+covers BIT/BYTE/WORD/DWORD/LWORD and explicit signed/unsigned integer pairs
+SINT/USINT, INT/UINT, DINT/UDINT and LINT/ULINT, bounded direct addresses and
+1,000 scalar tags. Integer type names are retained in the native tag records;
+word-width types do not implicitly select signedness.
+IEC variable export flags, arrays, structures and special-module addresses are
+not yet writable. See [native EOPCT acceptance evidence](fixtures/networks/README.md)
+for exact fixtures and the live-device boundary.

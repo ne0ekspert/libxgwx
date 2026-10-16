@@ -67,3 +67,55 @@ preserved every Cnet module/port attribute and the full ladder payload.
 C22's native dialog does not offer repeater mode; its writer/UI guard rejects
 that option. CH2 and C42 expose it. Empty-program compilation is outside this
 serial-configuration acceptance check.
+
+## EOPCT OPC UA settings and exported tags
+
+Captured on 2026-10-16 with XG5000 4.82.1 in the offline lab VM, using a
+throwaway disk snapshot and synthetic projects. No PLC was connected.
+
+- `eopct-tags-native.xgwx`: native Project → EtherNet/IP(OPC UA) Tag Settings
+  added `PumpReady` (BIT, M00000) and `TankLevel` (WORD, D00123).
+- `eopct-scalars-native.xgwx`: the same project with native BYTE M00010,
+  DWORD D00200 and LWORD D00300 tags. The BYTE record stores native bit offset
+  16, rather than decimal device number 10.
+- `eopct-generated-resaved.xgwx`: native Save As of a blank Rust-generated
+  XGK-CPUSN project with a newly inserted EOPCT and five generated scalar tags.
+  The dialogs displayed the generated types, names, addresses and descriptions,
+  port 4841 and String node IDs. Both intervals were saved at 100 ms. During
+  acceptance, XG5000 rejected publishing 100 ms with sampling 200 ms; the writer
+  now checks this relationship atomically. The resaved typed settings and tag
+  list are compared against the corrected generator in `tests/opcua.rs`.
+- `eopct-integers-resaved.xgwx`: native Save As of the generated project with
+  eight additional SINT/USINT, INT/UINT, DINT/UDINT and LINT/ULINT tags.
+  XG5000 displayed each exact type and retained its address and description.
+  Regression tests also edit and reopen every integer record after this resave.
+
+The settings template in `src/eopct_default.xml` comes from the captured EOPCT
+record and is stored separately from its unchanged module Details bytes.
+Inserted server identities are distinct by base/slot within the document.
+
+The provided XGL-EOPCT/T1 manual V1.20 (2026-05), sections 5.3.2 and 5.3.5,
+describes server options and how PLC export tags generate nodes. XGK exported
+nodes are compressed `SV5.0` records in `EIPTags`. Numeric node IDs are assigned
+by the server; String IDs follow tag names. The editor does not write client
+NodeSet XML or manually assign numeric IDs.
+
+Supported node edits are XGK scalar BIT/BYTE/WORD/DWORD/LWORD and explicit
+integer pairs SINT/USINT, INT/UINT, DINT/UDINT and LINT/ULINT, direct P/M/K/L/D
+areas, bounded native offsets and up to 1,000 entries. BIT and 8-bit types use P/M/K/L;
+wide types require aligned addresses. Unchanged records are preserved verbatim.
+Arrays, structures, special-module/banked addresses, extended native strings,
+and IEC variable export flags are not yet writable. Certificate material,
+account tables, NTP server lists and host/port tables are preserved; their
+records are not rebuilt. NTP cannot be enabled without a configured server.
+
+Native Save As and offline Rust/WASM/browser tests establish file-format and
+editor behavior. They do not establish live OPC UA interoperability, module
+firmware compatibility, authentication or network operation.
+
+The developer probe can generate a controlled candidate and inspect a resave:
+
+```sh
+cargo run --manifest-path dev-tools/Cargo.toml --bin opcua_acceptance -- /tmp/EOPGEN.xgwx
+cargo run --manifest-path dev-tools/Cargo.toml --bin opcua_acceptance -- check /path/to/native-resave.xgwx
+```

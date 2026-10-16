@@ -29,7 +29,7 @@ use crate::{
 ///
 #[derive(Debug, Clone, Copy)]
 pub struct NetworkView<'a> {
-    doc: &'a XgwxDocument,
+    pub(crate) doc: &'a XgwxDocument,
 }
 
 impl XgwxDocument {
@@ -233,6 +233,10 @@ mod editors {
     pub struct CnetEditor<'a> {
         module: NetworkModuleEditor<'a>,
     }
+    /// Native OPC UA options associated with a selected EOPCT membership.
+    pub struct OpcUaEditor<'a> {
+        module: NetworkModuleEditor<'a>,
+    }
     /// One captured field change; the selected handle supplies its location.
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct NetworkFieldEdit {
@@ -258,6 +262,11 @@ mod editors {
         }
     }
     impl<'a> NetworkCollectionEditor<'a> {
+        /// Create, update or delete a native XGK exported tag with a complete stale-list guard.
+        pub fn edit_opcua_tag(&mut self, patch: &crate::OpcUaTagPatch) -> Result<(), XgwxError> {
+            self.doc.edit_opcua_tag(patch)
+        }
+
         /// Select a network by document order.
         pub fn get(self, index: usize) -> Result<NetworkEditor<'a>, XgwxError> {
             consistent(self.doc)?;
@@ -319,6 +328,12 @@ mod editors {
         }
     }
     impl<'a> NetworkModuleEditor<'a> {
+        /// Select native EOPCT OPC UA settings at this membership's coordinates.
+        pub fn opcua(self) -> Result<OpcUaEditor<'a>, XgwxError> {
+            let (base, slot) = self.coordinates()?;
+            self.doc.edit_opcua_settings(base, slot, &[])?;
+            Ok(OpcUaEditor { module: self })
+        }
         /// Borrow the selected membership for inspection.
         pub fn view(&self) -> NetworkModuleRef<'_> {
             NetworkModuleRef {
@@ -427,6 +442,16 @@ mod editors {
                 slot,
                 changes: changes.to_vec(),
             })
+        }
+    }
+    impl OpcUaEditor<'_> {
+        /// Apply related native server changes in one transaction.
+        pub fn edit_settings(
+            &mut self,
+            changes: &[crate::OpcUaFieldEdit],
+        ) -> Result<(), XgwxError> {
+            let (base, slot) = self.module.coordinates()?;
+            self.module.doc.edit_opcua_settings(base, slot, changes)
         }
     }
 }

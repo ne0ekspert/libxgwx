@@ -77,12 +77,20 @@ pub use configuration_api::{ConfigurationRef, ConfigurationView};
 pub use project_api::ProjectEditor;
 pub use project_api::ProjectView;
 mod network_api;
+mod opcua;
+mod opcua_tags;
 #[cfg(feature = "write")]
 pub use network_api::{
     CnetEditor, FenetEditor, NetworkCollectionEditor, NetworkEditor, NetworkFieldEdit,
-    NetworkModuleEditor,
+    NetworkModuleEditor, OpcUaEditor,
 };
 pub use network_api::{NetworkModuleRef, NetworkRef, NetworkView};
+#[cfg(feature = "write")]
+pub use opcua::OpcUaFieldEdit;
+pub use opcua::{OpcUaConfig, OpcUaSetting};
+pub use opcua_tags::OpcUaTag;
+#[cfg(feature = "write")]
+pub use opcua_tags::OpcUaTagPatch;
 mod program_api;
 #[cfg(feature = "write")]
 pub use document_api::{ProgramEditor, VariableEditor};

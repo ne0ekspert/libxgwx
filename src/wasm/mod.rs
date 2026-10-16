@@ -890,6 +890,47 @@ pub fn edit_xgwx_browser_network_wasm(bytes: &[u8], patch: JsValue) -> Result<Ve
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+/// Create, update or delete an XGK exported OPC UA tag.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_opcua_tag)]
+pub fn edit_xgwx_opcua_tag_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&patch)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("invalid OPC UA tag patch"))?;
+    let patch: OpcUaTagPatch =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.network_mut()
+        .edit_opcua_tag(&patch)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Apply EOPCT server options atomically with stale-value protection.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_opcua_settings)]
+pub fn edit_xgwx_opcua_settings_wasm(
+    bytes: &[u8],
+    base: u32,
+    slot: u32,
+    changes: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&changes)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("invalid OPC UA changes"))?;
+    let changes: Vec<OpcUaFieldEdit> =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.network_mut()
+        .module_at(base, slot)
+        .and_then(|module| module.opcua())
+        .and_then(|mut server| server.edit_settings(&changes))
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Apply a batch of native Cnet serial-port changes atomically.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = edit_xgwx_cnet_settings)]
@@ -2524,12 +2565,22 @@ struct WasmDocumentSummary {
     xgpd: Vec<WasmXgpdSummary>,
     cnet: Vec<WasmCnetSummary>,
     fenet: Vec<WasmFenetSummary>,
+    opcua: Vec<OpcUaConfig>,
+    opcua_tags: Vec<WasmOpcUaTagTable>,
     parameters: Vec<WasmParameterSummary>,
     safety_comm: Option<WasmSafetyCommSummary>,
     hsc: Vec<WasmHscSummary>,
     position: Vec<WasmPositionSummary>,
     pid: WasmPidSummary,
     warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmOpcUaTagTable {
+    configuration_index: usize,
+    tags: Vec<OpcUaTag>,
+    error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2727,6 +2778,25 @@ impl WasmDocumentSummary {
             fenet: fenet_configs
                 .iter()
                 .map(WasmFenetSummary::from_fenet)
+                .collect(),
+            opcua: doc.network().opcua_config_infos(),
+            opcua_tags: doc
+                .configuration()
+                .list()
+                .iter()
+                .enumerate()
+                .map(|(index, _)| match doc.network().opcua_tags(index) {
+                    Ok(tags) => WasmOpcUaTagTable {
+                        configuration_index: index,
+                        tags,
+                        error: None,
+                    },
+                    Err(error) => WasmOpcUaTagTable {
+                        configuration_index: index,
+                        tags: Vec::new(),
+                        error: Some(error.to_string()),
+                    },
+                })
                 .collect(),
             parameters: parameters
                 .into_iter()

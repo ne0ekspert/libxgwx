@@ -591,3 +591,8 @@ path = "xgk_manual_probe.rs"
 [[bin]]
 name = "xgk_string_acceptance"
 path = "xgk_string_acceptance.rs"
+
+[[bin]]
+name = "opcua_acceptance"
+path = "opcua_acceptance.rs"
+required-features = ["write"]

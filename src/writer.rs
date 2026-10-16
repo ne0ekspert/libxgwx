@@ -959,6 +959,7 @@ impl XgwxDocument {
         }
         let mut candidate = self.clone();
         candidate.apply_xml_replacements(replacements)?;
+        candidate.sync_opcua_endpoint(patch.base, patch.slot)?;
         candidate.to_verified_bytes()?;
         *self = candidate;
         Ok(())
@@ -13622,6 +13623,30 @@ fn push_network_configuration_additions(
                 String::new()
             },
         );
+        let config = if entry.model == "XGL-EOPCT" {
+            let guid = format!("00000000_0000_4000_8000_{base:06x}{slot:06x}");
+            let cpu_type = document
+                .descendants()
+                .find(|n| n.has_tag_name("Configuration"))
+                .and_then(|n| n.attribute("Type"))
+                .and_then(|v| v.parse::<u32>().ok());
+            let family = crate::cpu_catalog()
+                .iter()
+                .find(|c| Some(c.type_code) == cpu_type)
+                .map(|c| c.family)
+                .unwrap_or("XGK");
+            let app =
+                escape_xml_attribute(&format!("XG5000.{family}.OPCUAServer/{configuration_name}"));
+            include_str!("eopct_default.xml")
+                .replace("{base}", &base.to_string())
+                .replace("{slot}", &slot.to_string())
+                .replace("{guid}", &guid)
+                .replace("XG5000.XGK.OPCUAServer/LSPLC", &app)
+                + newline
+                + &group_indentation
+        } else {
+            config
+        };
         replacements.push((group_offset..group_offset, config));
     }
     Ok(())
@@ -13634,6 +13659,10 @@ struct NetworkProfile {
 
 fn network_profile(model: &str) -> Option<NetworkProfile> {
     match model {
+        "XGL-EOPCT" => Some(NetworkProfile {
+            xgpd_tag: Some("FENET"),
+            attributes: "",
+        }),
         "XGL-EDMT" => Some(NetworkProfile {
             xgpd_tag: Some("FDENET"),
             attributes: " Media=\"0\" Master=\"0\"",
@@ -17788,7 +17817,7 @@ fn replace_iec_ld_text_bytes(
     Ok(updated)
 }
 
-fn encode_payload_text(
+pub(crate) fn encode_payload_text(
     original_text: &str,
     compressed: bool,
     payload: &[u8],
