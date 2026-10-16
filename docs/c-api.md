@@ -13,6 +13,12 @@ The build produces a shared library (`libxgwx.so`, `libxgwx.dylib`, or
 in the crates.io package; examples and fixtures remain repository-only.
 The C API targets native platforms; use the existing `wasm` API in browsers.
 
+Prebuilt shared/static libraries and the matching header are distributed through
+[GitHub Releases](https://github.com/ne0ekspert/libxgwx/releases), using the same
+version tags as crates.io (`vX.Y.Z`). Choose the archive for your target and
+verify its checksum against `SHA256SUMS`. These builds enable `ffi,write,il`.
+See [release assets and platform details](releases.md#release-assets).
+
 ## C example
 
 The [C inspector](../examples/c/inspect.c) prints a JSON summary and optionally

@@ -1,0 +1,150 @@
+name: Release crate and native libraries
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/package-ffi.py'
+      - 'scripts/check-release-registry.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check version matches release tag
+        id: version
+        shell: python
+        run: |
+          import os, tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path('Cargo.toml').read_text())['package']['version']
+          if os.environ['GITHUB_REF_TYPE'] == 'tag' and os.environ['GITHUB_REF_NAME'] != f'v{version}':
+              raise SystemExit(f'Tag must be v{version}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+      - run: cargo test --locked --features ffi,write,il
+      - run: sh scripts/check-c-api.sh
+      - name: Verify crate and optional APIs
+        run: |
+          cargo package --locked
+          cargo check --locked --manifest-path target/package/libxgwx-${{ steps.version.outputs.version }}/Cargo.toml --lib --features ffi,write,il,wasm
+          cargo publish --dry-run --locked
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-crate
+          path: target/package/*.crate
+          if-no-files-found: error
+
+  native:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-crate
+          path: candidate
+      - name: Build, smoke-test and archive native libraries
+        run: python scripts/package-ffi.py candidate/libxgwx-${{ needs.validate.outputs.version }}.crate --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: github.ref_type == 'tag' && github.event_name != 'pull_request'
+    needs: [validate, native]
+    runs-on: ubuntu-22.04
+    environment: crates-io
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-crate
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          merge-multiple: true
+          path: dist
+      - name: Verify source package and checksum assets
+        run: |
+          cargo package --locked
+          cmp "target/package/libxgwx-$RELEASE_VERSION.crate" "dist/libxgwx-$RELEASE_VERSION.crate"
+          (cd dist && sha256sum *.crate *.tar.gz *.zip > SHA256SUMS)
+      - name: Check registry version before creating release
+        id: registry
+        run: |
+          state=$(python scripts/check-release-registry.py "dist/libxgwx-$RELEASE_VERSION.crate")
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+      - name: Prepare draft release with all assets
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            extra=()
+            if [[ "$RELEASE_VERSION" == *-* ]]; then extra+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" dist/* --draft --verify-tag --generate-notes \
+              --title "libxgwx $RELEASE_VERSION" "${extra[@]}"
+          fi
+      - name: Publish matching crate
+        if: steps.registry.outputs.state == 'missing'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked
+      - name: Verify crates.io checksum and publish GitHub Release
+        run: |
+          python scripts/check-release-registry.py "dist/libxgwx-$RELEASE_VERSION.crate" --wait
+          gh release edit "$RELEASE_TAG" --draft=false

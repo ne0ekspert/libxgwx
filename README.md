@@ -550,6 +550,15 @@ network summaries, and a parameter selector with the same section attributes
 and decoded HSC, position, PID, safety, Cnet, and FEnet details as the TUI. It
 also includes a best-effort SVG ladder viewer for decoded ladder programs.
 
+## Releases
+
+Rust crate versions and [GitHub Releases](https://github.com/ne0ekspert/libxgwx/releases)
+share a version: crate `X.Y.Z` corresponds to tag `vX.Y.Z`. Each Release includes
+the `.crate` package, native C libraries for Linux x86-64, Windows x86-64 (MSVC),
+and macOS Intel/Apple Silicon, plus `SHA256SUMS`. Native archives contain shared
+and static libraries, the matching `xgwx.h`, Apache license, and build metadata.
+See [the release procedure](docs/releases.md) and [C API guide](docs/c-api.md).
+
 ## Fixtures
 
 The repository includes small `.xgwx` files in `fixtures/` for the normal test
