@@ -259,7 +259,7 @@ fn row_frames(program: &LadderProgramData) -> Option<Vec<IecRowFrame>> {
                 && prefix[offset + 1..offset + 3] == y.to_le_bytes()
                 && prefix[offset + 3] == 0
         };
-        if prefix[13] > 1
+        if !matches!(prefix[13], 0 | 1 | 16)
             || prefix[14..17] != [0; 3]
             || prefix[21] != 94
             || !coordinate(21)

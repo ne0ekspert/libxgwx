@@ -52,6 +52,7 @@ pub(super) struct WasmLadderProgramSummary {
     pub(super) vertical_lines: Vec<WasmLadderVerticalLineSummary>,
     pub(super) branch_groups: Vec<WasmLadderBranchGroupSummary>,
     pub(super) horizontal_lines: Vec<WasmLadderHorizontalLineSummary>,
+    pub(super) labels: Vec<LadderLabel>,
     pub(super) rung_comments: Vec<WasmLadderRungCommentSummary>,
     pub(super) output_comments: Vec<WasmLadderOutputCommentSummary>,
     pub(super) unknown_records: Vec<WasmLadderUnknownRecordSummary>,
@@ -558,6 +559,7 @@ impl WasmLadderProgramSummary {
                 .iter()
                 .map(WasmLadderHorizontalLineSummary::from_line)
                 .collect(),
+            labels: program.labels(),
             rung_comments: program
                 .structure
                 .rung_comments
@@ -626,6 +628,7 @@ impl WasmIecRecordSummary {
             IecRecordKind::Contact(code) => ("Contact", Some(code)),
             IecRecordKind::Coil(code) => ("Coil", Some(code)),
             IecRecordKind::Comment => ("Comment", None),
+            IecRecordKind::Label => ("Label", None),
             IecRecordKind::FunctionOperand => ("Function operand", None),
             IecRecordKind::BranchStart => ("Branch start", None),
             IecRecordKind::BranchEnd => ("Branch end", None),

@@ -418,6 +418,27 @@ pub fn edit_xgwx_ladder_comment_wasm(
         .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Create, rename or delete a native IEC or XGK ladder label.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_ld_label)]
+pub fn edit_xgwx_ld_label_wasm(
+    bytes: &[u8],
+    program_index: usize,
+    edit: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    let edit: LadderLabelEdit = serde_json::from_str(
+        &js_sys::JSON::stringify(&edit)?
+            .as_string()
+            .ok_or_else(|| JsValue::from_str("invalid label edit"))?,
+    )
+    .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.edit_ld_label(program_index, &edit)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Delete a supported native rung comment.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = delete_xgwx_ladder_rung_comment)]

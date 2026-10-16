@@ -114,6 +114,11 @@ impl<'a> ProgramEditor<'a> {
 
 #[cfg(feature = "write")]
 impl Program<'_> {
+    /// Create, rename or delete a native label in XGK or IEC ladder.
+    pub fn edit_ld_label(&mut self, edit: &LadderLabelEdit) -> Result<(), XgwxError> {
+        self.ensure_identity()?;
+        self.doc.edit_ld_label(self.index, edit)
+    }
     fn ensure_identity(&self) -> Result<(), XgwxError> {
         let program = self
             .doc
@@ -1273,9 +1278,9 @@ impl IecLdEditor<'_> {
             destination_first_row_index,
         )
     }
-    /// Create a standalone IEC comment in an empty row by copying a captured
-    /// one-record comment group from the same program and replacing its text.
-    /// The source group remains untouched; failures leave the document intact.
+    /// Insert a native standalone IEC comment into an empty canvas row.
+    /// No existing comment template is needed. Sparse tail rows extend the
+    /// stored extent; failures leave the document intact.
     pub fn insert_comment(
         &mut self,
         destination_row_index: u16,

@@ -646,6 +646,7 @@ pub(crate) fn extract_ladder_unknown_records(
             || marker == [0xff, 0x02]
             || marker == [0xff, 0x3f]
             || marker == [0xff, 0x40]
+            || marker == [0xff, 0x41]
             || marker == [0xff, 0x43]
         {
             offset += 1;

@@ -749,7 +749,7 @@ fn comment_marker(kind: LadderCommentKind) -> u8 {
     }
 }
 
-fn comment_record(kind: LadderCommentKind, y: u32, text: &str) -> Record {
+pub(crate) fn comment_record(kind: LadderCommentKind, y: u32, text: &str) -> Record {
     let rung = kind == LadderCommentKind::Rung;
     let x = if rung { 1 } else { 97 };
     let mut bytes = vec![
@@ -805,6 +805,75 @@ fn replace_comment_text(
         wire_end: None,
         element: None,
     })
+}
+
+pub(crate) fn edit_ladder_label(
+    bytes: &[u8],
+    edit: &crate::LadderLabelEdit,
+) -> Result<Vec<u8>, XgwxError> {
+    if !edit.raw_y.is_multiple_of(4) || edit.raw_y >= XGK_MAX_ROWS as u32 * 4 {
+        return Err(unsupported());
+    }
+    if edit.replacement.is_none() {
+        return delete_ladder_annotation(
+            bytes,
+            edit.raw_y,
+            edit.expected.as_deref().ok_or_else(unsupported)?,
+            0x41,
+            16,
+        );
+    }
+    let name = edit.replacement.as_deref().unwrap();
+    let mut program = EditableProgram::parse(bytes)?;
+    if let Some(expected) = &edit.expected {
+        let row = program
+            .rows
+            .iter_mut()
+            .find(|row| row.y == edit.raw_y && row.prefix[13] == 16)
+            .ok_or_else(unsupported)?;
+        let record = row.records.first_mut().ok_or_else(unsupported)?;
+        if !record.bytes.starts_with(&[255, 0x41]) || string_at(&record.bytes, 15)?.0 != *expected {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "label changed since selection",
+            });
+        }
+        record.bytes = crate::ld_labels::record(edit.raw_y, name);
+    } else {
+        let occupied = program
+            .rows
+            .iter()
+            .any(|row| row.y == edit.raw_y && !row.records.is_empty());
+        if occupied {
+            if program.rows.iter().any(|row| {
+                row.y < edit.raw_y
+                    && row.records.iter().any(|record| {
+                        record.bytes.starts_with(&[0, 0]) && y_at(&record.bytes, 18) >= edit.raw_y
+                    })
+            }) {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "labels cannot split a branch span",
+                });
+            }
+            program = EditableProgram::parse(&insert_ladder_row(bytes, edit.raw_y)?)?;
+        }
+        let index = program.materialize_row(edit.raw_y);
+        let row = &mut program.rows[index];
+        row.prefix[13] = 16;
+        row.prefix[17..21].copy_from_slice(&39u32.to_le_bytes());
+        row.prefix[21..25].copy_from_slice(&xy(94, edit.raw_y));
+        row.prefix[25..29].copy_from_slice(&xy(94, edit.raw_y));
+        row.prefix[29..33].copy_from_slice(&xy(1, edit.raw_y));
+        row.records.push(Record {
+            bytes: crate::ld_labels::record(edit.raw_y, name),
+            x: 1,
+            wire_end: None,
+            element: None,
+        });
+        program.rebuild_groups();
+    }
+    let out = program.encode();
+    EditableProgram::parse(&out)?;
+    Ok(out)
 }
 
 /// Create or edit a native rung/output comment record.
@@ -915,6 +984,16 @@ pub(crate) fn delete_ladder_rung_comment(
     raw_y: u32,
     expected: &str,
 ) -> Result<Vec<u8>, XgwxError> {
+    delete_ladder_annotation(bytes, raw_y, expected, 0x3f, 1)
+}
+
+pub(crate) fn delete_ladder_annotation(
+    bytes: &[u8],
+    raw_y: u32,
+    expected: &str,
+    marker: u8,
+    flag: u8,
+) -> Result<Vec<u8>, XgwxError> {
     if !raw_y.is_multiple_of(4) {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "invalid rung comment row",
@@ -934,7 +1013,7 @@ pub(crate) fn delete_ladder_rung_comment(
     let record = row
         .records
         .iter()
-        .find(|record| record.bytes.starts_with(&[255, 0x3f]))
+        .find(|record| record.bytes.starts_with(&[255, marker]))
         .ok_or(XgwxError::InvalidLadderEdit {
             reason: "comment changed since selection",
         })?;
@@ -944,7 +1023,7 @@ pub(crate) fn delete_ladder_rung_comment(
             reason: "comment changed since selection",
         });
     }
-    if row.prefix[13] != 1 || row.records.len() != 1 || count == 0 {
+    if row.prefix[13] != flag || row.records.len() != 1 || count == 0 {
         return Err(XgwxError::InvalidLadderEdit {
             reason: "rung comment row contains unsupported records",
         });

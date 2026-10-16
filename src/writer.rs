@@ -8252,7 +8252,7 @@ impl XgwxDocument {
                 .and_then(|bytes| bytes.try_into().ok())
                 .ok_or(XgwxError::UnsupportedLadderLayout)?,
         );
-        if group_count <= 1 || group_index >= usize::from(group_count) {
+        if group_index >= usize::from(group_count) {
             return Err(XgwxError::UnsupportedLadderLayout);
         }
         let group_starts = (0..usize::from(group_count))
@@ -8307,6 +8307,25 @@ impl XgwxDocument {
                 )
         {
             return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        if group_count == 1 {
+            // An annotation-only IEC program returns to its native empty header.
+            // Keep the last-network guard for executable or mixed record groups.
+            if rows.len() != 1
+                || records.len() != 1
+                || records[0].kind != IecRecordKind::Comment
+                || program.data[first.start + 13] != 1
+                || program.data[records[0].offset..records[0].offset + 2] != [255, 0x3f]
+            {
+                return Err(XgwxError::UnsupportedLadderLayout);
+            }
+            return self.edit_program_payload_with_validation(
+                program_index,
+                "2",
+                false,
+                false,
+                |_| Ok(vec![0; 8]),
+            );
         }
         let removed = program.data[start..end].to_vec();
         let removed_record_count = records
@@ -8565,6 +8584,14 @@ impl XgwxDocument {
             .iter()
             .filter(|record| record.group_index == group_index)
             .collect::<Vec<_>>();
+        if group_records
+            .iter()
+            .any(|record| record.kind == IecRecordKind::Label)
+        {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "copying a label would require a new unique name; insert a new label instead",
+            });
+        }
         let source_strings = extract_utf16_marker_strings(&source.data, false, false);
         if group_records.is_empty()
             || group_records.iter().any(|record| {
@@ -8577,6 +8604,7 @@ impl XgwxDocument {
                         | IecRecordKind::BranchStart
                         | IecRecordKind::BranchEnd
                         | IecRecordKind::Comment
+                        | IecRecordKind::Label
                         | IecRecordKind::FunctionBlock
                         | IecRecordKind::FunctionOperand
                         | IecRecordKind::LinkReference(_)
@@ -8812,6 +8840,7 @@ impl XgwxDocument {
                 | IecRecordKind::ShortWire
                 | IecRecordKind::BranchEnd
                 | IecRecordKind::Comment
+                | IecRecordKind::Label
                 | IecRecordKind::FunctionOperand
                 | IecRecordKind::LinkReference(_) => {
                     translate_iec_y(&mut relocated, offset + 6, delta)?;
@@ -9152,18 +9181,121 @@ impl XgwxDocument {
         Ok(())
     }
 
-    /// Create a standalone IEC comment in an empty row by copying a captured
-    /// one-record comment group from the same program and replacing its text.
-    /// The source group remains untouched; failures leave the document intact.
+    /// Create, rename or delete a captured native label in either LD family.
+    pub(crate) fn edit_ld_label(
+        &mut self,
+        program_index: usize,
+        edit: &crate::LadderLabelEdit,
+    ) -> Result<(), XgwxError> {
+        let program = self
+            .ladder_program(program_index)
+            .ok_or(XgwxError::ProgramNotFound {
+                index: program_index,
+            })?;
+        let program = program?;
+        if !edit.raw_y.is_multiple_of(4) {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        let labels = program.labels();
+        if let Some(expected) = &edit.expected
+            && !labels
+                .iter()
+                .any(|label| label.raw_y == edit.raw_y && label.name == *expected)
+        {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "label changed since selection",
+            });
+        }
+        if let Some(name) = &edit.replacement {
+            crate::ld_labels::validate_name(name)?;
+            if labels.iter().any(|label| {
+                label.name == *name && (edit.expected.is_none() || label.raw_y != edit.raw_y)
+            }) {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "label name already exists in this program",
+                });
+            }
+        } else if edit.expected.is_none() {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        if program.project_type == Some(1) {
+            return self.edit_ladder_payload(program_index, |payload| {
+                crate::ladder_write::edit_ladder_label(payload, edit)
+            });
+        }
+        if program.project_type != Some(2) {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        let rows = program
+            .iec_row_frames()
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
+        program
+            .iec_record_frames()
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
+        if edit.expected.is_some() && edit.replacement.is_none() {
+            let row = rows
+                .iter()
+                .find(|row| u32::from(row.row_index) * 4 == edit.raw_y)
+                .ok_or(XgwxError::UnsupportedLadderLayout)?;
+            if rows
+                .iter()
+                .filter(|other| other.group_index == row.group_index)
+                .count()
+                != 1
+            {
+                return Err(XgwxError::UnsupportedLadderLayout);
+            }
+            if rows.len() == 1 {
+                return self.edit_program_payload_with_validation(
+                    program_index,
+                    "2",
+                    false,
+                    false,
+                    |_| Ok(vec![0; 8]),
+                );
+            }
+            return self.delete_iec_ld_group(program_index, row.group_index, row.row_index);
+        }
+        let name = edit.replacement.as_deref().unwrap();
+        let updated = if edit.expected.is_some() {
+            let label = labels
+                .iter()
+                .find(|label| label.raw_y == edit.raw_y)
+                .ok_or(XgwxError::UnsupportedLadderLayout)?;
+            let (_, end) = crate::ladder_records::string_at(&program.data, label.offset + 15)?;
+            let mut out = program.data.clone();
+            out.splice(
+                label.offset..end,
+                crate::ld_labels::record(edit.raw_y, name),
+            );
+            out
+        } else {
+            insert_iec_annotation_bytes(&program, edit.raw_y, name, IecRecordKind::Label)?
+        };
+        let mut verified = program.clone();
+        verified.data = updated.clone();
+        verified.decoded_len = updated.len();
+        verified
+            .iec_record_frames()
+            .ok_or(XgwxError::UnsupportedLadderLayout)?;
+        self.edit_program_payload_with_validation(program_index, "2", false, false, |_| Ok(updated))
+    }
+
+    /// Insert a standalone native IEC comment in an unoccupied canvas row.
+    /// The program need not contain a comment template; sparse tail rows extend
+    /// the stored extent without moving existing functions, wires or operands.
     pub(crate) fn insert_iec_ld_comment(
         &mut self,
         program_index: usize,
         destination_row_index: u16,
         text: &str,
     ) -> Result<(), XgwxError> {
-        if text.is_empty() || text.chars().any(char::is_control) {
+        if text.trim().is_empty()
+            || text.encode_utf16().count() > 255
+            || text.chars().any(char::is_control)
+        {
             return Err(XgwxError::InvalidLadderEdit {
-                reason: "IEC comment text must be nonempty and contain no control characters",
+                reason: "IEC comment must contain 1 to 255 UTF-16 units without control characters",
             });
         }
         let program = self
@@ -9171,58 +9303,24 @@ impl XgwxDocument {
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
-        let rows = program
-            .iec_row_frames()
-            .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let records = program
-            .iec_record_frames()
-            .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let source = rows
-            .iter()
-            .find(|row| {
-                row.record_count == 1
-                    && rows
-                        .iter()
-                        .filter(|other| other.group_index == row.group_index)
-                        .count()
-                        == 1
-                    && records.iter().any(|record| {
-                        record.group_index == row.group_index
-                            && record.row_index == row.row_index
-                            && record.kind == IecRecordKind::Comment
-                    })
-            })
-            .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let mut edited = self.clone();
-        edited.copy_iec_ld_group(
-            program_index,
-            source.group_index,
-            source.row_index,
-            destination_row_index,
-        )?;
-        let copied_program = edited
-            .ladder_program(program_index)
-            .ok_or(XgwxError::UnsupportedLadderLayout)??;
-        let copied_record = copied_program
-            .iec_record_frames()
-            .ok_or(XgwxError::UnsupportedLadderLayout)?
-            .into_iter()
-            .find(|record| {
-                record.row_index == destination_row_index && record.kind == IecRecordKind::Comment
-            })
-            .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        let copied_text = crate::iec_ld::comments(&copied_program)
-            .into_iter()
-            .find(|item| item.offset == copied_record.offset + 15)
-            .ok_or(XgwxError::UnsupportedLadderLayout)?;
-        edited.update_iec_ld_comment(
-            program_index,
-            copied_text.offset,
-            &copied_text.value,
+        if program.project_type != Some(2) || program.version.as_deref() != Some("LD VER 1.1") {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        let updated = insert_iec_annotation_bytes(
+            &program,
+            u32::from(destination_row_index) * 4,
             text,
+            IecRecordKind::Comment,
         )?;
-        *self = edited;
-        Ok(())
+        self.edit_program_payload_with_validation(program_index, "2", false, false, |payload| {
+            if payload != program.data {
+                return Err(XgwxError::LadderCellChanged {
+                    program_index,
+                    offset: 0,
+                });
+            }
+            Ok(updated)
+        })
     }
 
     fn relocate_iec_ld_group(
@@ -9349,6 +9447,16 @@ impl XgwxDocument {
                 return Err(XgwxError::UnsupportedLadderLayout);
             }
         }
+        if keep_source
+            && program.labels().iter().any(|label| {
+                label.raw_y / 4 >= u32::from(first.row_index)
+                    && label.raw_y / 4 <= u32::from(source_last)
+            })
+        {
+            return Err(XgwxError::InvalidLadderEdit {
+                reason: "copying a label would create a duplicate name; insert a new label instead",
+            });
+        }
         let delta = i32::from(destination_first_row_index) - i32::from(first.row_index);
         let mut shifted = program.data.clone();
         for row in source_rows {
@@ -9401,6 +9509,7 @@ impl XgwxDocument {
                 | IecRecordKind::Contact(_)
                 | IecRecordKind::Coil(_)
                 | IecRecordKind::Comment
+                | IecRecordKind::Label
                 | IecRecordKind::FunctionOperand => {
                     translate_iec_y(&mut shifted, record.offset + 6, delta)?;
                 }
@@ -13900,6 +14009,7 @@ fn insert_iec_ld_blank_row_bytes(
             | IecRecordKind::Contact(_)
             | IecRecordKind::Coil(_)
             | IecRecordKind::Comment
+            | IecRecordKind::Label
             | IecRecordKind::FunctionOperand => {
                 shift_iec_y_after(&mut updated, record.offset + 6, after_row_index, 1)?;
             }
@@ -15254,6 +15364,7 @@ fn delete_iec_ld_blank_row_bytes(
             | IecRecordKind::Contact(_)
             | IecRecordKind::Coil(_)
             | IecRecordKind::Comment
+            | IecRecordKind::Label
             | IecRecordKind::FunctionOperand => {
                 shift_iec_y_after(&mut updated, record.offset + 6, blank_row_index, -1)?;
             }
@@ -15445,6 +15556,7 @@ fn edit_iec_ld_branch_segment_bytes(
             | IecRecordKind::Contact(_)
             | IecRecordKind::Coil(_)
             | IecRecordKind::Comment
+            | IecRecordKind::Label
             | IecRecordKind::FunctionBlock
             | IecRecordKind::FunctionOperand
             | IecRecordKind::LinkReference(_) => program.data.get(record.offset + 5).copied(),
@@ -15958,6 +16070,7 @@ fn remove_iec_ld_final_branch_row(
             | IecRecordKind::Contact(_)
             | IecRecordKind::Coil(_)
             | IecRecordKind::Comment
+            | IecRecordKind::Label
             | IecRecordKind::FunctionOperand => {
                 shift_y(&mut updated, record.offset + 6)?;
             }
@@ -18481,4 +18594,97 @@ fn browser_program_text_range(xml: &str, index: usize) -> Result<Range<usize>, X
         .and_then(|n| n.children().find(|n| n.is_text()))
         .map(|n| n.range())
         .ok_or(XgwxError::MissingProgramData)
+}
+
+// Native labels and rung comments each occupy a dedicated one-record group.
+fn insert_iec_annotation_bytes(
+    program: &LadderProgramData,
+    raw_y: u32,
+    text: &str,
+    kind: IecRecordKind,
+) -> Result<Vec<u8>, XgwxError> {
+    let row_flag = match kind {
+        IecRecordKind::Comment => 1,
+        IecRecordKind::Label => 16,
+        _ => return Err(XgwxError::UnsupportedLadderLayout),
+    };
+    let row_index = u16::try_from(raw_y / 4).map_err(|_| XgwxError::UnsupportedLadderLayout)?;
+    if row_index >= u16::MAX / 4 {
+        return Err(XgwxError::UnsupportedLadderLayout);
+    }
+    let rows = program
+        .iec_row_frames()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    let graph = program
+        .iec_circuit_layout()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    if rows.iter().any(|row| row.row_index == row_index)
+        || graph
+            .occupied_areas
+            .iter()
+            .any(|area| area.start_row_index <= row_index && area.end_row_index >= row_index)
+        || graph.edges.iter().any(|edge| {
+            edge.start.row_index.min(edge.end.row_index) <= row_index
+                && edge.start.row_index.max(edge.end.row_index) >= row_index
+        })
+    {
+        return Err(XgwxError::InvalidLadderEdit {
+            reason: "IEC comment or label requires an empty row outside existing networks and branch spans",
+        });
+    }
+    let groups = u16::from_le_bytes(program.data[6..8].try_into().unwrap());
+    let (group, offset) = if let Some(next) = rows.iter().find(|row| row.row_index > row_index) {
+        if rows
+            .iter()
+            .any(|row| row.group_index == next.group_index && row.start < next.start)
+        {
+            return Err(XgwxError::UnsupportedLadderLayout);
+        }
+        (next.group_index, next.start - 10)
+    } else {
+        (usize::from(groups), program.data.len())
+    };
+    let mut out = program.data.clone();
+    for first in rows.iter().filter(|row| {
+        row.group_index >= group
+            && !rows
+                .iter()
+                .any(|other| other.group_index == row.group_index && other.start < row.start)
+    }) {
+        out[first.start - 10..first.start - 6]
+            .copy_from_slice(&((first.group_index + 1) as u32).to_le_bytes());
+    }
+    let mut inserted = Vec::new();
+    inserted.extend((group as u32).to_le_bytes());
+    inserted.extend([0; 4]);
+    inserted.extend(1u16.to_le_bytes());
+    inserted.extend(u32::from(row_index).to_le_bytes());
+    inserted.extend([255, 67, 0, 0, 0, 0, 0, 0, 0, row_flag, 0, 0, 0]);
+    inserted.extend(39u32.to_le_bytes());
+    let y = raw_y.to_le_bytes();
+    inserted.extend([94, y[0], y[1], 0, 94, y[0], y[1], 0, 1, y[0], y[1], 0, 1, 0]);
+    inserted.extend(if kind == IecRecordKind::Label {
+        crate::ld_labels::record(raw_y, text)
+    } else {
+        crate::ladder_write::comment_record(LadderCommentKind::Rung, raw_y, text).bytes
+    });
+    out.splice(offset..offset, inserted);
+    let max = u16::from_le_bytes(out[4..6].try_into().unwrap()).max(row_index + 1);
+    out[4..6].copy_from_slice(&max.to_le_bytes());
+    out[6..8].copy_from_slice(
+        &groups
+            .checked_add(1)
+            .ok_or(XgwxError::UnsupportedLadderLayout)?
+            .to_le_bytes(),
+    );
+    let mut verified = program.clone();
+    verified.data = out.clone();
+    verified.decoded_len = out.len();
+    verified
+        .iec_record_frames()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    verified
+        .iec_circuit_layout()
+        .ok_or(XgwxError::UnsupportedLadderLayout)?;
+    Ok(out)
 }

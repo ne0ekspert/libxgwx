@@ -254,6 +254,7 @@ fn circuit_graph(program: &LadderProgramData) -> Option<IecCircuitGraph> {
                 )?);
             }
             IecRecordKind::Comment
+            | IecRecordKind::Label
             | IecRecordKind::BranchStart
             | IecRecordKind::BranchEnd
             | IecRecordKind::LinkReference(_) => {}

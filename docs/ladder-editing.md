@@ -620,3 +620,42 @@ the generated cleared payload and conversion reassignment match native Save As
 exactly. Local private-project checks clear and restore all 46 nonempty OUT
 assignments byte for byte; 14 additional OUT assignments are already blank.
 Those private-project checks do not constitute a native compile of every edit.
+
+## Native LD labels
+
+`LadderProgramData::labels()` decodes dedicated `FF 41` label records for
+both XGK (`ProjectType=1`) and IEC (`ProjectType=2`) LD. The captured row flag
+is `0x10`; the UTF-16 name has no comment-width trailer. Native XG5000
+captures for both formats establish this representation.
+
+Use `doc.program_mut().get(index)?.edit_ld_label(&LadderLabelEdit {
+raw_y, expected, replacement })` to insert (`expected: None`), rename, or
+delete (`replacement: None`). Coordinates use four units per physical row.
+Names are case-sensitive and unique within the selected program. They begin
+with a letter and contain letters, digits, or underscores, with a weighted
+limit of 16 ASCII or eight non-ASCII characters. Changes require the expected
+name; a failed edit preserves the document.
+
+XGK insertion before an occupied rung creates a dedicated row and shifts the
+later ladder coordinates. IEC insertion fills an unoccupied implicit row and
+rejects occupied rows, branch spans, and positions inside an existing group.
+Insert a blank IEC row first when needed. Deleting an IEC label removes its
+group and leaves a gap; deleting an XGK label closes its dedicated row.
+Copying IEC label groups is guarded against duplicate targets. Existing
+unsupported record layouts remain guarded. This operation does not create JMP
+instructions or rewrite opaque jump references.
+
+`cargo test --features write --test ld_labels` covers both formats. Optional
+native-capture comparison uses `LIBXGWX_LABEL_CAPTURE_DIR` with `XGKL.XGW`,
+`IECL.XGW`, and the original `IEC.XGW` source. This comparison normalizes only
+the retained row display-state word that XG5000 changed on Save.
+
+On 2026-10-16, generated XGK and IEC `LabelEdited` cases opened and rendered in
+native XG5000 4.82.1.0, reported zero program errors, and retained every decoded
+ProgramData payload exactly through independent Save As outputs (one XGK
+payload and seven IEC payloads). The XGK case reported an unused-label warning;
+the IEC source also contains existing double-coil warnings. Captures, generated
+files, resaves, screenshots, and the comparison ledger are local artifacts under
+`/tmp/labels-*` and `/tmp/labels-captured/`. This establishes representative
+native label open/check/save behavior, not JMP execution on a PLC or live
+VS Code extension-host interaction.

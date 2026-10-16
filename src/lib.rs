@@ -135,6 +135,10 @@ mod iec_conversion_pair_write;
 mod iec_function_write;
 mod iec_graph;
 mod iec_ld;
+mod ld_labels;
+pub use ld_labels::LadderLabel;
+#[cfg(feature = "write")]
+pub use ld_labels::LadderLabelEdit;
 #[cfg(feature = "write")]
 mod iec_output_wire_write;
 #[cfg(feature = "write")]

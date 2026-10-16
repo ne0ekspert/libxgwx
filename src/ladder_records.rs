@@ -222,7 +222,7 @@ impl EditableProgram {
                     || prefix[4..9] != [255, 67, 0, 0, 0]
                     || prefix[9..13] != [0; 4]
                     || prefix[14..17] != [0; 3]
-                    || prefix[13] > 1
+                    || !matches!(prefix[13], 0 | 1 | 16)
                     || coordinate(&prefix, 21, y)? > 94
                     || y_at(&prefix, 26) >= XGK_MAX_ROWS as u32 * 4
                     || !y_at(&prefix, 26).is_multiple_of(4)
@@ -242,6 +242,14 @@ impl EditableProgram {
                     pos = end;
                 }
                 validate_row_records(&records)?;
+                if (prefix[13] == 16)
+                    != records
+                        .iter()
+                        .any(|record| record.bytes.starts_with(&[255, 0x41]))
+                    || prefix[13] == 16 && records.len() != 1
+                {
+                    return Err(unsupported());
+                }
                 rows.push(Row { prefix, y, records });
             }
         }
@@ -457,6 +465,12 @@ fn parse_record(bytes: &[u8], pos: usize, y: u32) -> Result<(Record, usize), Xgw
                     operand: String::new(),
                 });
             }
+        } else if marker == [255, 0x41] {
+            if x != 1 || head[9..15] != [0, 0, 32, 0, 0, 0] {
+                return Err(unsupported());
+            }
+            let (_, next) = string_at(bytes, pos + 15)?;
+            end = next;
         } else if marker[0] == 255 && matches!(marker[1], 0x3f | 0x40) {
             let (_, next) = string_at(bytes, pos + 15)?;
             bytes.get(next..next + 8).ok_or_else(unsupported)?;

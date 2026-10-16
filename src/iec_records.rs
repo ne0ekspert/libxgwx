@@ -14,6 +14,8 @@ pub enum IecRecordKind {
     Contact(u8),
     Coil(u8),
     Comment,
+    /// Dedicated native jump-target label.
+    Label,
     FunctionOperand,
     BranchStart,
     BranchEnd,
@@ -295,6 +297,15 @@ impl LadderProgramData {
             ) else {
                 return None;
             };
+            let label_row = self.data[row.start + 13] == 16;
+            if label_row
+                != records
+                    .iter()
+                    .any(|(_, _, kind)| *kind == IecRecordKind::Label)
+                || label_row && (records.len() != 1 || records[0].2 != IecRecordKind::Label)
+            {
+                return None;
+            }
             frames.extend(
                 records
                     .into_iter()
@@ -2267,6 +2278,7 @@ fn simple_record(
         0x3f | 0x40 if matches!(&bytes[9..15], [0, 0, 0x20, 0, 0, 0] | [0, 0, 0x24, 0, 0, 0]) => {
             IecRecordKind::Comment
         }
+        0x41 if bytes[5] == 1 && bytes[9..15] == [0, 0, 32, 0, 0, 0] => IecRecordKind::Label,
         0x46 if matches!(&bytes[9..15], [0, 0, 0, 0, 0, 0] | [0, 0, 4, 0, 0, 0]) => {
             IecRecordKind::FunctionOperand
         }
