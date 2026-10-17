@@ -2210,6 +2210,9 @@ impl XgwxDocument {
         program_index: usize,
         patch: &ProgramPatch,
     ) -> Result<(), XgwxError> {
+        if let Some(task) = &patch.task {
+            self.validate_program_task(program_index, task)?;
+        }
         let document = roxmltree::Document::parse(&self.xml).map_err(XgwxError::Xml)?;
         let program = document
             .descendants()

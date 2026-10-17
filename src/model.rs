@@ -297,7 +297,11 @@ impl fmt::Display for ModuleInputFilter {
 
 /// High-level summary of a `<Task>` element.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
+#[cfg_attr(
+    any(feature = "ffi", feature = "wasm"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "ffi", feature = "wasm"), serde(deny_unknown_fields))]
 pub struct TaskSummary {
     pub name: Option<String>,
     pub version: Option<u32>,
@@ -2196,7 +2200,11 @@ impl XmlElement {
 
 /// XML attribute stored on an [`XmlElement`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ffi", derive(serde::Serialize))]
+#[cfg_attr(
+    any(feature = "ffi", feature = "wasm"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
+#[cfg_attr(any(feature = "ffi", feature = "wasm"), serde(deny_unknown_fields))]
 pub struct XmlAttribute {
     pub name: String,
     pub value: String,

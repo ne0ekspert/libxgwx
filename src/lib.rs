@@ -50,6 +50,12 @@ pub use hardware_api::{
 pub use hardware_api::{ModuleRef, ModuleView};
 mod comparison_catalog;
 mod configuration_api;
+mod task_api;
+#[cfg(feature = "write")]
+pub use task_api::{Task, TaskCollectionEditor};
+pub use task_api::{
+    TaskBitCondition, TaskRef, TaskSettings, TaskSnapshot, TaskTrigger, TaskView, TaskWordCondition,
+};
 mod container_api;
 mod cpu;
 mod document;

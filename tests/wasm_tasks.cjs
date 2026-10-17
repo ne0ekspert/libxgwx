@@ -1,0 +1,45 @@
+// Build WASM with --target nodejs, then pass the generated libxgwx.js path.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const wasm = require(path.resolve(process.argv[2]));
+for (const family of ['xgk', 'xgi']) {
+  let bytes = fs.readFileSync(path.join(__dirname, `../fixtures/tasks/${family}-native.xgwx`));
+  const read = () => wasm.parse_xgwx(bytes);
+  const count = read().tasks.length;
+  assert.equal(read().tasks[0].configurationIndex, 0);
+  assert.deepEqual(read().tasks[0].programIndices, [0]);
+  const settings = { name: 'Fresh', priority: 3, task_number: 1, trigger: { kind: 'periodic', interval_ms: 123 } };
+  bytes = wasm.create_xgwx_task(bytes, 0, settings);
+  let selected = read().tasks[count];
+  assert.deepEqual(selected.settings, settings);
+  const expected = selected.expected;
+  let program = read().programs[0];
+  const scanName = program.task;
+  bytes = wasm.assign_xgwx_task_program(bytes, count, expected, 0, program.objectId, scanName);
+  assert.deepEqual(read().tasks[count].programIndices, [0]);
+  bytes = wasm.rename_xgwx_task(bytes, count, expected, 'WorkerLoop');
+  assert.equal(read().programs[0].task, 'WorkerLoop');
+  assert.throws(() => wasm.rename_xgwx_task(bytes, count, expected, 'Stale'));
+  selected = read().tasks[count];
+  const wrongPlc = structuredClone(selected.expected);
+  wrongPlc.configuration_guid = 'another-plc';
+  assert.throws(() => wasm.rename_xgwx_task(bytes, count, wrongPlc, 'WrongPLC'));
+  const updated = { ...selected.settings, priority: 7, trigger: { kind: 'periodic', interval_ms: 4294967295 } };
+  assert.throws(() => wasm.update_xgwx_task(bytes, count, selected.expected, { ...updated, hidden: true }));
+  bytes = wasm.update_xgwx_task(bytes, count, selected.expected, updated);
+  assert.deepEqual(read().tasks[count].settings, updated);
+  selected = read().tasks[count];
+  assert.throws(() => wasm.delete_xgwx_task(bytes, count, selected.expected));
+  const newProgram = { name: 'Worker', language: 'LD', objectId: '11111111-1111-4111-8111-111111111111', symbolId: '22222222-2222-4222-8222-222222222222' };
+  bytes = wasm.create_xgwx_task_program(bytes, count, selected.expected, newProgram);
+  assert.equal(read().programs.at(-1).task, 'WorkerLoop');
+  const newIndex = read().programs.length - 1;
+  bytes = wasm.delete_xgwx_program(bytes, newIndex, newProgram.objectId);
+  bytes = wasm.assign_xgwx_task_program(bytes, 0, read().tasks[0].expected, 0, program.objectId, 'WorkerLoop');
+  bytes = wasm.delete_xgwx_task(bytes, count, read().tasks[count].expected);
+  assert.equal(read().tasks.length, count);
+  assert.equal(read().programs[0].task, scanName);
+  assert.throws(() => wasm.delete_xgwx_task(bytes, 0, read().tasks[0].expected));
+  console.log(`${family}: six task exports, membership, PLC identity, stale edits, strict JSON and scan protection passed`);
+}

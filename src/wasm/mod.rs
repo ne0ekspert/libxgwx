@@ -9,6 +9,7 @@ mod ladder;
 mod network;
 mod parameters;
 mod project;
+mod tasks;
 
 use ladder::*;
 use network::*;
@@ -2459,6 +2460,7 @@ struct WasmDocumentSummary {
     cpu: Option<WasmCpuSummary>,
     counts: WasmCounts,
     programs: Vec<WasmProgramSummary>,
+    tasks: Vec<tasks::WasmTask>,
     variables: Vec<WasmVariableSummary>,
     local_variables: Vec<Vec<WasmIecLocalSymbolSummary>>,
     iec_system_variables: Vec<WasmIecSystemVariableSummary>,
@@ -2610,6 +2612,7 @@ impl WasmDocumentSummary {
 
         Self {
             sfc: sfc_programs,
+            tasks: tasks::summaries(doc),
             text_programs,
             user_pous: doc.user_pou().list(),
             user_pou_creation: doc.user_pou().can_create(),

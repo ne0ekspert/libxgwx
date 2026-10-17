@@ -8,6 +8,7 @@ pub const SECTIONS: &[&str] = &[
     "overview",
     "user_pous",
     "programs",
+    "tasks",
     "program",
     "symbols",
     "hardware",
@@ -787,6 +788,16 @@ pub fn inspect(
                 "native_acceptance": "unverified",
             })
         }
+        "tasks" => json!({
+            "tasks": indexed_page(&doc.task().list(), offset, limit, |index, definition| {
+                let task = doc.task().get(index).unwrap();
+                let programs = task.programs();
+                json!({"index":index, "configuration_index":task.configuration_index(),
+                    "expected":task.snapshot().ok(), "definition":definition, "settings":task.settings().ok(),
+                    "program_indices":programs.as_ref().ok().map(|ps| ps.iter().map(|p| p.index()).collect::<Vec<_>>()),
+                    "membership_error":programs.err().map(|e| e.to_string())})
+            }),
+        }),
         "programs" => json!({
             "programs": indexed_page(&doc.program().programs(), offset, limit, program_summary),
             "tasks": indexed_page(&doc.program().tasks(), offset, limit, |index, t| {

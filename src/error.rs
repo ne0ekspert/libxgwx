@@ -249,6 +249,8 @@ pub enum XgwxError {
     /// A selected global variable cannot be safely inspected or edited.
     GlobalVariableEdit(String),
     ProgramCreation(String),
+    /// A task definition or program assignment failed validation.
+    TaskEdit(String),
     ProgramDeletion(String),
     ProgramReorder(String),
     RewriteVerificationFailed,
@@ -505,6 +507,7 @@ impl fmt::Display for XgwxError {
             Self::DocumentEdit(reason) => write!(f, "document edit rejected: {reason}"),
             Self::ProjectRename(reason) => write!(f, "project rename rejected: {reason}"),
             Self::ProgramCreation(reason) => write!(f, "program creation rejected: {reason}"),
+            Self::TaskEdit(reason) => write!(f, "task edit rejected: {reason}"),
             Self::TextProgramEdit(reason) => write!(f, "text program edit rejected: {reason}"),
             Self::UserPouEdit(reason) => write!(f, "user-defined POU edit: {reason}"),
             Self::SfcEdit(reason) => write!(f, "SFC edit rejected: {reason}"),

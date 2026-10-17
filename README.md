@@ -177,6 +177,7 @@ let locals = doc.variable().locals();
 | Namespace | Contents |
 | --- | --- |
 | `program()` | Program/task summaries, languages, LD bodies, SFC charts, ST/IL source |
+| `task()` | PLC-scoped task definitions, scheduling settings and assigned programs |
 | `variable()` | Global symbols, IEC locals, source/SFC declarations, I/O generation preview |
 | `program_mut()` | Select program handles, create programs, read collection metadata |
 | `variable_mut()` | Global symbol edits and I/O variable generation |
@@ -1013,3 +1014,11 @@ inspection section `parameters` for indices and native control constraints. See
 [the C schema](docs/c-api-operations.md#basic-parameters). The MCP server exposes
 the corresponding typed `xgwx_edit_basic_operation` and `xgwx_edit_basic_timing`
 tools with revision checks, dry runs and backup saves.
+
+### PLC tasks
+
+Task creation, scheduling edits, rename, guarded program assignment and empty-task
+deletion are available through `task_mut()` for supported standard XGK/XGI CPUs.
+See [task APIs, constraints and native evidence](docs/tasks.md) and the
+[complete Rust example](examples/tasks.rs). Unknown and compact interrupt layouts
+remain readable without enabling unverified scheduling writes.

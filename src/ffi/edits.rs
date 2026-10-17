@@ -57,6 +57,39 @@ struct BasicParameterChange {
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum Edit {
+    CreateTask {
+        configuration_index: usize,
+        settings: crate::TaskSettings,
+    },
+    CreateTaskProgram {
+        task_index: usize,
+        expected: crate::TaskSnapshot,
+        name: String,
+        language: String,
+        object_id: String,
+        symbol_id: String,
+    },
+    UpdateTask {
+        task_index: usize,
+        expected: crate::TaskSnapshot,
+        settings: crate::TaskSettings,
+    },
+    RenameTask {
+        task_index: usize,
+        expected: crate::TaskSnapshot,
+        name: String,
+    },
+    DeleteTask {
+        task_index: usize,
+        expected: crate::TaskSnapshot,
+    },
+    AssignTaskProgram {
+        task_index: usize,
+        expected: crate::TaskSnapshot,
+        program_index: usize,
+        expected_object_id: String,
+        expected_task: String,
+    },
     EditBasicOperation {
         parameter_index: usize,
         changes: Vec<BasicParameterChange>,
@@ -250,6 +283,69 @@ pub(super) fn apply(doc: &mut XgwxDocument, request: &str) -> Result<()> {
 
 fn apply_one(doc: &mut XgwxDocument, edit: Edit) -> Result<()> {
     match edit {
+        Edit::CreateTask {
+            configuration_index,
+            settings,
+        } => doc
+            .task_mut()
+            .create(configuration_index, &settings)
+            .map_err(operation),
+        Edit::CreateTaskProgram {
+            task_index,
+            expected,
+            name,
+            language,
+            object_id,
+            symbol_id,
+        } => doc
+            .task_mut()
+            .get_if(task_index, &expected)
+            .and_then(|mut t| {
+                t.create_program(&crate::NewProgram {
+                    name,
+                    language,
+                    object_id,
+                    symbol_id,
+                })
+            })
+            .map_err(operation),
+        Edit::UpdateTask {
+            task_index,
+            expected,
+            settings,
+        } => doc
+            .task_mut()
+            .get_if(task_index, &expected)
+            .and_then(|mut t| t.update(&settings))
+            .map_err(operation),
+        Edit::RenameTask {
+            task_index,
+            expected,
+            name,
+        } => doc
+            .task_mut()
+            .get_if(task_index, &expected)
+            .and_then(|mut t| t.rename(&name))
+            .map_err(operation),
+        Edit::DeleteTask {
+            task_index,
+            expected,
+        } => doc
+            .task_mut()
+            .get_if(task_index, &expected)
+            .and_then(|t| t.delete())
+            .map_err(operation),
+        Edit::AssignTaskProgram {
+            task_index,
+            expected,
+            program_index,
+            expected_object_id,
+            expected_task,
+        } => doc
+            .task_mut()
+            .get_if(task_index, &expected)
+            .and_then(|mut t| t.assign_program(program_index, &expected_object_id, &expected_task))
+            .map_err(operation),
         Edit::EditBasicOperation {
             parameter_index,
             changes,

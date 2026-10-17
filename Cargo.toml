@@ -76,3 +76,7 @@ required-features = ["write"]
 [[example]]
 name = "global_variable_handles"
 required-features = ["write"]
+
+[[example]]
+name = "tasks"
+required-features = ["write"]

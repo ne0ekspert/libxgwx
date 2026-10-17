@@ -215,7 +215,11 @@ impl XgwxDocument {
         }
         let task = config
             .descendants()
-            .find(|n| n.has_tag_name("Task") && n.attribute("Type") == Some("0"))
+            .find(|n| {
+                n.has_tag_name("Task")
+                    && n.attribute("Type") == Some("0")
+                    && n.attribute("Kind") == Some("0")
+            })
             .and_then(|n| n.text())
             .ok_or_else(|| fail("missing scan task"))?;
         let native = roxmltree::Document::parse(template).map_err(XgwxError::Xml)?;

@@ -1117,7 +1117,7 @@ pub(crate) fn ladder_connections(bytes: &[u8]) -> Result<Vec<(u8, u32, u32)>, Xg
         .collect())
 }
 
-fn valid_bit_device_address(operand: &str) -> bool {
+pub(crate) fn valid_bit_device_address(operand: &str) -> bool {
     let address = operand.as_bytes();
     if !(2..=32).contains(&address.len()) {
         return false;

@@ -8,6 +8,7 @@ fixtures and examples are excluded from the crates.io package.
 | `inspect` | Print project, program and hardware summaries | `cargo run --example inspect -- project.xgwx` |
 | `modules` | List bases and their typed modules, plus all network protocol settings | `cargo run --example modules -- project.xgwx` |
 | `namespaces` | Inspect program and variable namespaces | `cargo run --example namespaces -- project.xgwx` |
+| `tasks` | Create task-driven XGK/XGI programs and all supported trigger conditions | `cargo run --features write --example tasks -- new-output-directory` |
 | `program_handles` | Create and edit selected ST/IEC programs and local declarations | `cargo run --features write --example program_handles -- output-directory` |
 | `il` | Print IL converted from supported ladder programs | `cargo run --features il --example il -- project.xgwx` |
 | `write-module` | Change a supported input module's filter | `cargo run --features write --example write-module -- input.xgwx output.xgwx 0 2 5` |

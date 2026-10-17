@@ -8,6 +8,12 @@ Read `programs` with `xgwx_document_inspect_section_json` to capture `object_id`
 
 | Operation | Fields |
 | --- | --- |
+| `create_task` | `configuration_index: usize`, `settings: TaskSettings` |
+| `update_task` | `task_index: usize`, `expected: TaskSnapshot`, `settings: TaskSettings` |
+| `rename_task` | `task_index: usize`, `expected: TaskSnapshot`, `name: String` |
+| `delete_task` | `task_index: usize`, `expected: TaskSnapshot` |
+| `assign_task_program` | `task_index: usize`, `expected: TaskSnapshot`, `program_index: usize`, `expected_object_id: String`, `expected_task: String` |
+| `create_task_program` | `task_index: usize`, `expected: TaskSnapshot`, `name: String`, `language: String`, `object_id: String`, `symbol_id: String` |
 | `edit_basic_operation` | `parameter_index: usize`, `changes: Vec<BasicParameterChange>` |
 | `edit_basic_timing` | Same fields; legacy XGK timing subset only |
 | `edit_ld_label` | `program_index: usize`, `expected_object_id: String`, `raw_y: u32`, `expected: Option<String>`, `replacement: Option<String>` |
@@ -184,3 +190,7 @@ state; send coupled changes in one operation. Overall-only blocking is supported
 Unknown fields/layouts, stale values, duplicates, invalid choices and ranges are
 rejected atomically. `edit_basic_timing` retains the legacy XGK-only timing subset.
 Read-only `ffi` builds can inspect; editing requires `write`.
+
+Task settings, snapshot shapes, supported CPUs and native validation boundaries
+are described in [tasks.md](tasks.md). Inspect section `tasks` to capture the
+exact `expected` object, including its owning PLC GUID.

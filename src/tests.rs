@@ -1148,6 +1148,17 @@ fn rejects_unverified_module_option_values_without_mutating_xml() {
 fn writes_program_metadata_and_same_length_ladder_cell() {
     let source = std::fs::read("fixtures/elements.xgwx").expect("fixture reads");
     let mut doc = XgwxDocument::parse(&source).expect("fixture parses");
+    doc.task_mut()
+        .create(
+            0,
+            &TaskSettings {
+                name: "EditedTask".into(),
+                priority: 2,
+                task_number: 1,
+                trigger: TaskTrigger::Periodic { interval_ms: 100 },
+            },
+        )
+        .expect("valid native task exists before assignment");
     let original_program = doc
         .ladder_programs()
         .into_iter()
@@ -1164,7 +1175,7 @@ fn writes_program_metadata_and_same_length_ladder_cell() {
         0,
         &ProgramPatch {
             name: Some("EditedProgram".to_owned()),
-            task: Some("Edited task".to_owned()),
+            task: Some("EditedTask".into()),
             comment: Some("VS Code & XG5000 <program>".to_owned()),
             ..ProgramPatch::default()
         },
@@ -1181,7 +1192,7 @@ fn writes_program_metadata_and_same_length_ladder_cell() {
         .next()
         .expect("program exists");
     assert_eq!(metadata.name.as_deref(), Some("EditedProgram"));
-    assert_eq!(metadata.task.as_deref(), Some("Edited task"));
+    assert_eq!(metadata.task.as_deref(), Some("EditedTask"));
     assert_eq!(
         metadata.comment.as_deref(),
         Some("VS Code & XG5000 <program>")
