@@ -295,41 +295,54 @@ fn hardware_bases(doc: &XgwxDocument, offset: usize, limit: usize) -> Value {
 
 fn hardware(doc: &XgwxDocument, offset: usize, limit: usize) -> Value {
     let modules = doc.module().summaries();
-    let selections = modules
-        .iter()
-        .enumerate()
-        .map(|(module_index, m)| {
-            let mut result =
-                fields!(m; base, slot, id, sub_type, name, comment, details, input_filter_raw);
-            result["module_index"] = json!(module_index);
-            result["attributes"] = attrs(&m.attributes);
-            result["input_filter"] = m
-                .input_filter
-                .map(|filter| json!(super::inspection_types::ModuleInputFilter::from(filter)))
-                .unwrap_or(Value::Null);
-            result["input_filter_label"] = m.input_filter.map(|filter| filter.to_string()).into();
-            #[cfg(feature="write")]
-            { result["option_values"] = match (m.base, m.slot) {
-                (Some(base), Some(slot)) => match doc
-                    .module()
-                    .at(base, slot)
-                    .and_then(|selected_record| selected_record.option_values())
-                {
-                    Ok(options) => json!({"status": "decoded", "items": options.iter()
-                    .map(|o| fields!(o; key, index, value)).collect::<Vec<_>>()}),
-                    Err(error) => json!({"status": "unsupported", "error": error.to_string()}),
-                },
-                _ => json!({"status": "unsupported", "error": "Module has no base/slot identity"}),
-            };
+    // Ambiguity is document-wide, including records outside the requested page.
+    // Detect it once instead of rebuilding all summaries for every duplicate.
+    #[cfg(feature = "write")]
+    let ambiguous_coordinates = {
+        let mut coordinates = std::collections::BTreeMap::new();
+        for module in &modules {
+            if let (Some(base), Some(slot)) = (module.base, module.slot) {
+                coordinates
+                    .entry((base, slot))
+                    .and_modify(|duplicate| *duplicate = true)
+                    .or_insert(false);
             }
-            result
-        })
-        .collect::<Vec<_>>();
+        }
+        coordinates
+    };
+    let selections = indexed_page(&modules, offset, limit, |module_index, m| {
+        let mut result =
+            fields!(m; base, slot, id, sub_type, name, comment, details, input_filter_raw);
+        result["module_index"] = json!(module_index);
+        result["attributes"] = attrs(&m.attributes);
+        result["input_filter"] = m
+            .input_filter
+            .map(|filter| json!(super::inspection_types::ModuleInputFilter::from(filter)))
+            .unwrap_or(Value::Null);
+        result["input_filter_label"] = m.input_filter.map(|filter| filter.to_string()).into();
+        #[cfg(feature="write")]
+        { result["option_values"] = match (m.base, m.slot) {
+            (Some(base), Some(slot)) if ambiguous_coordinates.get(&(base, slot)) == Some(&true) =>
+                json!({"status": "unsupported", "error": XgwxError::AmbiguousModule { base, slot }.to_string()}),
+            (Some(base), Some(slot)) => match doc
+                .module()
+                .at(base, slot)
+                .and_then(|selected_record| selected_record.option_values())
+            {
+                Ok(options) => json!({"status": "decoded", "items": options.iter()
+                .map(|o| fields!(o; key, index, value)).collect::<Vec<_>>()}),
+                Err(error) => json!({"status": "unsupported", "error": error.to_string()}),
+            },
+            _ => json!({"status": "unsupported", "error": "Module has no base/slot identity"}),
+        };
+        }
+        result
+    });
     json!({
         "configurations": page(&doc.configuration().list(), offset, limit, configuration),
         "bases": hardware_bases(doc, offset, limit),
         "typed_modules": typed_modules(doc, offset, limit),
-        "modules": page(&selections, offset, limit, Clone::clone),
+        "modules": selections,
         "cpu_hardware_profile": doc.configuration().get(0).ok().and_then(|plc| plc.hardware_profile()).map(|p| fields!(p;
             cpu_model, variant, builtin_io_base, builtin_io_slot, builtin_io_id,
             builtin_io_sub_types, builtin_network_id, builtin_network_option_type,
