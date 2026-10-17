@@ -10,6 +10,8 @@ use std::path::Path;
 pub struct XgwxDocument {
     /// Parsed fixed/header metadata.
     pub(crate) header: XgwxHeader,
+    /// Program identities authenticated in this in-memory session.
+    pub(crate) opened_programs: std::collections::BTreeSet<String>,
     /// Inflated XML project payload.
     pub(crate) xml: String,
     /// Original compressed main XML member.
@@ -27,12 +29,40 @@ pub struct XgwxDocument {
 
 impl XgwxDocument {
     /// Parse an `.xgwx` document from bytes.
+    /// Protected projects return [`PasswordError::Required`]; use
+    /// [`Self::parse_with_password`] to supply their project password.
     pub fn parse(bytes: &[u8]) -> Result<Self, XgwxError> {
+        let doc = Self::parse_container(bytes)?;
+        doc.verify_project_password(None)?;
+        Ok(doc)
+    }
+
+    pub(crate) fn parse_container(bytes: &[u8]) -> Result<Self, XgwxError> {
         if bytes.len() < XG_MAGIC.len() || &bytes[..2] != XG_MAGIC {
             return Err(XgwxError::InvalidMagic);
         }
 
-        let gzip_offset = find_gzip_member(bytes, 0).ok_or(XgwxError::MissingMainPayload)?;
+        // Password bytes can themselves contain gzip magic (for example the
+        // native encoding of "ZV"). Prefer the captured header's payload slot
+        // and never mistake its password field for the main XML member.
+        let known_prefix = matches!(bytes.get(..6), Some([b'X', b'G', 0, 4, 2 | 3, 0]))
+            && parse_header_label(bytes.get(..134).unwrap_or(bytes))
+                .0
+                .as_deref()
+                == Some("XG5000 WORKSPACE FILE");
+        let gzip_offset = if known_prefix {
+            let offset = if bytes.get(134..138) == Some(&[0xff; 4]) {
+                142
+            } else {
+                138
+            };
+            (bytes.get(offset..offset + 2) == Some(GZIP_MAGIC.as_slice()))
+                .then_some(offset)
+                .or_else(|| find_gzip_member(bytes, 134))
+        } else {
+            find_gzip_member(bytes, 0)
+        }
+        .ok_or(XgwxError::MissingMainPayload)?;
         let header = XgwxHeader::parse(&bytes[..gzip_offset], gzip_offset);
         let main_payload = parse_gzip_member(bytes, gzip_offset)?;
         let main_gzip = bytes[gzip_offset..main_payload.end_offset].to_vec();
@@ -42,6 +72,7 @@ impl XgwxDocument {
         let trailer_gzip_members = find_trailer_gzip_members(bytes, main_payload.end_offset);
 
         Ok(Self {
+            opened_programs: Default::default(),
             header,
             xml,
             main_gzip,
@@ -149,7 +180,11 @@ impl XgwxDocument {
     pub(crate) fn iec_local_symbols(&self) -> Vec<Result<Vec<IecLocalSymbol>, XgwxError>> {
         self.root
             .descendants_named("Program")
-            .map(decode_program_local_symbols)
+            .enumerate()
+            .map(|(index, program)| {
+                self.require_open_program(index)?;
+                decode_program_local_symbols(program)
+            })
             .collect()
     }
 
@@ -157,8 +192,10 @@ impl XgwxDocument {
         &self,
         index: usize,
     ) -> Option<Result<Vec<IecLocalSymbol>, XgwxError>> {
-        self.program_element(index)
-            .map(decode_program_local_symbols)
+        self.program_element(index).map(|program| {
+            self.require_open_program(index)?;
+            decode_program_local_symbols(program)
+        })
     }
 
     /// Decode ladder `<ProgramData>` payloads for all `<Program>` elements.
@@ -169,7 +206,11 @@ impl XgwxDocument {
     pub(crate) fn ladder_programs(&self) -> Vec<Result<LadderProgramData, XgwxError>> {
         self.root
             .descendants_named("Program")
-            .map(LadderProgramData::from_program_element)
+            .enumerate()
+            .map(|(index, program)| {
+                self.require_open_program(index)?;
+                LadderProgramData::from_program_element(program)
+            })
             .collect()
     }
 
@@ -179,8 +220,10 @@ impl XgwxDocument {
         &self,
         index: usize,
     ) -> Option<Result<LadderProgramData, XgwxError>> {
-        self.program_element(index)
-            .map(LadderProgramData::from_program_element)
+        self.program_element(index).map(|program| {
+            self.require_open_program(index)?;
+            LadderProgramData::from_program_element(program)
+        })
     }
 
     /// Return high-level summaries for all `<XGPD_HS_LINK>` elements.

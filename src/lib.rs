@@ -114,6 +114,8 @@ pub use sfc::{SfcEntityPatch, SfcSequencePatch, SfcVariablePatch};
 pub use text_program::TextProgram;
 #[cfg(feature = "write")]
 pub use text_program::TextProgramPatch;
+mod password;
+pub use password::{PasswordError, PasswordScope};
 mod error;
 #[cfg(all(feature = "ffi", not(target_arch = "wasm32")))]
 pub mod ffi;

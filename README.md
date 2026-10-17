@@ -957,3 +957,13 @@ See [the user-POU workflow and native acceptance evidence](docs/user-pous.md)
 for the complete example and current language/type limits. Native XG5000
 Check Program and Save As cover function calls, custom FB instances and all
 19 supported scalar types.
+
+### Project and program passwords
+
+The library can open project passwords with `XgwxDocument::parse_with_password`
+or `from_path_with_password`, and authenticate program blocks with
+`unlock_program`. With `write`, `project_mut().set_password` and the selected
+program's `set_password` set, change, or remove native passwords. Protected
+program edits retain their native save layout. Program protection supports
+captured XGK LD and XGI LD/ST/IL/SFC layouts. See [password support](docs/passwords.md)
+for usage, native fixtures, Korean password encoding, and remaining scope.

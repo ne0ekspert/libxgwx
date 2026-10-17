@@ -16,6 +16,8 @@ typedef int32_t xgwx_status;
 #define XGWX_PARSE_ERROR         ((xgwx_status)2)
 #define XGWX_OPERATION_ERROR     ((xgwx_status)3)
 #define XGWX_FEATURE_UNAVAILABLE ((xgwx_status)4)
+#define XGWX_PASSWORD_REQUIRED  ((xgwx_status)5)
+#define XGWX_PASSWORD_INCORRECT ((xgwx_status)6)
 #define XGWX_PANIC               ((xgwx_status)255)
 #define XGWX_FEATURE_WRITE 1u
 #define XGWX_FEATURE_IL    2u
@@ -53,6 +55,19 @@ const char *xgwx_last_error(void);
 
 xgwx_status xgwx_document_parse(const uint8_t *data, size_t len,
                                 xgwx_document **out);
+/* Passwords are UTF-8 spans, max eight native characters. NULL+0 current
+ * means absent; NULL+0 replacement removes. Non-NULL empty passwords are invalid.
+ * Setters require write; opening/unlocking/status also work in read-only builds.
+ * Authentication retains no plaintext passwords. Unlocking does not remove protection. */
+xgwx_status xgwx_document_parse_with_password(const uint8_t *data, size_t len,
+    const uint8_t *password, size_t password_len, xgwx_document **out);
+xgwx_status xgwx_document_unlock_program(xgwx_document *doc, size_t index,
+    const uint8_t *password, size_t password_len);
+xgwx_status xgwx_document_passwords_json(const xgwx_document *doc, xgwx_buffer *out);
+xgwx_status xgwx_document_set_project_password(xgwx_document *doc,
+    const uint8_t *current, size_t current_len, const uint8_t *replacement, size_t replacement_len);
+xgwx_status xgwx_document_set_program_password(xgwx_document *doc, size_t index,
+    const uint8_t *current, size_t current_len, const uint8_t *replacement, size_t replacement_len);
 /* Release exactly once. NULL is a no-op; discard the handle after release. */
 void xgwx_document_free(xgwx_document *doc);
 /* Resets the struct to {NULL, 0}; repeated calls on that struct are safe. */

@@ -22,6 +22,10 @@ impl<'a> ProjectView<'a> {
     pub fn info(self) -> ProjectInfo {
         self.doc.project_info()
     }
+    /// Whether the captured workspace header has a project password.
+    pub fn password_protected(self) -> Result<bool, crate::XgwxError> {
+        self.doc.project_password_is_set()
+    }
     /// Direct project name text, if nonempty.
     pub fn name(self) -> Option<&'a str> {
         self.doc.project_name()
@@ -55,6 +59,15 @@ mod editors {
         }
     }
     impl ProjectEditor<'_> {
+        /// Set, change, or remove the project password. `None` removes it.
+        /// Existing protection requires the current password.
+        pub fn set_password(
+            &mut self,
+            current: Option<&str>,
+            replacement: Option<&str>,
+        ) -> Result<(), XgwxError> {
+            self.doc.set_project_password(current, replacement)
+        }
         /// Inspect current project metadata and options.
         pub fn view(&self) -> ProjectView<'_> {
             ProjectView { doc: self.doc }

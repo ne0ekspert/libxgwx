@@ -12944,6 +12944,7 @@ impl XgwxDocument {
         require_valid_result: bool,
         update: impl FnOnce(&[u8]) -> Result<Vec<u8>, XgwxError>,
     ) -> Result<(), XgwxError> {
+        self.require_open_program(program_index)?;
         let original_iec = if project_type == "2" {
             let program =
                 self.ladder_program(program_index)
@@ -13021,8 +13022,9 @@ impl XgwxDocument {
     /// additive header checksum. Existing trailing Security metadata is
     /// validated and preserved byte-for-byte.
     pub fn to_bytes(&self) -> Result<Vec<u8>, XgwxError> {
+        let xml = self.password_serialized_xml()?;
         let original = parse_gzip_member(&self.main_gzip, 0)?;
-        if original.data == self.xml.as_bytes() {
+        if original.data == xml.as_bytes() {
             return Ok(assemble_workspace(
                 &self.header.raw,
                 &self.main_gzip,
@@ -13031,7 +13033,7 @@ impl XgwxDocument {
         }
 
         let preserved_trailer = self.supported_trailer_after_main_padding()?;
-        serialize_new_workspace(&self.header.raw, self.xml.as_bytes(), preserved_trailer)
+        serialize_new_workspace(&self.header.raw, xml.as_bytes(), preserved_trailer)
     }
 
     /// Serialize, reparse, and verify the full XML plus untouched container data.
@@ -13039,7 +13041,8 @@ impl XgwxDocument {
     /// header bytes and the security trailer must remain identical.
     pub fn to_verified_bytes(&self) -> Result<Vec<u8>, XgwxError> {
         let bytes = self.to_bytes()?;
-        let reparsed = Self::parse(&bytes)?;
+        let mut reparsed = Self::parse_container(&bytes)?;
+        reparsed.restore_open_programs(&self.opened_programs)?;
         if reparsed.xml != self.xml || reparsed.root != self.root {
             return Err(XgwxError::RewriteVerificationFailed);
         }
@@ -13052,7 +13055,8 @@ impl XgwxDocument {
             let mut after = reparsed.header.raw.clone();
             for header in [&mut before, &mut after] {
                 header[HEADER_CHECKSUM_OFFSET..HEADER_CHECKSUM_INPUT_START].fill(0);
-                header[COMPRESSED_SIZE_OFFSET..SUPPORTED_HEADER_LEN].fill(0);
+                let size_offset = header.len() - 4;
+                header[size_offset..].fill(0);
             }
             if before != after
                 || self.supported_trailer_after_main_padding()?
@@ -13071,8 +13075,8 @@ impl XgwxDocument {
     }
 
     fn supported_trailer_after_main_padding(&self) -> Result<&[u8], XgwxError> {
-        if self.header.gzip_offset != SUPPORTED_HEADER_LEN
-            || self.header.raw.len() != SUPPORTED_HEADER_LEN
+        if self.header.gzip_offset != self.header.raw.len()
+            || !supported_workspace_header(&self.header.raw)
         {
             return Err(XgwxError::AuthenticatedRewriteUnsupported);
         }
@@ -13595,7 +13599,7 @@ pub(crate) fn serialize_new_workspace(
     xml: &[u8],
     preserved_trailer: &[u8],
 ) -> Result<Vec<u8>, XgwxError> {
-    if header.len() != SUPPORTED_HEADER_LEN {
+    if !supported_workspace_header(header) {
         return Err(XgwxError::AuthenticatedRewriteUnsupported);
     }
     validate_preserved_security(preserved_trailer)?;
@@ -13607,8 +13611,8 @@ pub(crate) fn serialize_new_workspace(
     let padding_len = aligned_len - main_gzip.len();
 
     let mut header = header.to_vec();
-    header[COMPRESSED_SIZE_OFFSET..SUPPORTED_HEADER_LEN]
-        .copy_from_slice(&aligned_len_u32.to_le_bytes());
+    let size_offset = header.len() - 4;
+    header[size_offset..].copy_from_slice(&aligned_len_u32.to_le_bytes());
     let checksum = workspace_checksum(&header, aligned_len_u32, &main_gzip);
     header[HEADER_CHECKSUM_OFFSET..HEADER_CHECKSUM_INPUT_START]
         .copy_from_slice(&checksum.to_le_bytes());
@@ -13633,14 +13637,29 @@ fn align_up(value: usize, alignment: usize) -> Option<usize> {
         .map(|value| value & !(alignment - 1))
 }
 
-fn workspace_checksum(header: &[u8], aligned_len: u32, main_gzip: &[u8]) -> u32 {
+fn supported_workspace_header(header: &[u8]) -> bool {
+    header.len() == SUPPORTED_HEADER_LEN
+        || (header.len() == SUPPORTED_HEADER_LEN + 4
+            && header[COMPRESSED_SIZE_OFFSET..COMPRESSED_SIZE_OFFSET + 4] == [0xff; 4])
+}
+
+pub(crate) fn workspace_checksum(header: &[u8], aligned_len: u32, main_gzip: &[u8]) -> u32 {
+    // XG5000 adds header password bytes as signed C chars. This differs
+    // from the unsigned gzip sum and matters once protection is enabled.
     let header_sum = header[HEADER_CHECKSUM_INPUT_START..COMPRESSED_SIZE_OFFSET]
         .iter()
-        .fold(0u32, |sum, byte| sum.wrapping_add(u32::from(*byte)));
+        .fold(0u32, |sum, byte| {
+            sum.wrapping_add(i32::from(*byte as i8) as u32)
+        });
     let gzip_sum = main_gzip
         .iter()
         .fold(0u32, |sum, byte| sum.wrapping_add(u32::from(*byte)));
-    header_sum.wrapping_add(aligned_len).wrapping_add(gzip_sum)
+    let mask = if header.len() == SUPPORTED_HEADER_LEN + 4 {
+        u32::MAX
+    } else {
+        0
+    };
+    header_sum.wrapping_add(aligned_len).wrapping_add(gzip_sum) ^ mask
 }
 
 fn validate_preserved_security(trailer: &[u8]) -> Result<(), XgwxError> {

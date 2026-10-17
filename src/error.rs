@@ -6,6 +6,8 @@ use std::io;
 pub enum XgwxError {
     Io(io::Error),
     InvalidMagic,
+    /// Password authentication or unsupported protection layout.
+    Password(crate::PasswordError),
     MissingMainPayload,
     InvalidGzipHeader {
         offset: usize,
@@ -254,6 +256,7 @@ impl fmt::Display for XgwxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(error) => write!(f, "failed to read xgwx file: {error}"),
+            Self::Password(error) => error.fmt(f),
             Self::InvalidMagic => write!(f, "file does not start with XG magic"),
             Self::MissingMainPayload => write!(f, "missing gzip-compressed XML payload"),
             Self::InvalidGzipHeader { offset } => write!(f, "invalid gzip header at byte {offset}"),
@@ -519,6 +522,7 @@ impl std::error::Error for XgwxError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(error) => Some(error),
+            Self::Password(error) => Some(error),
             Self::Inflate(error) => Some(error),
             Self::Base64(error) => Some(error),
             Self::Bzip2(error) => Some(error),

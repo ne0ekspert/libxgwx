@@ -96,10 +96,14 @@ impl XgwxDocument {
             _ => return None,
         };
         let body = program.children.iter().find(|n| n.name == "Body");
-        let source = body.and_then(source);
+        let source = if self.program_is_locked(program_index) {
+            None
+        } else {
+            body.and_then(source)
+        };
         let editable = supported
             && languages.contains(&language)
-            && program.attribute("Encrytption").unwrap_or("").is_empty()
+            && !self.program_is_locked(program_index)
             && program
                 .attribute("ObjectId")
                 .is_some_and(|id| !id.is_empty())
@@ -115,7 +119,10 @@ impl XgwxDocument {
                             == 1
                     })
             });
-        let (variables, variables_error) = match self.sfc_variables_from_program(program) {
+        let (variables, variables_error) = match self
+            .require_open_program(program_index)
+            .and_then(|()| self.sfc_variables_from_program(program))
+        {
             Ok(v) => (v, None),
             Err(e) => (Vec::new(), Some(e.to_string())),
         };

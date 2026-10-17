@@ -275,3 +275,27 @@ The snake_case transport stays unchanged when built together with `wasm`.
 
 Use the focused inspection section `networks.opcua_tags.<configuration_index>`
 to paginate exported tags without paginating their parent configuration list.
+
+## Project and program passwords
+
+`xgwx_document_parse` returns `XGWX_PASSWORD_REQUIRED` (5) for protected projects.
+Use `xgwx_document_parse_with_password` with an explicit UTF-8 password span;
+an incorrect password returns `XGWX_PASSWORD_INCORRECT` (6). Programs remain
+locked until `xgwx_document_unlock_program` succeeds. Opening and unlocking do
+not remove stored protection and work without the `write` feature.
+
+`xgwx_document_passwords_json` returns only `schema_version`,
+`project_protected`, and program `index`/`protected`/`locked` flags. It never
+returns plaintext credentials. With `write`, use
+`xgwx_document_set_project_password` or `xgwx_document_set_program_password`:
+
+- Current `NULL, 0` means no current password; existing protection requires it.
+- Replacement `NULL, 0` removes protection.
+- A non-NULL replacement with zero length is invalid, rather than removal.
+- Nonempty NULL spans are invalid arguments. Failed calls preserve the handle.
+
+Passwords retain the native encoding and layout limits documented in
+[password support](passwords.md). Native XGK and XGI workspace signatures
+(version 2 and 3), including 138/142-byte protection headers, are supported.
+`tests/ffi_passwords.c` is a compiled C lifecycle example. Serialize and persist
+its returned bytes through the caller's normal file handling.

@@ -613,3 +613,7 @@ path = "user_pou_acceptance.rs"
 name = "iec_ff_acceptance"
 path = "iec_ff_acceptance.rs"
 required-features = ["write"]
+
+[[bin]]
+name = "password_acceptance"
+path = "password_acceptance.rs"

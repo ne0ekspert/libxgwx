@@ -24,6 +24,8 @@ use std::ptr;
 #[cfg(feature = "write")]
 mod edits;
 mod inspection;
+mod password;
+pub use password::*;
 mod inspection_types;
 #[cfg(feature = "write")]
 mod types;
@@ -60,6 +62,10 @@ pub const XGWX_OPERATION_ERROR: i32 = 3;
 pub const XGWX_FEATURE_UNAVAILABLE: i32 = 4;
 /// Rust panicked while performing the request.
 pub const XGWX_PANIC: i32 = 255;
+/// A project or program password is required.
+pub const XGWX_PASSWORD_REQUIRED: i32 = 5;
+/// The supplied password did not match.
+pub const XGWX_PASSWORD_INCORRECT: i32 = 6;
 
 /// Rust-owned bytes, matching `xgwx_buffer` in the C header.
 #[repr(C)]
@@ -206,8 +212,7 @@ pub unsafe extern "C" fn xgwx_document_parse(
         // SAFETY: All foreign memory follows the documented caller contract.
         unsafe {
             document_output(out)?;
-            let doc = XgwxDocument::parse(input(data, len)?)
-                .map_err(|e| Failure(XGWX_PARSE_ERROR, e.to_string()))?;
+            let doc = XgwxDocument::parse(input(data, len)?).map_err(password::parse_failure)?;
             *out = Box::into_raw(Box::new(doc)).cast();
         }
         Ok(())

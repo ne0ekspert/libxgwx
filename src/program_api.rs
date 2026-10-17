@@ -33,6 +33,20 @@ impl ProgramRef<'_> {
             .program_summary(self.index)
             .expect("selected program exists")
     }
+    /// Whether this program still needs authentication in this session.
+    pub fn is_locked(&self) -> bool {
+        self.doc.program_is_locked(self.index)
+    }
+    /// Whether a program password is stored in the file.
+    pub fn password_protected(&self) -> bool {
+        !self
+            .doc
+            .program_element(self.index)
+            .expect("selected program exists")
+            .attribute("Encrytption")
+            .unwrap_or("")
+            .is_empty()
+    }
     /// Decode the selected native ladder payload without borrowing its bytes.
     pub fn ladder(&self) -> Result<LadderProgramData, XgwxError> {
         self.doc
@@ -41,12 +55,14 @@ impl ProgramRef<'_> {
     }
     /// Read standalone ST/IL source for this program; reject other languages.
     pub fn text(&self) -> Result<TextProgram, XgwxError> {
+        self.doc.require_open_program(self.index)?;
         self.doc.text_program(self.index).ok_or_else(|| {
             XgwxError::TextProgramEdit("selected program is not standalone ST/IL".into())
         })
     }
     /// Read the native SFC charts for this program; reject programs without SFC blocks.
     pub fn sfc(&self) -> Result<SfcProgram, XgwxError> {
+        self.doc.require_open_program(self.index)?;
         self.doc
             .sfc_program(self.index)
             .ok_or_else(|| XgwxError::SfcEdit("selected program is not SFC".into()))
@@ -59,6 +75,7 @@ impl ProgramRef<'_> {
     }
     /// Decode this program's local declarations, including native system records.
     pub fn declarations(&self) -> Result<Vec<SfcVariable>, XgwxError> {
+        self.doc.require_open_program(self.index)?;
         self.doc.sfc_variables(self.index)
     }
 }
@@ -114,6 +131,22 @@ impl<'a> ProgramEditor<'a> {
 
 #[cfg(feature = "write")]
 impl Program<'_> {
+    /// Authenticate this program without removing its stored password.
+    pub fn unlock(&mut self, password: &str) -> Result<(), XgwxError> {
+        self.ensure_identity()?;
+        self.doc.unlock_program(self.index, password)
+    }
+    /// Set, change, or remove this program password. `None` removes it.
+    /// Initial writes support captured XGK LD and XGI LD/ST/IL/SFC bodies.
+    pub fn set_password(
+        &mut self,
+        current: Option<&str>,
+        replacement: Option<&str>,
+    ) -> Result<(), XgwxError> {
+        self.ensure_identity()?;
+        self.doc
+            .set_program_password(self.index, current, replacement)
+    }
     /// Create, rename or delete a native label in XGK or IEC ladder.
     pub fn edit_ld_label(&mut self, edit: &LadderLabelEdit) -> Result<(), XgwxError> {
         self.ensure_identity()?;
@@ -215,6 +248,7 @@ impl Program<'_> {
     }
     /// Select the native XGK ladder editor.
     pub fn ladder(&mut self) -> Result<LadderEditor<'_>, XgwxError> {
+        self.doc.require_open_program(self.index)?;
         self.ensure_identity()?;
         if self.view().ladder()?.project_type != Some(1) {
             return Err(XgwxError::UnsupportedLadderLayout);
@@ -225,6 +259,7 @@ impl Program<'_> {
     }
     /// Borrow the standalone ST/IL source editor; reject other program body types.
     pub fn text(&mut self) -> Result<TextEditor<'_>, XgwxError> {
+        self.doc.require_open_program(self.index)?;
         self.ensure_identity()?;
         self.view().text()?;
         Ok(TextEditor {
@@ -233,6 +268,7 @@ impl Program<'_> {
     }
     /// Borrow the native SFC editor; reject programs without an SFC chart.
     pub fn sfc(&mut self) -> Result<SfcEditor<'_>, XgwxError> {
+        self.doc.require_open_program(self.index)?;
         self.ensure_identity()?;
         self.view().sfc()?;
         Ok(SfcEditor {

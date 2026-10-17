@@ -3,6 +3,8 @@ use wasm_bindgen::prelude::*;
 use crate::*;
 use serde::Serialize;
 
+mod passwords;
+use passwords::*;
 mod ladder;
 mod network;
 mod parameters;
@@ -18,7 +20,7 @@ use project::*;
 #[wasm_bindgen(js_name = create_xgwx_project)]
 pub fn create_xgwx_project_wasm(cpu_model: &str, language: &str) -> Result<Vec<u8>, JsValue> {
     crate::create_project(cpu_model, language)
-        .and_then(|doc| doc.to_verified_bytes())
+        .and_then(|doc| serialize_in_wasm_session(&doc, true))
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
@@ -31,7 +33,7 @@ pub fn edit_xgwx_browser_hardware_wasm(bytes: &[u8], patch: JsValue) -> Result<V
         .ok_or_else(|| JsValue::from_str("hardware patch is not JSON-serializable"))?;
     let patch: BrowserHardwarePatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     if patch.operation == "slotCount" {
         doc.base_mut()
             .by_number(patch.base)
@@ -55,8 +57,7 @@ pub fn edit_xgwx_browser_hardware_wasm(bytes: &[u8], patch: JsValue) -> Result<V
             })
     }
     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 const MAX_WASM_VARIABLES: usize = 65536;
@@ -77,11 +78,10 @@ pub fn insert_xgwx_iec_ld_function_wasm(
 ) -> Result<Vec<u8>, JsValue> {
     let operands: Vec<String> =
         serde_json::from_str(operands_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.insert_iec_ld_function(program_index, row_index, raw_x, name, &operands)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -94,7 +94,7 @@ pub fn insert_xgwx_iec_ld_function_output_wire_wasm(
     pin_name: &str,
     start_x: u8,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.insert_iec_ld_function_output_wire(
         program_index,
         block_offset,
@@ -103,8 +103,7 @@ pub fn insert_xgwx_iec_ld_function_output_wire_wasm(
         start_x,
     )
     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -116,11 +115,10 @@ pub fn delete_xgwx_ladder_horizontal_wire_wasm(
     start_x: u8,
     end_x: u8,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.delete_ladder_horizontal_wire(program_index, raw_y, start_x, end_x)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -132,11 +130,10 @@ pub fn delete_xgwx_ladder_vertical_wire_wasm(
     start_y: u32,
     end_y: u32,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.delete_ladder_vertical_wire(program_index, raw_x, start_y, end_y)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -148,11 +145,10 @@ pub fn delete_xgwx_iec_ld_horizontal_wire_record_wasm(
     start_x: u8,
     end_x: u8,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.delete_iec_ld_horizontal_wire_record(program_index, offset, start_x, end_x)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -163,17 +159,16 @@ pub fn delete_xgwx_iec_ld_isolated_element_wasm(
     offset: usize,
     expected: &str,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.delete_iec_ld_isolated_element(program_index, offset, expected)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
 #[wasm_bindgen]
 pub fn preview_xgwx_io_variables(bytes: &[u8]) -> Result<JsValue, JsValue> {
-    let doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let rows = doc
         .preview_io_variables()
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -184,17 +179,17 @@ pub fn preview_xgwx_io_variables(bytes: &[u8]) -> Result<JsValue, JsValue> {
 #[cfg(feature = "write")]
 #[wasm_bindgen]
 pub fn generate_xgwx_io_variables(bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.generate_io_variables()
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Parse `.xgwx` bytes and return a browser-friendly JavaScript summary.
 #[wasm_bindgen]
 pub fn parse_xgwx(bytes: &[u8]) -> Result<JsValue, JsValue> {
-    let doc = XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let doc =
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     let summary = WasmDocumentSummary::from_document(&doc);
     let json = serde_json::to_string(&summary).map_err(|error| {
         JsValue::from_str(&format!("failed to serialize xgwx summary: {error}"))
@@ -215,21 +210,19 @@ pub fn edit_xgwx_browser_iec(
         .ok_or_else(|| JsValue::from_str("invalid patch"))?;
     let patch: BrowserIecPatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_browser_iec(index, &patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Probe whether this container can be rewritten without returning probe bytes.
 #[cfg(feature = "write")]
 #[wasm_bindgen]
 pub fn check_xgwx_edit_support(bytes: &[u8]) -> Result<bool, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.xml.push('\n');
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))?;
     Ok(true)
 }
 
@@ -237,10 +230,9 @@ pub fn check_xgwx_edit_support(bytes: &[u8]) -> Result<bool, JsValue> {
 #[cfg(feature = "write")]
 #[wasm_bindgen]
 pub fn verify_xgwx_bytes(bytes: &[u8]) -> Result<bool, JsValue> {
-    let doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let roundtrip = doc
-        .to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let roundtrip =
+        serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))?;
     Ok(roundtrip == bytes)
 }
 
@@ -273,13 +265,12 @@ pub fn cpu_catalog_wasm() -> Result<JsValue, JsValue> {
 #[wasm_bindgen(js_name = select_xgwx_cpu)]
 pub fn select_xgwx_cpu_wasm(bytes: &[u8], model: &str) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.configuration_mut()
         .get(0)
         .and_then(|mut configuration| configuration.select_cpu(model))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Set the physical slot count for an existing XGK base.
@@ -290,13 +281,12 @@ pub fn set_xgwx_base_slot_count_wasm(
     base: u32,
     slot_count: u32,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.base_mut()
         .by_number(base)
         .and_then(|mut selected| selected.set_slot_count(slot_count))
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Structurally edit a supported LD contact or coil at a physical cell.
@@ -314,11 +304,10 @@ pub fn edit_xgwx_ladder_cell_wasm(
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.edit_ladder_cell(program_index, &edit)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert a catalog application instruction at an XGK output position.
@@ -334,11 +323,10 @@ pub fn insert_xgwx_ladder_instruction_wasm(
     let operands: Vec<String> = serde_json::from_str(operands_json)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_ladder_instruction(program_index, raw_y, mnemonic, &operands)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert a native comparison contact at an XGK contact position.
@@ -355,11 +343,10 @@ pub fn insert_xgwx_ladder_comparison_wasm(
     let operands: Vec<String> = serde_json::from_str(operands_json)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_ladder_comparison(program_index, raw_y, column, mnemonic, &operands)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete a verified XGK comparison contact and its operand references.
@@ -372,11 +359,10 @@ pub fn delete_xgwx_ladder_comparison_wasm(
     expected: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_ladder_comparison(program_index, offset, expected)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete a verified XGK application from an unbranched output row.
@@ -389,11 +375,10 @@ pub fn delete_xgwx_ladder_instruction_wasm(
     expected: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_ladder_instruction(program_index, offset, expected)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Create or edit a supported native rung/output comment.
@@ -411,11 +396,10 @@ pub fn edit_xgwx_ladder_comment_wasm(
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.edit_ladder_comment(program_index, &edit)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Create, rename or delete a native IEC or XGK ladder label.
@@ -432,11 +416,10 @@ pub fn edit_xgwx_ld_label_wasm(
             .ok_or_else(|| JsValue::from_str("invalid label edit"))?,
     )
     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_ld_label(program_index, &edit)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Delete a supported native rung comment.
@@ -449,11 +432,10 @@ pub fn delete_xgwx_ladder_rung_comment_wasm(
     expected: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_ladder_rung_comment(program_index, raw_y, expected)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Add or remove a supported vertical branch connection.
@@ -471,11 +453,10 @@ pub fn edit_xgwx_ladder_branch_wasm(
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.edit_ladder_branch(program_index, &edit)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert a physical blank row before the selected row.
@@ -487,11 +468,10 @@ pub fn insert_xgwx_ladder_row_wasm(
     raw_y: u32,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_ladder_row(program_index, raw_y)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Return the embedded latest-stable XGK module selection catalog.
@@ -515,13 +495,12 @@ pub fn select_xgwx_module_wasm(
     model: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.module_mut()
         .at(base, slot)
         .and_then(|mut selected| selected.select_model(model))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert a catalog module into an empty slot and return rewritten `.xgwx` bytes.
@@ -534,13 +513,12 @@ pub fn insert_xgwx_module_wasm(
     model: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.base_mut()
         .by_number(base)
         .and_then(|mut selected| selected.insert_module(slot, model))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one module and return rewritten `.xgwx` bytes.
@@ -548,13 +526,12 @@ pub fn insert_xgwx_module_wasm(
 #[wasm_bindgen(js_name = delete_xgwx_module)]
 pub fn delete_xgwx_module_wasm(bytes: &[u8], base: u32, slot: u32) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.module_mut()
         .at(base, slot)
         .and_then(|selected| selected.delete())
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Return the current values of all verified options for one module.
@@ -565,7 +542,8 @@ pub fn xgwx_module_option_values_wasm(
     base: u32,
     slot: u32,
 ) -> Result<JsValue, JsValue> {
-    let doc = XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let doc =
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     let values = doc
         .module()
         .at(base, slot)
@@ -591,13 +569,12 @@ pub fn set_xgwx_module_option_wasm(
     value: u32,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.module_mut()
         .at(base, slot)
         .and_then(|mut selected| selected.set_option(key, index, value))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Apply supported module attribute changes and return rewritten `.xgwx` bytes.
@@ -615,13 +592,12 @@ pub fn update_xgwx_module_wasm(
     let patch = serde_json::from_str::<ModulePatch>(&json)
         .map_err(|error| JsValue::from_str(&format!("invalid module patch: {error}")))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.module_mut()
         .at(base, slot)
         .and_then(|mut selected| selected.update(&patch))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Update an XGI-D24A/B input filter and return rewritten `.xgwx` bytes.
@@ -634,13 +610,12 @@ pub fn set_xgwx_module_input_filter_wasm(
     raw_filter: u8,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.module_mut()
         .at(base, slot)
         .and_then(|mut selected| selected.set_input_filter(ModuleInputFilter::from_raw(raw_filter)))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Move the identified program to its final index and return verified workspace bytes.
@@ -653,11 +628,10 @@ pub fn move_xgwx_program_wasm(
     expected_object_id: &str,
     expected_target_id: &str,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.move_program(from, to, expected_object_id, expected_target_id)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Delete the identified top-level program and return verified workspace bytes.
@@ -668,11 +642,10 @@ pub fn delete_xgwx_program_wasm(
     program_index: usize,
     expected_object_id: &str,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.delete_program(program_index, expected_object_id)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Append a captured blank program and return verified workspace bytes.
@@ -684,11 +657,10 @@ pub fn create_xgwx_program_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>,
         .ok_or_else(|| JsValue::from_str("program request is not JSON-serializable"))?;
     let patch =
         serde_json::from_str::<NewProgram>(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.create_program(&patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply supported program metadata changes and return rewritten `.xgwx` bytes.
@@ -705,11 +677,10 @@ pub fn update_xgwx_program_wasm(
     let patch = serde_json::from_str::<ProgramPatch>(&json)
         .map_err(|error| JsValue::from_str(&format!("invalid program patch: {error}")))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_program(program_index, &patch)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Apply supported changes to one global variable and return rewritten bytes.
@@ -726,13 +697,12 @@ pub fn update_xgwx_variable_wasm(
     let patch = serde_json::from_str::<VariablePatch>(&json)
         .map_err(|error| JsValue::from_str(&format!("invalid variable patch: {error}")))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.variable_mut()
         .get(variable_index)
         .and_then(|mut variable| variable.update(&patch))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Change a captured IEC program-local BOOL symbol's mapped address.
@@ -747,7 +717,7 @@ pub fn update_xgwx_iec_local_symbol_address_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_local_symbol_address(
         program_index,
         symbol_index,
@@ -756,8 +726,7 @@ pub fn update_xgwx_iec_local_symbol_address_wasm(
         replacement,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Rename a captured IEC local symbol and its classified LD references.
@@ -771,11 +740,10 @@ pub fn rename_xgwx_iec_local_symbol_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.rename_iec_local_symbol(program_index, symbol_index, expected_name, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert an unallocated primitive IEC program-local symbol.
@@ -789,11 +757,10 @@ pub fn insert_xgwx_iec_local_symbol_wasm(
     description: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_local_symbol(program_index, name, data_type, description)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Remove an unreferenced IEC program-local symbol.
@@ -806,11 +773,10 @@ pub fn delete_xgwx_iec_local_symbol_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_local_symbol(program_index, symbol_index, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Change a captured IEC program-local symbol description.
@@ -825,7 +791,7 @@ pub fn update_xgwx_iec_local_symbol_description_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_local_symbol_description(
         program_index,
         symbol_index,
@@ -834,8 +800,7 @@ pub fn update_xgwx_iec_local_symbol_description_wasm(
         replacement,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Change a captured automatic IEC local variable's primitive type.
@@ -850,7 +815,7 @@ pub fn update_xgwx_iec_local_symbol_type_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_local_symbol_type(
         program_index,
         symbol_index,
@@ -859,8 +824,7 @@ pub fn update_xgwx_iec_local_symbol_type_wasm(
         replacement,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Apply one bounded existing network metadata field.
@@ -872,7 +836,7 @@ pub fn edit_xgwx_browser_network_wasm(bytes: &[u8], patch: JsValue) -> Result<Ve
         .ok_or_else(|| JsValue::from_str("invalid network patch"))?;
     let patch = serde_json::from_str::<BrowserNetworkPatch>(&json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let edit = crate::NetworkFieldEdit {
         field: patch.field,
         expected_value: patch.expected_value,
@@ -907,8 +871,7 @@ pub fn edit_xgwx_browser_network_wasm(bytes: &[u8], patch: JsValue) -> Result<Ve
             .edit_field(&edit)
     };
     result.map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Create, update or delete an XGK exported OPC UA tag.
@@ -920,12 +883,11 @@ pub fn edit_xgwx_opcua_tag_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>,
         .ok_or_else(|| JsValue::from_str("invalid OPC UA tag patch"))?;
     let patch: OpcUaTagPatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.network_mut()
         .edit_opcua_tag(&patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply EOPCT server options atomically with stale-value protection.
@@ -942,14 +904,13 @@ pub fn edit_xgwx_opcua_settings_wasm(
         .ok_or_else(|| JsValue::from_str("invalid OPC UA changes"))?;
     let changes: Vec<OpcUaFieldEdit> =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.network_mut()
         .module_at(base, slot)
         .and_then(|module| module.opcua())
         .and_then(|mut server| server.edit_settings(&changes))
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply a batch of native Cnet serial-port changes atomically.
@@ -961,14 +922,13 @@ pub fn edit_xgwx_cnet_settings_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<
         .ok_or_else(|| JsValue::from_str("invalid Cnet patch"))?;
     let patch = serde_json::from_str::<CnetSettingsPatch>(&json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.network_mut()
         .module_at(patch.base, patch.slot)
         .and_then(|module| module.cnet())
         .and_then(|mut config| config.edit_settings(&patch.changes))
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply supported changes to one network and return rewritten bytes.
@@ -980,7 +940,7 @@ pub fn edit_xgwx_fenet_field_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8
         .ok_or_else(|| JsValue::from_str("invalid FEnet patch"))?;
     let patch = serde_json::from_str::<FenetFieldPatch>(&json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.network_mut()
         .module_at(patch.base, patch.slot)
         .and_then(|module| module.fenet())
@@ -992,8 +952,7 @@ pub fn edit_xgwx_fenet_field_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8
             })
         })
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Apply supported changes to one network and return rewritten bytes.
@@ -1010,13 +969,12 @@ pub fn update_xgwx_network_wasm(
     let patch = serde_json::from_str::<NetworkPatch>(&json)
         .map_err(|error| JsValue::from_str(&format!("invalid network patch: {error}")))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.network_mut()
         .get(network_index)
         .and_then(|mut network| network.update(&patch))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Apply supported changes to one network-module metadata record.
@@ -1034,13 +992,12 @@ pub fn update_xgwx_network_module_wasm(
     let patch = serde_json::from_str::<NetworkModulePatch>(&json)
         .map_err(|error| JsValue::from_str(&format!("invalid network-module patch: {error}")))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.network_mut()
         .module_at(base, slot)
         .and_then(|mut module| module.update(&patch))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace one same-length ladder cell string and return rewritten bytes.
@@ -1054,11 +1011,10 @@ pub fn update_xgwx_ladder_cell_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_ladder_cell_text(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace one verified IEC LD comment with up to 255 UTF-16 units.
@@ -1072,11 +1028,10 @@ pub fn update_xgwx_iec_ld_comment_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_ld_comment(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace a verified IEC LD rising-edge contact variable reference.
@@ -1090,11 +1045,10 @@ pub fn update_xgwx_iec_ld_rising_contact_operand_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_ld_rising_contact_operand(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace a verified IEC LD contact or output coil variable reference.
@@ -1108,11 +1062,10 @@ pub fn update_xgwx_iec_ld_element_operand_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_ld_element_operand(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Change a captured IEC contact among the six addressed IEC contact kinds.
@@ -1126,11 +1079,10 @@ pub fn update_xgwx_iec_ld_contact_kind_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_ld_contact_kind(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Change a captured IEC coil among the six decoded coil kinds.
@@ -1144,11 +1096,10 @@ pub fn update_xgwx_iec_ld_coil_kind_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_ld_coil_kind(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Add or remove one guarded IEC LD vertical branch segment between adjacent
@@ -1167,7 +1118,7 @@ pub fn edit_xgwx_iec_ld_branch_segment_wasm(
     present: bool,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.edit_iec_ld_branch_segment(
         program_index,
         group_index,
@@ -1178,8 +1129,7 @@ pub fn edit_xgwx_iec_ld_branch_segment_wasm(
         present,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Toggle a vertical wire without deleting shared row or function records.
@@ -1197,7 +1147,7 @@ pub fn edit_xgwx_iec_ld_vertical_wire_wasm(
     present: bool,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.edit_iec_ld_vertical_wire(
         program_index,
         group_index,
@@ -1208,8 +1158,7 @@ pub fn edit_xgwx_iec_ld_vertical_wire_wasm(
         present,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Connect adjacent IEC groups, rebuilding group envelopes and adding wiring.
@@ -1225,7 +1174,7 @@ pub fn connect_xgwx_iec_ld_groups_wasm(
     expected_lower_row: u16,
     x: u8,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.connect_iec_ld_groups(
         program_index,
         upper_group_index,
@@ -1235,8 +1184,7 @@ pub fn connect_xgwx_iec_ld_groups_wasm(
         x,
     )
     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Extend an IEC group into the adjacent implicit blank row.
@@ -1249,11 +1197,10 @@ pub fn extend_xgwx_iec_ld_vertical_wire_wasm(
     start_row_index: u16,
     x: u8,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.extend_iec_ld_vertical_wire(program_index, group_index, start_row_index, x)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Split disconnected IEC row ranges without changing coordinates or elements.
@@ -1266,7 +1213,7 @@ pub fn split_xgwx_iec_ld_group_wasm(
     expected_upper_row: u16,
     expected_lower_row: u16,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.split_iec_ld_group(
         program_index,
         group_index,
@@ -1274,8 +1221,7 @@ pub fn split_xgwx_iec_ld_group_wasm(
         expected_lower_row,
     )
     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Insert one implicit IEC LD blank row after a decoded stored row, matching
@@ -1288,11 +1234,10 @@ pub fn insert_xgwx_iec_ld_blank_row_wasm(
     after_row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_blank_row(program_index, after_row_index)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one implicit IEC LD blank row, matching XG5000 Ctrl+D coordinate
@@ -1305,11 +1250,10 @@ pub fn delete_xgwx_iec_ld_blank_row_wasm(
     blank_row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_blank_row(program_index, blank_row_index)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Create one native-shaped normally-open-contact to output-coil rung in an
@@ -1324,7 +1268,7 @@ pub fn insert_xgwx_iec_ld_linear_rung_wasm(
     coil_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_linear_rung(
         program_index,
         blank_row_index,
@@ -1332,8 +1276,7 @@ pub fn insert_xgwx_iec_ld_linear_rung_wasm(
         coil_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert one contact or coil into an empty IEC cell, without adding other elements.
@@ -1349,11 +1292,10 @@ pub fn insert_xgwx_iec_ld_single_element_wasm(
     operand: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_single_element(program_index, row_index, raw_x, category, kind, operand)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Create one addressed-contact to coil rung using decoded IEC element kinds.
@@ -1370,7 +1312,7 @@ pub fn insert_xgwx_iec_ld_rung_wasm(
     coil_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_rung(
         program_index,
         blank_row_index,
@@ -1380,8 +1322,7 @@ pub fn insert_xgwx_iec_ld_rung_wasm(
         coil_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Add a normally open contact in parallel with a captured simple IEC rung.
@@ -1396,7 +1337,7 @@ pub fn insert_xgwx_iec_ld_parallel_contact_wasm(
     parallel_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_parallel_contact(
         program_index,
         row_index,
@@ -1405,8 +1346,7 @@ pub fn insert_xgwx_iec_ld_parallel_contact_wasm(
         parallel_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Add one of the addressed IEC contact kinds on a lower parallel branch.
@@ -1423,7 +1363,7 @@ pub fn insert_xgwx_iec_ld_parallel_contact_kind_wasm(
     parallel_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_parallel_contact_kind(
         program_index,
         row_index,
@@ -1433,8 +1373,7 @@ pub fn insert_xgwx_iec_ld_parallel_contact_kind_wasm(
         parallel_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one captured normally-open-contact to output-coil rung and restore
@@ -1449,7 +1388,7 @@ pub fn delete_xgwx_iec_ld_linear_rung_wasm(
     expected_coil_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_linear_rung(
         program_index,
         row_index,
@@ -1457,8 +1396,7 @@ pub fn delete_xgwx_iec_ld_linear_rung_wasm(
         expected_coil_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one exact addressed-contact to coil rung, restoring an implicit gap.
@@ -1475,7 +1413,7 @@ pub fn delete_xgwx_iec_ld_rung_wasm(
     expected_coil_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_rung(
         program_index,
         row_index,
@@ -1485,8 +1423,7 @@ pub fn delete_xgwx_iec_ld_rung_wasm(
         expected_coil_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Remove the terminal wire and coil from a one-row IEC rung.
@@ -1499,11 +1436,10 @@ pub fn delete_xgwx_iec_ld_terminal_coil_wasm(
     expected_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_terminal_coil(program_index, coil_record_offset, expected_variable)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Complete a contact-only one-row IEC rung with a wire and BOOL coil.
@@ -1518,7 +1454,7 @@ pub fn insert_xgwx_iec_ld_terminal_coil_wasm(
     coil_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_terminal_coil(
         program_index,
         contact_record_offset,
@@ -1527,8 +1463,7 @@ pub fn insert_xgwx_iec_ld_terminal_coil_wasm(
         coil_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete an occupied simple IEC LD row and shift later lines up.
@@ -1545,7 +1480,7 @@ pub fn delete_xgwx_iec_ld_simple_row_wasm(
     expected_coil_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_simple_row(
         program_index,
         row_index,
@@ -1555,8 +1490,7 @@ pub fn delete_xgwx_iec_ld_simple_row_wasm(
         expected_coil_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete the upper line of a captured two-row IEC branch.
@@ -1569,11 +1503,10 @@ pub fn delete_xgwx_iec_ld_branch_top_row_wasm(
     row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_branch_top_row(program_index, group_index, row_index)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete a native-shaped contact-only middle row in a nested IEC branch.
@@ -1586,11 +1519,10 @@ pub fn delete_xgwx_iec_ld_nested_contact_branch_row_wasm(
     row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_nested_contact_branch_row(program_index, group_index, row_index)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete a contact-only middle row in a native-shaped x3 branch chain.
@@ -1603,11 +1535,10 @@ pub fn delete_xgwx_iec_ld_chained_contact_branch_row_wasm(
     row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_chained_contact_branch_row(program_index, group_index, row_index)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete a middle IEC row containing only a vertical branch end and start.
@@ -1620,11 +1551,10 @@ pub fn delete_xgwx_iec_ld_empty_branch_row_wasm(
     row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_empty_branch_row(program_index, group_index, row_index)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete the captured FF branch output line and its connected FF block.
@@ -1637,11 +1567,10 @@ pub fn delete_xgwx_iec_ld_ff_branch_output_row_wasm(
     row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_ff_branch_output_row(program_index, group_index, row_index)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert one normally open contact into a captured linear IEC LD wire.
@@ -1657,7 +1586,7 @@ pub fn insert_xgwx_iec_ld_no_contact_wasm(
     variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_no_contact(
         program_index,
         wire_offset,
@@ -1667,8 +1596,7 @@ pub fn insert_xgwx_iec_ld_no_contact_wasm(
         variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert one of the four decoded contact kinds into a captured linear IEC LD wire.
@@ -1686,7 +1614,7 @@ pub fn insert_xgwx_iec_ld_contact_wasm(
     variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_contact(
         program_index,
         wire_offset,
@@ -1697,8 +1625,7 @@ pub fn insert_xgwx_iec_ld_contact_wasm(
         variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace a captured IEC one-cell wire with an addressed contact.
@@ -1713,7 +1640,7 @@ pub fn insert_xgwx_iec_ld_short_wire_contact_wasm(
     variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_short_wire_contact(
         program_index,
         wire_offset,
@@ -1722,8 +1649,7 @@ pub fn insert_xgwx_iec_ld_short_wire_contact_wasm(
         variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert an addressed contact into a captured upper-branch x1 gap.
@@ -1737,11 +1663,10 @@ pub fn insert_xgwx_iec_ld_leading_contact_wasm(
     variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_leading_contact(program_index, insertion_offset, contact_kind, variable)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one normally open contact in the captured linear IEC LD shape.
@@ -1755,7 +1680,7 @@ pub fn delete_xgwx_iec_ld_no_contact_wasm(
     expected_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_no_contact(
         program_index,
         contact_offset,
@@ -1763,8 +1688,7 @@ pub fn delete_xgwx_iec_ld_no_contact_wasm(
         expected_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one decoded contact in the captured linear IEC LD shape.
@@ -1779,7 +1703,7 @@ pub fn delete_xgwx_iec_ld_contact_wasm(
     expected_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_contact(
         program_index,
         contact_offset,
@@ -1788,8 +1712,7 @@ pub fn delete_xgwx_iec_ld_contact_wasm(
         expected_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one linear-row contact with native XG5000 Cell Delete semantics.
@@ -1803,7 +1726,7 @@ pub fn delete_xgwx_iec_ld_no_contact_cell_wasm(
     expected_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_no_contact_cell(
         program_index,
         contact_offset,
@@ -1811,8 +1734,7 @@ pub fn delete_xgwx_iec_ld_no_contact_cell_wasm(
         expected_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one decoded linear-row contact with native XG5000 Cell Delete semantics.
@@ -1827,7 +1749,7 @@ pub fn delete_xgwx_iec_ld_contact_cell_wasm(
     expected_variable: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_contact_cell(
         program_index,
         contact_offset,
@@ -1836,8 +1758,7 @@ pub fn delete_xgwx_iec_ld_contact_cell_wasm(
         expected_variable,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Remove one captured IEC short wire between two long-wire fragments.
@@ -1850,11 +1771,10 @@ pub fn delete_xgwx_iec_ld_horizontal_wire_wasm(
     expected_raw_x: u8,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_horizontal_wire(program_index, wire_offset, expected_raw_x)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Reconnect the one-cell wire gap left by a captured IEC contact deletion.
@@ -1867,11 +1787,10 @@ pub fn repair_xgwx_iec_ld_horizontal_wire_wasm(
     expected_raw_x: u8,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.repair_iec_ld_horizontal_wire(program_index, insertion_offset, expected_raw_x)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one captured terminal IEC function block and its otherwise empty
@@ -1885,11 +1804,10 @@ pub fn delete_xgwx_iec_ld_terminal_function_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_terminal_function(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Remove a scalar branch-mounted block while retaining its branch rows.
@@ -1902,11 +1820,10 @@ pub fn delete_xgwx_iec_ld_branch_function_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_branch_function(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace a captured scalar branch function atomically, adjusting its footprint.
@@ -1923,7 +1840,7 @@ pub fn replace_xgwx_iec_ld_branch_function_wasm(
     let operands: Vec<String> = serde_json::from_str(operands_json)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.replace_iec_ld_branch_function(
         program_index,
         block_offset,
@@ -1932,8 +1849,7 @@ pub fn replace_xgwx_iec_ld_branch_function_wasm(
         &operands,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace a supported scalar chain function atomically, adjusting its footprint.
@@ -1950,7 +1866,7 @@ pub fn replace_xgwx_iec_ld_scalar_chain_function_wasm(
     let operands: Vec<String> = serde_json::from_str(operands_json)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.replace_iec_ld_scalar_chain_function(
         program_index,
         block_offset,
@@ -1959,8 +1875,7 @@ pub fn replace_xgwx_iec_ld_scalar_chain_function_wasm(
         &operands,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert a terminal TON with a declared instance and typed TIME operands.
@@ -1974,11 +1889,10 @@ pub fn insert_xgwx_iec_ld_terminal_timer_wasm(
     preset: &str,
     elapsed: &str,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.insert_iec_ld_terminal_timer(program_index, contact_offset, instance, preset, elapsed)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Delete one scalar body from a shared-row horizontal chain.
@@ -1990,11 +1904,10 @@ pub fn delete_xgwx_iec_ld_scalar_chain_function_wasm(
     block_offset: usize,
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.delete_iec_ld_scalar_chain_function(program_index, block_offset, expected_name)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Restore the captured terminal MOVE after its retained contact.
@@ -2008,11 +1921,10 @@ pub fn insert_xgwx_iec_ld_terminal_move_wasm(
     output_operand: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_terminal_move(program_index, contact_offset, input_operand, output_operand)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one captured standalone IEC function group, leaving its stored rows
@@ -2026,11 +1938,10 @@ pub fn delete_xgwx_iec_ld_standalone_function_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_standalone_function(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Remove one complete decoded IEC LD network, leaving its rows blank.
@@ -2043,11 +1954,10 @@ pub fn delete_xgwx_iec_ld_group_wasm(
     expected_first_row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_group(program_index, group_index, expected_first_row_index)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace an occupied IEC LD network with a copy of another in the program.
@@ -2062,7 +1972,7 @@ pub fn replace_xgwx_iec_ld_group_wasm(
     expected_destination_first_row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.replace_iec_ld_group(
         program_index,
         source_group_index,
@@ -2071,8 +1981,7 @@ pub fn replace_xgwx_iec_ld_group_wasm(
         expected_destination_first_row_index,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace a network from another IEC program, optionally copying its missing locals.
@@ -2091,7 +2000,7 @@ pub fn replace_xgwx_iec_ld_group_from_program_wasm(
     copy_missing_locals: bool,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.replace_iec_ld_group_from_program(
         source_program_index,
         source_group_index,
@@ -2102,8 +2011,7 @@ pub fn replace_xgwx_iec_ld_group_from_program_wasm(
         copy_missing_locals,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Move one complete decoded IEC LD network into an empty row range.
@@ -2117,7 +2025,7 @@ pub fn move_xgwx_iec_ld_group_wasm(
     destination_first_row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.move_iec_ld_group(
         program_index,
         group_index,
@@ -2125,8 +2033,7 @@ pub fn move_xgwx_iec_ld_group_wasm(
         destination_first_row_index,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Copy one complete decoded IEC LD network into an empty row range.
@@ -2140,7 +2047,7 @@ pub fn copy_xgwx_iec_ld_group_wasm(
     destination_first_row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.copy_iec_ld_group(
         program_index,
         group_index,
@@ -2148,8 +2055,7 @@ pub fn copy_xgwx_iec_ld_group_wasm(
         destination_first_row_index,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Copy a contact/coil IEC network from another program into an empty row range.
@@ -2164,7 +2070,7 @@ pub fn copy_xgwx_iec_ld_group_to_program_wasm(
     destination_first_row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.copy_iec_ld_group_to_program(
         source_program_index,
         group_index,
@@ -2173,8 +2079,7 @@ pub fn copy_xgwx_iec_ld_group_to_program_wasm(
         destination_first_row_index,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Copy an IEC network and its missing supported local declarations.
@@ -2189,7 +2094,7 @@ pub fn copy_xgwx_iec_ld_group_to_program_with_locals_wasm(
     destination_first_row_index: u16,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.copy_iec_ld_group_to_program_with_locals(
         source_program_index,
         group_index,
@@ -2198,8 +2103,7 @@ pub fn copy_xgwx_iec_ld_group_to_program_with_locals_wasm(
         destination_first_row_index,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Add a standalone comment to one empty IEC LD row.
@@ -2212,11 +2116,10 @@ pub fn insert_xgwx_iec_ld_comment_wasm(
     text: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_comment(program_index, destination_row_index, text)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Give one captured IEC function block a separate local instance.
@@ -2230,7 +2133,7 @@ pub fn duplicate_xgwx_iec_ld_function_instance_wasm(
     new_instance: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.duplicate_iec_ld_function_instance(
         program_index,
         block_offset,
@@ -2238,8 +2141,7 @@ pub fn duplicate_xgwx_iec_ld_function_instance_wasm(
         new_instance,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Restore the captured standalone WORD_TO_UDINT group and operand binding.
@@ -2254,7 +2156,7 @@ pub fn insert_xgwx_iec_ld_standalone_function_wasm(
     output_operand: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_standalone_function(
         program_index,
         insertion_offset,
@@ -2263,8 +2165,7 @@ pub fn insert_xgwx_iec_ld_standalone_function_wasm(
         output_operand,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete one captured connected IEC function cell while retaining the other
@@ -2278,11 +2179,10 @@ pub fn delete_xgwx_iec_ld_function_cell_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_function_cell(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete the captured head EQ and close its pin-row gap in the comparison chain.
@@ -2295,11 +2195,10 @@ pub fn delete_xgwx_iec_ld_eq_chain_head_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_eq_chain_head(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete the native-validated first comparison block in the heating chain.
@@ -2312,11 +2211,10 @@ pub fn delete_xgwx_iec_ld_heating_chain_head_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_heating_chain_head(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete either native-validated middle EQ block in the heating chain.
@@ -2329,11 +2227,10 @@ pub fn delete_xgwx_iec_ld_heating_chain_middle_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_heating_chain_middle(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete the L58 EQ and its dangling feed, yielding a valid circuit.
@@ -2346,11 +2243,10 @@ pub fn delete_xgwx_iec_ld_heating_chain_x3_eq_repaired_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_heating_chain_x3_eq_repaired(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete the captured contact-fed L62 comparison and its x6/x12 branches.
@@ -2363,11 +2259,10 @@ pub fn delete_xgwx_iec_ld_heating_chain_contact_eq_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_heating_chain_contact_eq(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete either captured x15-fed comparison at L66 or L70.
@@ -2380,11 +2275,10 @@ pub fn delete_xgwx_iec_ld_heating_chain_x15_eq_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_heating_chain_x15_eq(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete the captured connected ADD while preserving its neighboring circuits.
@@ -2397,11 +2291,10 @@ pub fn delete_xgwx_iec_ld_connected_arithmetic_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_connected_arithmetic(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Delete a scalar arithmetic block while retaining its external branch spine.
@@ -2414,11 +2307,10 @@ pub fn delete_xgwx_iec_ld_branched_arithmetic_wasm(
     expected_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.delete_iec_ld_branched_arithmetic(program_index, block_offset, expected_name)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Insert the captured connected single-output FF function cell.
@@ -2432,7 +2324,7 @@ pub fn insert_xgwx_iec_ld_function_cell_wasm(
     instance_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.insert_iec_ld_function_cell(
         program_index,
         insertion_offset,
@@ -2440,8 +2332,7 @@ pub fn insert_xgwx_iec_ld_function_cell_wasm(
         instance_name,
     )
     .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Replace a captured IEC LD function input/output expression.
@@ -2453,11 +2344,10 @@ pub fn delete_xgwx_iec_ld_function_output_operand_wasm(
     offset: usize,
     expected: &str,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.delete_iec_ld_function_output_operand(program_index, offset, expected)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -2470,7 +2360,7 @@ pub fn assign_xgwx_iec_ld_function_output_operand_wasm(
     ordinal: u8,
     value: &str,
 ) -> Result<Vec<u8>, JsValue> {
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.assign_iec_ld_function_output_operand(
         program_index,
         block_offset,
@@ -2479,8 +2369,7 @@ pub fn assign_xgwx_iec_ld_function_output_operand_wasm(
         value,
     )
     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Replace a captured IEC LD function input/output expression.
@@ -2494,11 +2383,10 @@ pub fn update_xgwx_iec_ld_function_operand_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_ld_function_operand(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Change a captured IEC ADD/SUB/MUL/DIV block kind.
@@ -2512,11 +2400,10 @@ pub fn update_xgwx_iec_ld_arithmetic_function_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_ld_arithmetic_function(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Change a captured IEC comparison block among EQ, GT, GE, LT, and LE.
@@ -2530,11 +2417,10 @@ pub fn update_xgwx_iec_ld_comparison_function_wasm(
     replacement: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let mut doc =
-        XgwxDocument::parse(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
     doc.update_iec_ld_comparison_function(program_index, offset, expected, replacement)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    doc.to_bytes()
-        .map_err(|error| JsValue::from_str(&error.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 #[derive(Debug, Serialize)]
@@ -2568,6 +2454,7 @@ struct WasmIecSystemVariableSummary {
 #[serde(rename_all = "camelCase")]
 struct WasmDocumentSummary {
     header: WasmHeaderSummary,
+    password_protection: WasmPasswordProtection,
     project: WasmProjectSummary,
     cpu: Option<WasmCpuSummary>,
     counts: WasmCounts,
@@ -2730,6 +2617,7 @@ impl WasmDocumentSummary {
             #[cfg(all(feature = "write", feature = "il"))]
             vendor_il_programs: doc.vendor_il_programs(),
             header: WasmHeaderSummary::from_header(&doc.header, doc.trailer.len()),
+            password_protection: WasmPasswordProtection::from_document(doc),
             project: WasmProjectSummary {
                 name: project.name,
                 file_version: project.file_version,
@@ -3082,11 +2970,10 @@ pub fn edit_xgwx_sfc_entity_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>
         .ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
     let patch: SfcEntityPatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_sfc_entity(&patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -3097,11 +2984,10 @@ pub fn replace_xgwx_sfc_sequence_wasm(bytes: &[u8], patch: JsValue) -> Result<Ve
         .ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
     let patch: crate::SfcSequencePatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.replace_sfc_sequence(&patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -3112,11 +2998,10 @@ pub fn edit_xgwx_sfc_variable_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u
         .ok_or_else(|| JsValue::from_str("SFC patch is not JSON"))?;
     let patch: crate::SfcVariablePatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_sfc_variable(&patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -3127,11 +3012,10 @@ pub fn edit_xgwx_text_program_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u
         .ok_or_else(|| JsValue::from_str("text patch is not JSON-serializable"))?;
     let patch: TextProgramPatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_text_program(&patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -3146,11 +3030,10 @@ pub fn edit_xgwx_text_variable_wasm(
         .ok_or_else(|| JsValue::from_str("variable patch is not JSON-serializable"))?;
     let patch: SfcVariablePatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_text_variable(expected_object_id, &patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(all(feature = "write", feature = "il"))]
@@ -3161,11 +3044,10 @@ pub fn edit_xgwx_vendor_il_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>,
         .ok_or_else(|| JsValue::from_str("IL patch must be JSON"))?;
     let patch: crate::VendorIlPatch =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_vendor_il(&patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// Create a native ST user-defined function or function block.
@@ -3177,12 +3059,11 @@ pub fn create_xgwx_user_pou_wasm(bytes: &[u8], request: JsValue) -> Result<Vec<u
         .ok_or_else(|| JsValue::from_str("POU request is not JSON"))?;
     let request: NewUserPou =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.user_pou_mut()
         .create(&request)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(feature = "write")]
@@ -3210,7 +3091,7 @@ pub fn edit_xgwx_user_pou_wasm(bytes: &[u8], request: JsValue) -> Result<Vec<u8>
         .ok_or_else(|| JsValue::from_str("POU edit is not JSON"))?;
     let request: UserPouBrowserEdit =
         serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let result = match request {
         UserPouBrowserEdit::Source { expected, source } => doc
             .user_pou_mut()
@@ -3229,6 +3110,5 @@ pub fn edit_xgwx_user_pou_wasm(bytes: &[u8], request: JsValue) -> Result<Vec<u8>
             .and_then(|p| p.delete(&expected)),
     };
     result.map_err(|e| JsValue::from_str(&e.to_string()))?;
-    doc.to_verified_bytes()
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
 }

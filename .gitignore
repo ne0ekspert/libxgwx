@@ -34,3 +34,6 @@
 !fixtures/networks/eopct-scalars-native.xgwx
 !fixtures/networks/eopct-generated-resaved.xgwx
 !fixtures/networks/eopct-integers-resaved.xgwx
+
+# Controlled native password fixtures
+!fixtures/passwords/*.xgwx
