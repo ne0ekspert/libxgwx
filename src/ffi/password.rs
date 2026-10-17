@@ -78,9 +78,8 @@ pub unsafe extern "C" fn xgwx_document_passwords_json(
     call(|| unsafe {
         buffer_output(out)?;
         let doc = handle(doc)?;
-        let programs: Vec<_> = (0..doc.program().programs().len()).map(|index| {
-            let program = doc.program().get(index).unwrap();
-            serde_json::json!({"index":index,"protected":program.password_protected(),"locked":program.is_locked()})
+        let programs: Vec<_> = doc.root.descendants_named("Program").enumerate().map(|(index, program)| {
+            serde_json::json!({"index":index,"protected":!program.attribute("Encrytption").unwrap_or("").is_empty(),"locked":doc.program_element_is_locked(program)})
         }).collect();
         let value = serde_json::json!({"schema_version":1,"project_protected":doc.project().password_protected().map_err(failure)?,"programs":programs});
         write_buffer(out, json_bytes(value)?);

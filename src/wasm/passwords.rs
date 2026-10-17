@@ -130,14 +130,14 @@ impl WasmPasswordProtection {
     pub(super) fn from_document(doc: &XgwxDocument) -> Self {
         Self {
             project_protected: doc.project().password_protected().unwrap_or(false),
-            programs: (0..doc.program().programs().len())
-                .map(|index| {
-                    let p = doc.program().get(index).unwrap();
-                    WasmProgramProtection {
-                        index,
-                        protected: p.password_protected(),
-                        locked: p.is_locked(),
-                    }
+            programs: doc
+                .root
+                .descendants_named("Program")
+                .enumerate()
+                .map(|(index, program)| WasmProgramProtection {
+                    index,
+                    protected: !program.attribute("Encrytption").unwrap_or("").is_empty(),
+                    locked: doc.program_element_is_locked(program),
                 })
                 .collect(),
         }

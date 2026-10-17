@@ -133,19 +133,25 @@ impl XgwxDocument {
         {
             return Err(fail(PasswordError::Required(PasswordScope::Project)));
         }
+        let previous_credentials = previous
+            .root
+            .descendants_named("Program")
+            .filter_map(|program| {
+                let id = program.attribute("ObjectId")?;
+                if !previous.opened_programs.contains(id) {
+                    return None;
+                }
+                Some((id, program.attribute("Encrytption")?))
+            })
+            .collect::<BTreeSet<_>>();
         let ids = next
             .root
             .descendants_named("Program")
             .filter_map(|program| {
                 let id = program.attribute("ObjectId")?;
                 let credential = program.attribute("Encrytption")?;
-                (!credential.is_empty()
-                    && previous.opened_programs.contains(id)
-                    && previous.root.descendants_named("Program").any(|old| {
-                        old.attribute("ObjectId") == Some(id)
-                            && old.attribute("Encrytption") == Some(credential)
-                    }))
-                .then(|| id.to_owned())
+                (!credential.is_empty() && previous_credentials.contains(&(id, credential)))
+                    .then(|| id.to_owned())
             })
             .collect();
         next.restore_open_programs(&ids)?;
@@ -181,20 +187,33 @@ impl XgwxDocument {
         Ok(self.header.raw[68..134].iter().any(|b| *b != 0))
     }
     pub(crate) fn program_is_locked(&self, index: usize) -> bool {
-        self.program_element(index).is_some_and(|p| {
-            !p.attribute("Encrytption").unwrap_or("").is_empty()
-                && !p
-                    .attribute("ObjectId")
-                    .is_some_and(|id| self.opened_programs.contains(id))
-        })
+        self.program_element(index)
+            .is_some_and(|program| self.program_element_is_locked(program))
     }
-    pub(crate) fn require_open_program(&self, index: usize) -> Result<(), XgwxError> {
-        if self.program_is_locked(index) {
+    // Bulk readers already hold the element; looking it up again by index would
+    // restart the document traversal once for every program.
+    pub(crate) fn program_element_is_locked(&self, program: &XmlElement) -> bool {
+        !program.attribute("Encrytption").unwrap_or("").is_empty()
+            && !program
+                .attribute("ObjectId")
+                .is_some_and(|id| self.opened_programs.contains(id))
+    }
+    pub(crate) fn require_open_program_element(
+        &self,
+        index: usize,
+        program: &XmlElement,
+    ) -> Result<(), XgwxError> {
+        if self.program_element_is_locked(program) {
             return Err(fail(PasswordError::Required(PasswordScope::Program {
                 index,
             })));
         }
         Ok(())
+    }
+    pub(crate) fn require_open_program(&self, index: usize) -> Result<(), XgwxError> {
+        self.program_element(index).map_or(Ok(()), |program| {
+            self.require_open_program_element(index, program)
+        })
     }
     /// Authenticate a protected program, opening its real `Body2` source when
     /// the native layout uses a compatibility body.
@@ -230,7 +249,22 @@ impl XgwxDocument {
         &mut self,
         ids: &BTreeSet<String>,
     ) -> Result<(), XgwxError> {
-        for index in 0..self.programs().len() {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let indices = self
+            .root
+            .descendants_named("Program")
+            .enumerate()
+            .filter_map(|(index, program)| {
+                (program
+                    .attribute("ObjectId")
+                    .is_some_and(|id| ids.contains(id))
+                    && !program.attribute("Encrytption").unwrap_or("").is_empty())
+                .then_some(index)
+            })
+            .collect::<Vec<_>>();
+        for index in indices {
             let p = self.program_element(index).unwrap();
             if p.attribute("ObjectId").is_some_and(|id| ids.contains(id))
                 && !p.attribute("Encrytption").unwrap_or("").is_empty()

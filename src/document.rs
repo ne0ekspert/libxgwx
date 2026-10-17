@@ -182,7 +182,7 @@ impl XgwxDocument {
             .descendants_named("Program")
             .enumerate()
             .map(|(index, program)| {
-                self.require_open_program(index)?;
+                self.require_open_program_element(index, program)?;
                 decode_program_local_symbols(program)
             })
             .collect()
@@ -193,7 +193,7 @@ impl XgwxDocument {
         index: usize,
     ) -> Option<Result<Vec<IecLocalSymbol>, XgwxError>> {
         self.program_element(index).map(|program| {
-            self.require_open_program(index)?;
+            self.require_open_program_element(index, program)?;
             decode_program_local_symbols(program)
         })
     }
@@ -208,7 +208,7 @@ impl XgwxDocument {
             .descendants_named("Program")
             .enumerate()
             .map(|(index, program)| {
-                self.require_open_program(index)?;
+                self.require_open_program_element(index, program)?;
                 LadderProgramData::from_program_element(program)
             })
             .collect()
@@ -221,7 +221,7 @@ impl XgwxDocument {
         index: usize,
     ) -> Option<Result<LadderProgramData, XgwxError>> {
         self.program_element(index).map(|program| {
-            self.require_open_program(index)?;
+            self.require_open_program_element(index, program)?;
             LadderProgramData::from_program_element(program)
         })
     }

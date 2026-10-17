@@ -4,6 +4,50 @@ use xgwx::ffi::*;
 const PROJECT: &[u8] = include_bytes!("../fixtures/passwords/xgk-project-ascii.xgwx");
 const PROGRAM: &[u8] = include_bytes!("../fixtures/passwords/xgi-st-native.xgwx");
 #[test]
+fn large_password_status_enumeration_preserves_order_and_protection() {
+    use std::{
+        io::Write,
+        time::{Duration, Instant},
+    };
+    let header =
+        xgwx::XgwxDocument::parse(include_bytes!("../fixtures/passwords/xgk-plain.xgwx")).unwrap();
+    let xml = format!(
+        "<Project>{}<Program Encrytption='ZZ'/></Project>",
+        "<Program/>".repeat(100_000)
+    );
+    let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    gzip.write_all(xml.as_bytes()).unwrap();
+    let mut bytes = header.container().header().raw.clone();
+    bytes.extend(gzip.finish().unwrap());
+    unsafe {
+        let mut doc = ptr::null_mut();
+        assert_eq!(
+            xgwx_document_parse(bytes.as_ptr(), bytes.len(), &mut doc),
+            XGWX_OK
+        );
+        let start = Instant::now();
+        let mut out = XgwxBuffer::default();
+        assert_eq!(xgwx_document_passwords_json(doc, &mut out), XGWX_OK);
+        let elapsed = start.elapsed();
+        eprintln!("100001 program C password statuses: {elapsed:?}");
+        assert!(elapsed < Duration::from_secs(10), "status took {elapsed:?}");
+        let value: serde_json::Value =
+            serde_json::from_slice(std::slice::from_raw_parts(out.data, out.len)).unwrap();
+        assert_eq!(value["programs"].as_array().unwrap().len(), 100_001);
+        assert_eq!(
+            value["programs"][0],
+            serde_json::json!({"index":0,"protected":false,"locked":false})
+        );
+        assert_eq!(
+            value["programs"][100_000],
+            serde_json::json!({"index":100_000,"protected":true,"locked":true})
+        );
+        xgwx_buffer_free(&mut out);
+        xgwx_document_free(doc);
+    }
+}
+
+#[test]
 fn c_password_open_unlock_and_output_contracts() {
     unsafe {
         let mut doc = ptr::null_mut();

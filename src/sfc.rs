@@ -93,7 +93,7 @@ impl XgwxDocument {
         program_index: usize,
         program: &XmlElement,
     ) -> Option<SfcProgram> {
-        if self.program_is_locked(program_index) {
+        if self.program_element_is_locked(program) {
             return None;
         }
         let list = program.descendants_named("SFC_ProgramList").next()?;
@@ -1290,7 +1290,7 @@ impl XgwxDocument {
         let program = self
             .program_element(program_index)
             .ok_or_else(|| crate::XgwxError::SfcEdit("program is absent".into()))?;
-        self.require_open_program(program_index)?;
+        self.require_open_program_element(program_index, program)?;
         self.sfc_variables_from_program(program)
     }
 

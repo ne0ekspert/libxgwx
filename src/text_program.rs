@@ -96,14 +96,11 @@ impl XgwxDocument {
             _ => return None,
         };
         let body = program.children.iter().find(|n| n.name == "Body");
-        let source = if self.program_is_locked(program_index) {
-            None
-        } else {
-            body.and_then(source)
-        };
+        let locked = self.program_element_is_locked(program);
+        let source = if locked { None } else { body.and_then(source) };
         let editable = supported
             && languages.contains(&language)
-            && !self.program_is_locked(program_index)
+            && !locked
             && program
                 .attribute("ObjectId")
                 .is_some_and(|id| !id.is_empty())
@@ -120,7 +117,7 @@ impl XgwxDocument {
                     })
             });
         let (variables, variables_error) = match self
-            .require_open_program(program_index)
+            .require_open_program_element(program_index, program)
             .and_then(|()| self.sfc_variables_from_program(program))
         {
             Ok(v) => (v, None),

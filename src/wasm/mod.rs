@@ -2543,10 +2543,14 @@ impl WasmDocumentSummary {
         let local_variables = doc
             .iec_local_symbols()
             .into_iter()
+            .zip(doc.root.descendants_named("Program"))
             .enumerate()
-            .map(|(program_index, result)| {
+            .map(|(program_index, (result, program))| {
                 if sfc_indices.contains(&program_index) {
-                    if let Err(error) = doc.sfc_variables(program_index) {
+                    if let Err(error) = doc
+                        .require_open_program_element(program_index, program)
+                        .and_then(|()| doc.sfc_variables_from_program(program))
+                    {
                         warnings.push(format!("program {program_index}: {error}"));
                     }
                     return Vec::new();
@@ -2844,6 +2848,50 @@ fn decode_browser_ladder(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn program_enumeration_large_browser_summary_keeps_all_slots() {
+        use std::{
+            io::Write,
+            time::{Duration, Instant},
+        };
+        for entry in [
+            "<Program/>",
+            "<Program Kind='4'/>",
+            "<Program Kind='9' Encrytption='ZZ'/>",
+            "<Program Kind='3'><Body><SFC_ProgramList/></Body></Program>",
+        ] {
+            let count = 100_000;
+            let xml = format!("<Project>{}</Project>", entry.repeat(count));
+            let mut gzip =
+                flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            gzip.write_all(xml.as_bytes()).unwrap();
+            let mut bytes = b"XG".to_vec();
+            bytes.extend(gzip.finish().unwrap());
+            let doc = XgwxDocument::parse(&bytes).unwrap();
+            let start = Instant::now();
+            let summary = WasmDocumentSummary::from_document(&doc);
+            let elapsed = start.elapsed();
+            eprintln!("100000 {entry} browser summaries: {elapsed:?}");
+            assert!(
+                elapsed < Duration::from_secs(10),
+                "summary took {elapsed:?}"
+            );
+            assert_eq!(summary.programs.len(), count);
+            assert_eq!(summary.local_variables.len(), count);
+            let protection = serde_json::to_value(&summary.password_protection).unwrap();
+            assert_eq!(protection["programs"].as_array().unwrap().len(), count);
+            assert_eq!(protection["programs"][count - 1]["index"], count - 1);
+            assert_eq!(
+                protection["programs"][count - 1]["locked"],
+                entry.contains("ZZ")
+            );
+            assert_eq!(
+                protection["programs"][count - 1]["protected"],
+                entry.contains("ZZ")
+            );
+        }
+    }
 
     #[test]
     fn ladder_summary_cache_matches_fresh_decode_after_edit_and_undo() {
