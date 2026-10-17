@@ -23,6 +23,10 @@ use std::ptr;
 
 #[cfg(feature = "write")]
 mod edits;
+mod inspection;
+mod inspection_types;
+#[cfg(feature = "write")]
+mod types;
 mod user_pou;
 
 /// Select the installed hardware module list.
@@ -683,4 +687,62 @@ mod tests {
             b""
         );
     }
+}
+
+/// Inspect a paginated semantic section. Request: section, optional program_index,
+/// offset and limit (1..1000). Available sections are returned by overview.
+///
+/// # Safety
+/// Input and handle must be live, and out must be a writable zeroed buffer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn xgwx_document_inspect_section_json(
+    doc: *const XgwxHandle,
+    request: *const u8,
+    request_len: usize,
+    out: *mut XgwxBuffer,
+) -> i32 {
+    call(|| unsafe {
+        buffer_output(out)?;
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Request {
+            section: String,
+            program_index: Option<usize>,
+            #[serde(default)]
+            offset: usize,
+            #[serde(default = "inspection_limit")]
+            limit: usize,
+        }
+        fn inspection_limit() -> usize {
+            100
+        }
+        let request: Request = serde_json::from_str(text(request, request_len)?)
+            .map_err(|e| invalid(&e.to_string()))?;
+        if request.section == "vendor_il" && !cfg!(feature = "il")
+            || matches!(
+                request.section.as_str(),
+                "catalog.modules" | "io_variables" | "program.edit_sites"
+            ) && !cfg!(feature = "write")
+        {
+            return Err(Failure(
+                XGWX_FEATURE_UNAVAILABLE,
+                "enable the required il or write feature".into(),
+            ));
+        }
+        let value = inspection::inspect(
+            handle(doc)?,
+            &request.section,
+            request.program_index,
+            request.offset,
+            request.limit,
+        )
+        .map_err(operation)?;
+        write_buffer(
+            out,
+            json_bytes(
+                serde_json::json!({"schema_version":1,"section":request.section,"data":value}),
+            )?,
+        );
+        Ok(())
+    })
 }

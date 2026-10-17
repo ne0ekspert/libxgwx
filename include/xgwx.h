@@ -63,6 +63,11 @@ void xgwx_buffer_free(xgwx_buffer *buffer);
  * variables, variables_error, program_languages, user_pous, user_pou_creation. A variables decoding error
  * sets variables to null and variables_error to a message. */
 xgwx_status xgwx_document_inspect_json(const xgwx_document *doc, xgwx_buffer *out);
+/* Semantic inspection: {"section":"overview","program_index":0,"offset":0,"limit":100}.
+ * program_index is optional. Overview lists all sections. Result uses schema_version=1.
+ * Pagination applies independently to each list; collect all pages for edit snapshots. */
+xgwx_status xgwx_document_inspect_section_json(const xgwx_document *doc,
+    const uint8_t *request, size_t request_len, xgwx_buffer *out);
 /* Full decompressed XML in UTF-8. */
 xgwx_status xgwx_document_xml(const xgwx_document *doc, xgwx_buffer *out);
 /* Dedicated lists: {"schema_version":1,"items":[...]}. See selectors above.

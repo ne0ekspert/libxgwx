@@ -46,6 +46,9 @@ int main(void) {
     xgwx_buffer_free(&list);
     assert(xgwx_module_catalog_json(&catalog) == XGWX_OK && catalog.len > 0);
     xgwx_buffer_free(&catalog);
+    assert(xgwx_document_inspect_section_json(doc, BYTES("{\"section\":\"text.variables\",\"program_index\":0}"), &catalog) == XGWX_OK);
+    assert(catalog.len > 0);
+    xgwx_buffer_free(&catalog);
     assert(xgwx_document_apply_edits_json(doc, BYTES("{\"schema_version\":1,\"edits\":[]}")) == XGWX_OK);
     assert(xgwx_document_apply_edits_json(doc, BYTES("not JSON")) == XGWX_INVALID_ARGUMENT);
     xgwx_document *original = doc;

@@ -348,3 +348,189 @@ fn iec_block_insert_and_wire_transactions_use_program_identity_and_roll_back() {
     assert_eq!(doc.apply(json!([stale])), XGWX_OPERATION_ERROR);
     assert_eq!(doc.bytes(), before);
 }
+
+impl Document {
+    fn section(&self, section: &str, index: Option<usize>) -> Value {
+        self.section_page(section, index, 0, 1000)
+    }
+    fn section_page(
+        &self,
+        section: &str,
+        index: Option<usize>,
+        offset: usize,
+        limit: usize,
+    ) -> Value {
+        let request = serde_json::to_vec(
+            &serde_json::json!({"section":section,"program_index":index,"offset":offset,"limit":limit}),
+        )
+        .unwrap();
+        let mut out = XgwxBuffer::default();
+        assert_ok(unsafe {
+            xgwx_document_inspect_section_json(self.0, request.as_ptr(), request.len(), &mut out)
+        });
+        serde_json::from_slice::<Value>(&take_buffer(out)).unwrap()["data"].clone()
+    }
+}
+
+#[test]
+fn structured_inspection_is_available_without_writers() {
+    let doc = Document::parse(include_bytes!("../fixtures/elements.xgwx"));
+    assert!(
+        doc.section("overview", None)["sections"]
+            .as_array()
+            .unwrap()
+            .len()
+            > 20
+    );
+    let details = doc.section("program", Some(0));
+    assert!(details["details"]["cells"]["total"].as_u64().unwrap() > 0);
+    assert_eq!(details["details"]["labels"]["total"], 0);
+    let request = br#"{"section":"overview","programIndex":0}"#;
+    let mut out = XgwxBuffer::default();
+    assert_eq!(
+        unsafe {
+            xgwx_document_inspect_section_json(doc.0, request.as_ptr(), request.len(), &mut out)
+        },
+        XGWX_INVALID_ARGUMENT
+    );
+    assert!(out.data.is_null());
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn extended_c_envelopes_reach_guarded_operations_and_preserve_the_document() {
+    let doc = Document::parse(include_bytes!("../fixtures/empty-projects/new-xgk.xgwx"));
+    let before = doc.bytes();
+    let cases: Value =
+        serde_json::from_str(include_str!("ffi-extended-preconditions.json")).unwrap();
+    assert_eq!(cases.as_object().unwrap().len(), 110);
+    for (name, args) in cases.as_object().unwrap() {
+        let mut args = args.clone();
+        args["operation"] = json!(name);
+        let status = doc.apply(json!([args]));
+        if name == "generate_io_variables" && status == XGWX_OK {
+            continue;
+        }
+        assert!(
+            status == XGWX_OPERATION_ERROR || status == XGWX_FEATURE_UNAVAILABLE,
+            "{name}: status={status}, {}",
+            unsafe { CStr::from_ptr(xgwx_last_error()) }.to_string_lossy()
+        );
+        assert_eq!(doc.bytes(), before, "{name}");
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn labels_c_roundtrip_identity_and_atomic_batches() {
+    for cpu in ["XGK-CPUSN", "XGI-CPUE"] {
+        let native = xgwx::create_project(cpu, "LD").unwrap();
+        let doc = Document::parse(&native.to_verified_bytes().unwrap());
+        let id = doc.list(XGWX_LIST_PROGRAMS)[0]["object_id"].clone();
+        let insert = json!({"operation":"edit_ld_label","program_index":0,"expected_object_id":id,"raw_y":0,"expected":null,"replacement":"Start"});
+        assert_ok(doc.apply(json!([insert])));
+        let details = doc.section("program", Some(0));
+        assert_eq!(details["details"]["labels"]["items"][0]["name"], "Start");
+        let before = doc.bytes();
+        assert_eq!(doc.apply(json!([
+            {"operation":"edit_ld_label","program_index":0,"expected_object_id":id,"raw_y":0,"expected":"Start","replacement":"Next"},
+            {"operation":"edit_ld_label","program_index":0,"expected_object_id":"stale","raw_y":0,"expected":"Next","replacement":"Fail"}
+        ])),XGWX_OPERATION_ERROR);
+        assert_eq!(doc.bytes(), before);
+        assert_ok(doc.apply(json!([{"operation":"edit_ld_label","program_index":0,"expected_object_id":id,"raw_y":0,"expected":"Start","replacement":null}])));
+        assert_eq!(
+            doc.section("program", Some(0))["details"]["labels"]["total"],
+            0
+        );
+    }
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn opcua_c_settings_tags_and_stale_snapshot_roundtrip() {
+    let doc = Document::parse(include_bytes!(
+        "../fixtures/networks/eopct-tags-native.xgwx"
+    ));
+    let networks = doc.section("networks", None);
+    let first = doc.section_page("networks.opcua_tags.0", None, 0, 1);
+    assert_eq!(first["tags"]["next_offset"], 1);
+    let second = doc.section_page("networks.opcua_tags.0", None, 1, 1);
+    assert_eq!(
+        second["tags"]["items"][0],
+        networks["opcua_tags"]["items"][0]["tags"]["items"][1]
+    );
+    let config = &networks["opcua"]["items"][0];
+    let base = config["base"].clone();
+    let slot = config["slot"].clone();
+    let old = config["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["field"] == "port")
+        .unwrap()["value"]
+        .clone();
+    let edit = json!({"operation":"edit_opcua_settings","base":base,"slot":slot,"changes":[{"field":"port","expected_value":old,"replacement":"4841"}]});
+    assert_ok(doc.apply(json!([edit])));
+    assert!(
+        doc.section("networks", None)["opcua"]["items"][0]["endpoint"]
+            .as_str()
+            .unwrap()
+            .ends_with(":4841")
+    );
+    let tags = networks["opcua_tags"]["items"][0]["tags"]["items"].clone();
+    let mut tag = tags[1].clone();
+    tag["name"] = json!("EditedTag");
+    let edit = json!({"operation":"edit_opcua_tag","configuration_index":0,"expected_tags":tags,"index":1,"tag":tag});
+    assert_ok(doc.apply(json!([edit])));
+    let before = doc.bytes();
+    assert_eq!(doc.apply(json!([edit])), XGWX_OPERATION_ERROR);
+    assert_eq!(doc.bytes(), before);
+    let reparsed = Document::parse(&before);
+    assert_eq!(
+        reparsed.section("networks", None)["opcua_tags"]["items"][0]["tags"]["items"][1]["name"],
+        "EditedTag"
+    );
+}
+
+#[cfg(feature = "write")]
+#[test]
+fn sfc_and_text_declarations_use_exact_c_inspection_snapshots() {
+    let doc = Document::parse(include_bytes!("../fixtures/sfc/native-loop.xgwx"));
+    let id = doc.list(XGWX_LIST_PROGRAMS)[0]["object_id"].clone();
+    assert_ok(doc.apply(json!([{"operation":"edit_sfc_entity","expected_object_id":id,"patch":{
+        "program_index":0,"block_index":0,"entity_index":3,"expected_type":0,"expected_row":3,"expected_column":0,
+        "field":"comment","expected_value":"Ready for cycle","replacement":"C chart"}}])));
+    let block = doc.section("sfc.block.0", Some(0));
+    let mut rows = block["editable_rows"]["items"].clone();
+    let step = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|r| r["kind"] == "step")
+        .unwrap();
+    rows[step]["comment"] = json!("C sequence");
+    assert_ok(doc.apply(json!([{"operation":"replace_sfc_sequence","expected_object_id":id,"patch":{
+        "program_index":0,"block_index":0,"expected_entities":block["entities"]["items"],"expected_rows":block["editable_rows"]["items"],"rows":rows}}])));
+    let vars = doc.section("sfc.variables", Some(0))["items"].clone();
+    assert_ok(doc.apply(json!([{"operation":"edit_sfc_variable","expected_object_id":id,"patch":{
+        "program_index":0,"expected_variables":vars,"name":"CFlag","data_type":"BOOL","description":"C variable","remove":false}}])));
+    assert!(
+        doc.section("sfc.variables", Some(0))["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["name"] == "CFlag")
+    );
+    let native = xgwx::create_project("XGI-CPUE", "ST").unwrap();
+    let doc = Document::parse(&native.to_verified_bytes().unwrap());
+    let text = doc.section("text.variables", Some(0));
+    assert_ok(doc.apply(json!([{"operation":"edit_text_variable","expected_object_id":text["object_id"],"patch":{
+        "program_index":0,"expected_variables":text["variables"]["items"],"name":"CFlag","data_type":"BOOL","description":"C variable","remove":false}}])));
+    assert!(
+        doc.section("text.variables", Some(0))["variables"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["name"] == "CFlag")
+    );
+}

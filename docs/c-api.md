@@ -69,6 +69,7 @@ text using its byte length before releasing it through the library.
 | Function | Behavior | Features |
 | --- | --- | --- |
 | `xgwx_document_parse` | Parse workspace bytes | `ffi` |
+| `xgwx_document_inspect_section_json` | Paginated ladder records, graphs, labels, declarations, SFC, network settings/tags and catalogs | `ffi`; some writer-site/catalog views require `write`, vendor IL requires `il` |
 | `xgwx_document_inspect_json` | Inspect project, hardware, programs, networks and globals | `ffi` |
 | `xgwx_document_xml` | Copy complete decompressed XML | `ffi` |
 | `xgwx_document_list_json` | Load modules, networks, programs, globals, network modules, standalone sources or user POUs | `ffi` |
@@ -84,9 +85,9 @@ text using its byte length before releasing it through the library.
 JSON uses `schema_version: 1`, snake_case fields and the sections listed in the
 header. A global-variable decoding error sets `variables` to null and
 `variables_error` to the reason; other sections remain available. Program indices
-follow inspection's program order. Use the XML export for information outside
-this summary. The ABI currently exposes the operations above, rather than every
-Rust writer or editable ladder IR. Existing CPU and layout guards still apply.
+follow inspection's program order. Use semantic section inspection for detailed program and network data.
+The extended transaction reference covers the guarded domain writers. Existing
+CPU and layout guards still apply.
 
 ## Loading and editing lists
 
@@ -94,7 +95,8 @@ Rust writer or editable ladder IR. Existing CPU and layout guards still apply.
 returns `{"schema_version":1,"items":[...]}`. Modules are identified by base
 and slot. Networks, programs and globals use their current list order. Program
 metadata includes `object_id`; standalone source items include source, language
-and editability. Source-local variable summaries are read-only in this interface.
+and editability. Use `text.variables` for complete declaration snapshots and the extended
+`edit_text_variable` transaction operation to edit supported declarations.
 If globals cannot be decoded, the dedicated globals query returns an error;
 the larger inspection snapshot still supports partial results.
 
@@ -245,3 +247,31 @@ and supported ENO/OUT pins need no output-variable assignment. Numeric outputs
 retain their destination rules. Both operations participate in the existing
 atomic batch and program-identity guards. See [IEC block support](iec-blocks.md)
 for the supported commands and operand order.
+
+
+## Structured inspection and extended edits
+
+Call `xgwx_document_inspect_section_json` with UTF-8 JSON such as
+`{"section":"program","program_index":0,"offset":0,"limit":100}`.
+It returns `{schema_version:1, section, data}`. `overview` lists available
+sections; `programs` supplies native ObjectIds. `program` and its focused
+`program.*` sections expose LD cells, records, functions, graph bindings,
+labels and edit sites. `symbols`, `sfc`, `sfc.variables`, `sfc.block.<index>`,
+`text.variables` and `networks` expose the snapshots needed for typed edits.
+Network inspection includes OPC UA settings and paginated exported tags.
+
+Every list reports `items`, `total`, `offset`, `limit` and `next_offset`.
+Limits clamp to 1..1000. In composite sections offset/limit apply to each list
+independently. Copy complete snapshots after collecting all pages. Unsupported
+layouts report their decoding limitations; this is local inspection and does
+not certify native compilation or PLC behavior.
+
+The [extended operation reference](c-api-operations.md) adds LD structural and
+instruction edits, local symbols and instances, SFC chart/declaration edits,
+ST/IL declarations, vendor IL, I/O variable generation, base slot counts,
+Cnet/FEnet fields, native labels and OPC UA settings/tags. Use the same
+schema-versioned atomic transaction function; no filesystem writes occur.
+The snake_case transport stays unchanged when built together with `wasm`.
+
+Use the focused inspection section `networks.opcua_tags.<configuration_index>`
+to paginate exported tags without paginating their parent configuration list.

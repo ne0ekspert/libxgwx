@@ -2,6 +2,13 @@
 use super::{Result, invalid, operation};
 use crate::XgwxDocument;
 use serde::Deserialize;
+mod extended;
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RequestEdit {
+    Core(Edit),
+    Extended(extended::Edit),
+}
 
 // Missing/null fields retain the native value. Explicit field conversion also
 // makes additions to the Rust patch types visible at compile time.
@@ -36,7 +43,7 @@ patch!(VariablePatch => VariablePatch {
 #[serde(deny_unknown_fields)]
 struct Transaction {
     schema_version: u32,
-    edits: Vec<Edit>,
+    edits: Vec<RequestEdit>,
 }
 
 #[derive(Deserialize)]
@@ -186,6 +193,25 @@ fn check_program(doc: &XgwxDocument, index: usize, expected: &str) -> Result<()>
 }
 
 pub(super) fn apply(doc: &mut XgwxDocument, request: &str) -> Result<()> {
+    #[cfg(not(feature = "il"))]
+    {
+        let value: serde_json::Value =
+            serde_json::from_str(request).map_err(|e| invalid(&e.to_string()))?;
+        if value
+            .get("edits")
+            .and_then(|v| v.as_array())
+            .is_some_and(|edits| {
+                edits
+                    .iter()
+                    .any(|e| e.get("operation").and_then(|v| v.as_str()) == Some("edit_vendor_il"))
+            })
+        {
+            return Err(super::Failure(
+                super::XGWX_FEATURE_UNAVAILABLE,
+                "enable the il feature".into(),
+            ));
+        }
+    }
     let transaction: Transaction = serde_json::from_str(request)
         .map_err(|e| invalid(&format!("invalid edit request: {e}")))?;
     if transaction.schema_version != 1 {
@@ -193,7 +219,11 @@ pub(super) fn apply(doc: &mut XgwxDocument, request: &str) -> Result<()> {
     }
     let mut candidate = doc.clone();
     for (index, edit) in transaction.edits.into_iter().enumerate() {
-        apply_one(&mut candidate, edit).map_err(|super::Failure(status, message)| {
+        match edit {
+            RequestEdit::Core(edit) => apply_one(&mut candidate, edit),
+            RequestEdit::Extended(edit) => edit.apply(&mut candidate),
+        }
+        .map_err(|super::Failure(status, message)| {
             super::Failure(status, format!("edit {index}: {message}"))
         })?;
     }

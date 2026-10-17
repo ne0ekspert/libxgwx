@@ -1,0 +1,812 @@
+{
+  "edit_vendor_il": {
+    "patch": {
+      "program_index": 0,
+      "expected_object_id": "stale",
+      "expected_source": "",
+      "source": "LOAD M00000\nOUT M00001"
+    },
+    "expected_object_id": "stale"
+  },
+  "edit_text_variable": {
+    "expected_object_id": "stale",
+    "patch": {
+      "program_index": 0,
+      "expected_variables": [],
+      "name": "Run",
+      "data_type": "BOOL",
+      "description": "",
+      "remove": false
+    }
+  },
+  "edit_browser_hardware": {
+    "patch": {
+      "operation": "__invalid__",
+      "base": 999999999,
+      "slot": null,
+      "expected_value": "__invalid__",
+      "replacement": "__invalid__",
+      "key": null,
+      "index": null
+    }
+  },
+  "edit_browser_network": {
+    "patch": {
+      "network_index": 999999999,
+      "module": false,
+      "base": null,
+      "slot": null,
+      "field": "__invalid__",
+      "expected_value": "__invalid__",
+      "replacement": "__invalid__"
+    }
+  },
+  "edit_fenet_field": {
+    "patch": {
+      "base": 999999999,
+      "slot": 999999999,
+      "field": "__invalid__",
+      "expected_value": "__invalid__",
+      "replacement": "__invalid__"
+    }
+  },
+  "select_cpu": {
+    "model": "__invalid__"
+  },
+  "set_base_slot_count": {
+    "base": 999999999,
+    "slot_count": 0
+  },
+  "edit_browser_iec": {
+    "index": 999999999,
+    "patch": {
+      "operation": "__invalid__",
+      "offset": 999999999,
+      "expected_kind": "__invalid__",
+      "expected_value": "__invalid__",
+      "replacement": "__invalid__"
+    },
+    "expected_object_id": "stale"
+  },
+  "rename_project": {
+    "expected_name": "stale project name",
+    "name": "Machine"
+  },
+  "generate_io_variables": {},
+  "update_iec_local_symbol_address": {
+    "program_index": 999999999,
+    "symbol_index": 999999999,
+    "expected_name": "__invalid__",
+    "expected_address": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "rename_iec_local_symbol": {
+    "program_index": 999999999,
+    "symbol_index": 999999999,
+    "expected_name": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "duplicate_iec_ld_function_instance": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_instance": "__invalid__",
+    "new_instance": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "copy_iec_instance_declaration_to_program": {
+    "source_program_index": 999999999,
+    "source_instance": "__invalid__",
+    "destination_program_index": 999999999,
+    "new_instance": "__invalid__",
+    "expected_source_object_id": "stale",
+    "expected_destination_object_id": "stale"
+  },
+  "update_iec_local_symbol_description": {
+    "program_index": 999999999,
+    "symbol_index": 999999999,
+    "expected_name": "__invalid__",
+    "expected_description": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_local_symbol": {
+    "program_index": 999999999,
+    "name": "__invalid__",
+    "data_type": "__invalid__",
+    "description": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_local_symbol": {
+    "program_index": 999999999,
+    "symbol_index": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_local_symbol_type": {
+    "program_index": 999999999,
+    "symbol_index": 999999999,
+    "expected_name": "__invalid__",
+    "expected_type": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_ladder_cell_text": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_ld_comment": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_ld_rising_contact_operand": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_ld_element_operand": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_ld_contact_kind": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_ld_coil_kind": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "edit_iec_ld_branch_segment": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "start_row_index": 0,
+    "end_row_index": 0,
+    "x": 0,
+    "expected": false,
+    "present": false,
+    "expected_object_id": "stale"
+  },
+  "edit_iec_ld_vertical_wire": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "start_row_index": 0,
+    "end_row_index": 0,
+    "x": 0,
+    "expected": false,
+    "present": false,
+    "expected_object_id": "stale"
+  },
+  "connect_iec_ld_groups": {
+    "program_index": 999999999,
+    "upper_group_index": 999999999,
+    "expected_upper_row": 0,
+    "lower_group_index": 999999999,
+    "expected_lower_row": 0,
+    "x": 0,
+    "expected_object_id": "stale"
+  },
+  "extend_iec_ld_vertical_wire": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "start_row_index": 0,
+    "x": 0,
+    "expected_object_id": "stale"
+  },
+  "split_iec_ld_group": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "expected_upper_row": 0,
+    "expected_lower_row": 0,
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_blank_row": {
+    "program_index": 999999999,
+    "after_row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_parallel_contact": {
+    "program_index": 999999999,
+    "row_index": 0,
+    "expected_contact_variable": "__invalid__",
+    "expected_coil_variable": "__invalid__",
+    "parallel_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_parallel_contact_kind": {
+    "program_index": 999999999,
+    "row_index": 0,
+    "expected_contact_variable": "__invalid__",
+    "expected_coil_variable": "__invalid__",
+    "parallel_kind": "__invalid__",
+    "parallel_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_blank_row": {
+    "program_index": 999999999,
+    "blank_row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_linear_rung": {
+    "program_index": 999999999,
+    "blank_row_index": 0,
+    "contact_variable": "__invalid__",
+    "coil_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_rung": {
+    "program_index": 999999999,
+    "blank_row_index": 0,
+    "contact_kind": "__invalid__",
+    "contact_variable": "__invalid__",
+    "coil_kind": "__invalid__",
+    "coil_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_single_element": {
+    "program_index": 999999999,
+    "row_index": 0,
+    "raw_x": 0,
+    "category": "__invalid__",
+    "kind": "__invalid__",
+    "operand": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_linear_rung": {
+    "program_index": 999999999,
+    "row_index": 0,
+    "expected_contact_variable": "__invalid__",
+    "expected_coil_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_rung": {
+    "program_index": 999999999,
+    "row_index": 0,
+    "expected_contact_kind": "__invalid__",
+    "expected_contact_variable": "__invalid__",
+    "expected_coil_kind": "__invalid__",
+    "expected_coil_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_terminal_coil": {
+    "program_index": 999999999,
+    "coil_record_offset": 999999999,
+    "expected_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_terminal_coil": {
+    "program_index": 999999999,
+    "contact_record_offset": 999999999,
+    "expected_contact_variable": "__invalid__",
+    "coil_kind": "__invalid__",
+    "coil_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_simple_row": {
+    "program_index": 999999999,
+    "row_index": 0,
+    "expected_contact_kind": "__invalid__",
+    "expected_contact_variable": "__invalid__",
+    "expected_coil_kind": "__invalid__",
+    "expected_coil_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_branch_top_row": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_nested_contact_branch_row": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_chained_contact_branch_row": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_empty_branch_row": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_ff_branch_output_row": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_no_contact": {
+    "program_index": 999999999,
+    "wire_offset": 999999999,
+    "raw_x": 0,
+    "expected_wire_start_x": 0,
+    "expected_wire_end_x": 0,
+    "variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_leading_contact": {
+    "program_index": 999999999,
+    "insertion_offset": 999999999,
+    "contact_kind": "__invalid__",
+    "variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_contact": {
+    "program_index": 999999999,
+    "wire_offset": 999999999,
+    "raw_x": 0,
+    "expected_wire_start_x": 0,
+    "expected_wire_end_x": 0,
+    "contact_kind": "__invalid__",
+    "variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_short_wire_contact": {
+    "program_index": 999999999,
+    "wire_offset": 999999999,
+    "expected_raw_x": 0,
+    "contact_kind": "__invalid__",
+    "variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_contact": {
+    "program_index": 999999999,
+    "contact_offset": 999999999,
+    "expected_raw_x": 0,
+    "expected_contact_kind": "__invalid__",
+    "expected_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_no_contact": {
+    "program_index": 999999999,
+    "contact_offset": 999999999,
+    "expected_raw_x": 0,
+    "expected_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_contact_cell": {
+    "program_index": 999999999,
+    "contact_offset": 999999999,
+    "expected_raw_x": 0,
+    "expected_contact_kind": "__invalid__",
+    "expected_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_no_contact_cell": {
+    "program_index": 999999999,
+    "contact_offset": 999999999,
+    "expected_raw_x": 0,
+    "expected_variable": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_horizontal_wire": {
+    "program_index": 999999999,
+    "wire_offset": 999999999,
+    "expected_raw_x": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_ladder_horizontal_wire": {
+    "program_index": 999999999,
+    "raw_y": 0,
+    "start_x": 0,
+    "end_x": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_ladder_vertical_wire": {
+    "program_index": 999999999,
+    "raw_x": 0,
+    "start_y": 0,
+    "end_y": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_horizontal_wire_record": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected_start_x": 0,
+    "expected_end_x": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_isolated_element": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "repair_iec_ld_horizontal_wire": {
+    "program_index": 999999999,
+    "insertion_offset": 999999999,
+    "expected_raw_x": 0,
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_function_output_operand": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "assign_iec_ld_function_output_operand": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "ordinal": 0,
+    "value": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_ld_function_operand": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_scalar_chain_function": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "replace_iec_ld_scalar_chain_function": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "function_name": "__invalid__",
+    "operands": [],
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_terminal_function": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_terminal_timer": {
+    "program_index": 999999999,
+    "contact_offset": 999999999,
+    "instance": "__invalid__",
+    "preset": "__invalid__",
+    "elapsed": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_terminal_move": {
+    "program_index": 999999999,
+    "contact_offset": 999999999,
+    "input_operand": "__invalid__",
+    "output_operand": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_standalone_function": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_group": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "expected_first_row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "replace_iec_ld_group": {
+    "program_index": 999999999,
+    "source_group_index": 999999999,
+    "expected_source_first_row_index": 0,
+    "destination_group_index": 999999999,
+    "expected_destination_first_row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "replace_iec_ld_group_from_program": {
+    "source_program_index": 999999999,
+    "source_group_index": 999999999,
+    "expected_source_first_row_index": 0,
+    "destination_program_index": 999999999,
+    "destination_group_index": 999999999,
+    "expected_destination_first_row_index": 0,
+    "copy_missing_locals": false,
+    "expected_source_object_id": "stale",
+    "expected_destination_object_id": "stale"
+  },
+  "move_iec_ld_group": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "expected_first_row_index": 0,
+    "destination_first_row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "copy_iec_ld_group": {
+    "program_index": 999999999,
+    "group_index": 999999999,
+    "expected_first_row_index": 0,
+    "destination_first_row_index": 0,
+    "expected_object_id": "stale"
+  },
+  "copy_iec_ld_group_to_program": {
+    "source_program_index": 999999999,
+    "group_index": 999999999,
+    "expected_first_row_index": 0,
+    "destination_program_index": 999999999,
+    "destination_first_row_index": 0,
+    "expected_source_object_id": "stale",
+    "expected_destination_object_id": "stale"
+  },
+  "copy_iec_ld_group_to_program_with_locals": {
+    "source_program_index": 999999999,
+    "group_index": 999999999,
+    "expected_first_row_index": 0,
+    "destination_program_index": 999999999,
+    "destination_first_row_index": 0,
+    "expected_source_object_id": "stale",
+    "expected_destination_object_id": "stale"
+  },
+  "insert_iec_ld_comment": {
+    "program_index": 999999999,
+    "destination_row_index": 0,
+    "text": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_branch_function": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "replace_iec_ld_branch_function": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "function_name": "__invalid__",
+    "operands": [],
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_standalone_function": {
+    "program_index": 999999999,
+    "insertion_offset": 999999999,
+    "function_name": "__invalid__",
+    "input_operand": "__invalid__",
+    "output_operand": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "insert_iec_ld_function_cell": {
+    "program_index": 999999999,
+    "insertion_offset": 999999999,
+    "function_name": "__invalid__",
+    "instance_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_function_cell": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_eq_chain_head": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_heating_chain_head": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_heating_chain_middle": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_heating_chain_x15_eq": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_heating_chain_contact_eq": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_heating_chain_x3_eq_repaired": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_heating_chain_x3_eq": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "repair_iec_ld_heating_chain_x3_eq_deletion": {
+    "program_index": 999999999,
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_connected_arithmetic": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_iec_ld_branched_arithmetic": {
+    "program_index": 999999999,
+    "block_offset": 999999999,
+    "expected_name": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_ld_arithmetic_function": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "update_iec_ld_comparison_function": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "replacement": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "edit_ladder_cell": {
+    "program_index": 999999999,
+    "edit": {
+      "raw_y": 0,
+      "column": 0,
+      "expected": null,
+      "replacement": null
+    },
+    "expected_object_id": "stale"
+  },
+  "insert_ladder_instruction": {
+    "program_index": 999999999,
+    "raw_y": 0,
+    "mnemonic": "__invalid__",
+    "operands": [],
+    "expected_object_id": "stale"
+  },
+  "insert_ladder_comparison": {
+    "program_index": 999999999,
+    "raw_y": 0,
+    "column": 0,
+    "mnemonic": "__invalid__",
+    "operands": [],
+    "expected_object_id": "stale"
+  },
+  "delete_ladder_comparison": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "delete_ladder_instruction": {
+    "program_index": 999999999,
+    "offset": 999999999,
+    "expected": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "edit_ladder_comment": {
+    "program_index": 999999999,
+    "edit": {
+      "kind": "Rung",
+      "raw_y": 0,
+      "expected": null,
+      "replacement": "__invalid__"
+    },
+    "expected_object_id": "stale"
+  },
+  "delete_ladder_rung_comment": {
+    "program_index": 999999999,
+    "raw_y": 0,
+    "expected": "__invalid__",
+    "expected_object_id": "stale"
+  },
+  "edit_ladder_branch": {
+    "program_index": 999999999,
+    "edit": {
+      "raw_y": 0,
+      "boundary": 0,
+      "expected": false,
+      "present": false
+    },
+    "expected_object_id": "stale"
+  },
+  "insert_ladder_row": {
+    "program_index": 999999999,
+    "raw_y": 0,
+    "expected_object_id": "stale"
+  },
+  "edit_cnet_settings": {
+    "patch": {
+      "base": 999999999,
+      "slot": 999999999,
+      "changes": []
+    }
+  },
+  "edit_sfc_entity": {
+    "patch": {
+      "program_index": 999999999,
+      "block_index": 999999999,
+      "entity_index": 999999999,
+      "expected_type": 0,
+      "expected_row": 0,
+      "expected_column": 0,
+      "field": "__invalid__",
+      "expected_value": "__invalid__",
+      "replacement": "__invalid__"
+    },
+    "expected_object_id": "stale"
+  },
+  "replace_sfc_sequence": {
+    "patch": {
+      "program_index": 999999999,
+      "block_index": 999999999,
+      "expected_entities": [],
+      "rows": [],
+      "expected_rows": null
+    },
+    "expected_object_id": "stale"
+  },
+  "edit_sfc_variable": {
+    "patch": {
+      "program_index": 999999999,
+      "expected_variables": [],
+      "name": "__invalid__",
+      "data_type": "__invalid__",
+      "description": "__invalid__",
+      "remove": false,
+      "declaration": null,
+      "update": false
+    },
+    "expected_object_id": "stale"
+  },
+  "edit_ld_label": {
+    "program_index": 999999,
+    "expected_object_id": "stale",
+    "raw_y": 0,
+    "expected": null,
+    "replacement": "Label"
+  },
+  "edit_opcua_settings": {
+    "base": 999999,
+    "slot": 999999,
+    "changes": [
+      {
+        "field": "port",
+        "expected_value": "4840",
+        "replacement": "4841"
+      }
+    ]
+  },
+  "edit_opcua_tag": {
+    "configuration_index": 999999,
+    "expected_tags": [],
+    "index": null,
+    "tag": null
+  }
+}
