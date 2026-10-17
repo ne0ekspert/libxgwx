@@ -403,6 +403,8 @@ impl UserPouView<'_> {
     }
     /// List definitions, retaining unknown layouts as read-only snapshots.
     pub fn list(&self) -> Vec<UserPou> {
+        // This capability scans the whole document and is identical for every definition.
+        let can_create = self.can_create();
         self.doc.root.descendants_named("UserFunction").enumerate().map(|(index,node)| {
             let kind=kind(node);
             let language=match node.attribute("Editor") {
@@ -412,7 +414,7 @@ impl UserPouView<'_> {
             let source=node.children.iter().find(|n|n.name=="Body").and_then(crate::sfc::read_st_source);
             let declarations=kind.ok_or_else(||fail("unknown user-POU kind")).and_then(|k|declarations(node,k));
             let return_type=declarations.as_ref().ok().and_then(|vars|vars.iter().find(|v|v.scope==UserPouScope::Return)).map(|v|v.data_type.clone());
-            let editable=self.can_create() && language.as_deref()==Some("ST") && source.is_some()
+            let editable=can_create && language.as_deref()==Some("ST") && source.is_some()
                 && node.attribute("Encrytption").unwrap_or("").is_empty()
                 && node.attribute("En")==Some("1") && node.attribute("Eno")==Some("1")
                 && node.attribute("ObjectId").is_some_and(|s|!s.is_empty())
