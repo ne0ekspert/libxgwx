@@ -314,8 +314,9 @@ ones, in document order. On a `NetworkModule`, `cnet_config_info()` and
 or other protocol configurations return `None`; `module.configuration` retains
 the association details. `doc.network().list()` lists raw network summaries.
 
-The namespace API is prepared for `0.2.0`. Migrating from `0.1.0` requires
-updating callers of the former document-level methods to their namespaces.
+Release `0.2.0` adds guarded task and other domain APIs. Callers upgrading from
+`0.1.0` may need to handle new `XgwxError` variants in exhaustive matches.
+Program task assignments now require an existing, unambiguous task in the same PLC.
 
 The default-feature API provides `HardwareModule` for common installed hardware
 metadata, `IOModule` for confirmed numeric I/O identities, and `NetworkModule`

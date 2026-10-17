@@ -2,9 +2,10 @@
 
 Use one version for crates.io and GitHub Releases: `Cargo.toml` version `X.Y.Z`
 must match tag `vX.Y.Z`. Do not move a published tag or reuse a crate version.
-The current release candidate is `0.2.0`. This minor version includes breaking
-Rust namespace API changes since the published `0.1.0`, along with the guarded
-task, program, parameter and C/WASM API additions.
+The current release candidate is `0.2.0`. New public `XgwxError` variants can
+require changes to exhaustive matches, and program task assignment now rejects
+dangling names. This minor version also adds guarded task, program, parameter
+and C/WASM APIs.
 
 ## Repository setup
 
