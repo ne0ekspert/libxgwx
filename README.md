@@ -314,7 +314,8 @@ ones, in document order. On a `NetworkModule`, `cnet_config_info()` and
 or other protocol configurations return `None`; `module.configuration` retains
 the association details. `doc.network().list()` lists raw network summaries.
 
-The crate version remains `0.1.0` while these APIs are unpublished.
+The namespace API is prepared for `0.2.0`. Migrating from `0.1.0` requires
+updating callers of the former document-level methods to their namespaces.
 
 The default-feature API provides `HardwareModule` for common installed hardware
 metadata, `IOModule` for confirmed numeric I/O identities, and `NetworkModule`

@@ -2,8 +2,9 @@
 
 Use one version for crates.io and GitHub Releases: `Cargo.toml` version `X.Y.Z`
 must match tag `vX.Y.Z`. Do not move a published tag or reuse a crate version.
-The current development version is still `0.1.0`; choose a new version before
-releasing changes beyond the existing crates.io upload.
+The current release candidate is `0.2.0`. This minor version includes breaking
+Rust namespace API changes since the published `0.1.0`, along with the guarded
+task, program, parameter and C/WASM API additions.
 
 ## Repository setup
 
@@ -19,11 +20,11 @@ The workflow uses the repository's `GITHUB_TOKEN` to manage Releases.
    intended branch. Branch runs build and validate candidates without publishing.
    Changes to the release workflow/helpers also trigger this validation on PRs.
 3. After reviewing the checks and downloadable candidates, tag that same commit
-   and push the tag. For example, for a prepared `0.1.1` release:
+   and push the tag. For the prepared `0.2.0` release:
 
    ```sh
-   git tag -a v0.1.1 <reviewed-commit> -m 'libxgwx 0.1.1'
-   git push origin v0.1.1
+   git tag -a v0.2.0 <reviewed-commit> -m 'libxgwx 0.2.0'
+   git push origin v0.2.0
    ```
 
 The tag workflow verifies the version, runs fixture-backed Rust and C ABI tests,
