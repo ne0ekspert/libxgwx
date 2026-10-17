@@ -1,8 +1,9 @@
 #![deny(missing_docs)]
 //! Parameter records with explicit PLC ownership and typed decoding.
 use crate::{
-    ConfigurationRef, HscParameterSummary, ParameterSummary, PidCalParameterSummary,
-    PidTuneParameterSummary, PositionParameterSummary, XgwxDocument, XgwxError, XmlElement,
+    ConfigurationRef, CpuCatalogEntry, HscParameterSummary, ParameterSummary,
+    PidCalParameterSummary, PidTuneParameterSummary, PositionParameterSummary, XgwxDocument,
+    XgwxError, XmlElement,
 };
 
 /// Parameter sections in document order, optionally scoped to a selected PLC.
@@ -19,6 +20,7 @@ pub struct ParameterRef<'a> {
     element: &'a XmlElement,
     index: usize,
     configuration_index: Option<usize>,
+    configuration_cpu: Option<&'static CpuCatalogEntry>,
 }
 /// Recognized parameter families. Unknown type strings are retained in summaries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,15 +81,19 @@ impl<'a> ParameterView<'a> {
             doc: &'a XgwxDocument,
             element: &'a XmlElement,
             owner: Option<usize>,
+            cpu: Option<&'static CpuCatalogEntry>,
             next_configuration: &mut usize,
             out: &mut Vec<ParameterRef<'a>>,
         ) {
-            let owner = if element.name == "Configuration" {
+            let (owner, cpu) = if element.name == "Configuration" {
                 let index = *next_configuration;
                 *next_configuration += 1;
-                Some(index)
+                (
+                    Some(index),
+                    crate::attr_u32(element, "Type").and_then(crate::cpu::cpu_for_type),
+                )
             } else {
-                owner
+                (owner, cpu)
             };
             if element.name == "Parameter" {
                 out.push(ParameterRef {
@@ -95,14 +101,15 @@ impl<'a> ParameterView<'a> {
                     element,
                     index: out.len(),
                     configuration_index: owner,
+                    configuration_cpu: cpu,
                 });
             }
             for child in &element.children {
-                walk(doc, child, owner, next_configuration, out);
+                walk(doc, child, owner, cpu, next_configuration, out);
             }
         }
         let mut out = Vec::new();
-        walk(self.doc, &self.doc.root, None, &mut 0, &mut out);
+        walk(self.doc, &self.doc.root, None, None, &mut 0, &mut out);
         if let Some(index) = self.configuration_index {
             out.retain(|record| record.configuration_index == Some(index));
         }
@@ -150,6 +157,11 @@ impl<'a> ParameterView<'a> {
     }
 }
 impl<'a> ParameterRef<'a> {
+    // Resolved during the owning configuration's traversal, so bulk parameter
+    // inspection does not repeatedly scan and summarize the whole document.
+    pub(crate) fn configuration_cpu(self) -> Option<&'static CpuCatalogEntry> {
+        self.configuration_cpu
+    }
     /// Native document-wide parameter record index.
     pub fn index(self) -> usize {
         self.index

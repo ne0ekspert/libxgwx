@@ -52,6 +52,51 @@ impl WasmParameterSummary {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        io::Write,
+        time::{Duration, Instant},
+    };
+
+    #[test]
+    fn parameter_inspection_large_browser_summary_retains_supported_and_unknown_layouts() {
+        let unsupported = "<Parameter Type='BASIC PARAMETER'><XGIBasicParam/></Parameter>";
+        let supported = "<Parameter Type='BASIC PARAMETER'><XGIBasicParam bp_ver='100' size='400' SCAN_WD_TIME_0='500'/></Parameter>";
+        let xml = format!(
+            "<Project><Configuration Type='100'>{}{}</Configuration></Project>",
+            unsupported.repeat(25_000),
+            supported.repeat(25_000)
+        );
+        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        gzip.write_all(xml.as_bytes()).unwrap();
+        let mut bytes = b"XG".to_vec();
+        bytes.extend(gzip.finish().unwrap());
+        let doc = XgwxDocument::parse(&bytes).unwrap();
+        let start = Instant::now();
+        let summary = super::super::WasmDocumentSummary::from_document(&doc);
+        let elapsed = start.elapsed();
+        eprintln!("50000 parameter browser summary: {elapsed:?}");
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "summary took {elapsed:?}"
+        );
+        assert_eq!(summary.parameters.len(), 50_000);
+        for (index, parameter) in summary.parameters.iter().enumerate() {
+            assert_eq!(parameter.parameter_index, index);
+            assert_eq!(parameter.configuration_index, Some(0));
+            assert_eq!(
+                parameter.basic_operation_fields.len(),
+                usize::from(index >= 25_000)
+            );
+            assert_eq!(parameter.sections.len(), 1);
+            assert_eq!(parameter.sections[0].name, "XGIBasicParam");
+            assert_eq!(parameter.parameter_type.as_deref(), Some("BASIC PARAMETER"));
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmParameterSectionSummary {
