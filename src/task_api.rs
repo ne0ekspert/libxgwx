@@ -2,6 +2,9 @@
 //! Selected PLC tasks and their program membership.
 use crate::{ProgramRef, TaskSummary, XgwxDocument, XgwxError};
 
+#[cfg(any(feature = "ffi", feature = "wasm", test))]
+mod inspection;
+
 /// Borrowed tasks in document order, including unknown native task types.
 #[derive(Debug, Clone, Copy)]
 pub struct TaskView<'a> {
@@ -788,53 +791,55 @@ impl TaskRef<'_> {
     /// Decode supported user-task scheduling fields. Scan and unknown layouts
     /// remain inspectable through [`Self::summary`].
     pub fn settings(self) -> Result<TaskSettings, XgwxError> {
-        let s = self.summary();
-        let missing = || task_error("missing or unsupported task scheduling fields");
-        let device = || s.device.clone().ok_or_else(missing);
-        let bit = [
-            TaskBitCondition::Rising,
-            TaskBitCondition::Falling,
-            TaskBitCondition::Changed,
-            TaskBitCondition::On,
-            TaskBitCondition::Off,
-        ];
-        let word = [
-            TaskWordCondition::Less,
-            TaskWordCondition::LessOrEqual,
-            TaskWordCondition::Equal,
-            TaskWordCondition::GreaterOrEqual,
-            TaskWordCondition::Greater,
-        ];
-        let trigger = match (s.kind, s.device_type) {
-            (Some(1), _) => TaskTrigger::Initialization,
-            (Some(2), _) => TaskTrigger::Periodic {
-                interval_ms: device()?.parse().map_err(|_| missing())?,
-            },
-            (Some(3), Some(0)) => TaskTrigger::InternalBit {
-                device: device()?,
-                condition: *bit
-                    .get(s.bit_condition.ok_or_else(missing)? as usize)
-                    .ok_or_else(missing)?,
-            },
-            (Some(3), Some(1)) => TaskTrigger::InternalWord {
-                device: device()?,
-                condition: *word
-                    .get(s.word_condition.ok_or_else(missing)? as usize)
-                    .ok_or_else(missing)?,
-                value: s
-                    .word_value
-                    .and_then(|n| n.try_into().ok())
-                    .ok_or_else(missing)?,
-            },
-            _ => return Err(missing()),
-        };
-        Ok(TaskSettings {
-            name: s.name.ok_or_else(missing)?,
-            priority: s.priority.ok_or_else(missing)?,
-            task_number: s.task_index.ok_or_else(missing)?,
-            trigger,
-        })
+        settings_from_summary(&self.summary())
     }
+}
+fn settings_from_summary(s: &TaskSummary) -> Result<TaskSettings, XgwxError> {
+    let missing = || task_error("missing or unsupported task scheduling fields");
+    let device = || s.device.clone().ok_or_else(missing);
+    let bit = [
+        TaskBitCondition::Rising,
+        TaskBitCondition::Falling,
+        TaskBitCondition::Changed,
+        TaskBitCondition::On,
+        TaskBitCondition::Off,
+    ];
+    let word = [
+        TaskWordCondition::Less,
+        TaskWordCondition::LessOrEqual,
+        TaskWordCondition::Equal,
+        TaskWordCondition::GreaterOrEqual,
+        TaskWordCondition::Greater,
+    ];
+    let trigger = match (s.kind, s.device_type) {
+        (Some(1), _) => TaskTrigger::Initialization,
+        (Some(2), _) => TaskTrigger::Periodic {
+            interval_ms: device()?.parse().map_err(|_| missing())?,
+        },
+        (Some(3), Some(0)) => TaskTrigger::InternalBit {
+            device: device()?,
+            condition: *bit
+                .get(s.bit_condition.ok_or_else(missing)? as usize)
+                .ok_or_else(missing)?,
+        },
+        (Some(3), Some(1)) => TaskTrigger::InternalWord {
+            device: device()?,
+            condition: *word
+                .get(s.word_condition.ok_or_else(missing)? as usize)
+                .ok_or_else(missing)?,
+            value: s
+                .word_value
+                .and_then(|n| n.try_into().ok())
+                .ok_or_else(missing)?,
+        },
+        _ => return Err(missing()),
+    };
+    Ok(TaskSettings {
+        name: s.name.clone().ok_or_else(missing)?,
+        priority: s.priority.ok_or_else(missing)?,
+        task_number: s.task_index.ok_or_else(missing)?,
+        trigger,
+    })
 }
 impl TaskView<'_> {
     /// Whether this PLC uses the captured standard XGK/XGI user-task layout.
@@ -843,11 +848,13 @@ impl TaskView<'_> {
         self.doc
             .configurations()
             .get(configuration_index)
-            .is_some_and(|c| {
-                matches!(
-                    c.type_code,
-                    Some(0 | 1 | 3 | 4 | 5 | 14 | 16 | 17 | 100 | 102 | 104 | 106 | 107 | 111)
-                )
-            })
+            .is_some_and(|c| task_creation_supported(c.type_code))
     }
+}
+
+pub(crate) fn task_creation_supported(type_code: Option<u32>) -> bool {
+    matches!(
+        type_code,
+        Some(0 | 1 | 3 | 4 | 5 | 14 | 16 | 17 | 100 | 102 | 104 | 106 | 107 | 111)
+    )
 }

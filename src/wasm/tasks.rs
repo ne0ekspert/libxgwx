@@ -16,26 +16,23 @@ pub(super) struct WasmTask {
     membership_error: Option<String>,
 }
 pub(super) fn summaries(doc: &XgwxDocument) -> Vec<WasmTask> {
+    let configurations = doc.configurations();
     doc.task()
-        .list()
+        .inspections()
         .into_iter()
-        .enumerate()
-        .map(|(index, definition)| {
-            let task = doc.task().get(index).unwrap();
-            let configuration = task
-                .configuration_index()
-                .and_then(|i| doc.configurations().get(i).cloned());
-            let (program_indices, membership_error) = match task.programs() {
-                Ok(programs) => (programs.iter().map(|p| p.index()).collect(), None),
-                Err(e) => (Vec::new(), Some(e.to_string())),
+        .map(|task| {
+            let index = task.index;
+            let configuration = task.configuration_index.and_then(|i| configurations.get(i));
+            let (program_indices, membership_error) = match task.program_indices {
+                Ok(programs) => (programs, None),
+                Err(error) => (Vec::new(), Some(error)),
             };
             WasmTask {
                 index,
-                configuration_index: task.configuration_index(),
+                configuration_index: task.configuration_index,
                 configuration_name: configuration.as_ref().and_then(|c| c.name.clone()),
-                creation_supported: task
-                    .configuration_index()
-                    .is_some_and(|i| doc.task().can_create(i)),
+                creation_supported: configuration
+                    .is_some_and(|c| crate::task_api::task_creation_supported(c.type_code)),
                 device_syntax: if configuration
                     .as_ref()
                     .and_then(|c| c.type_code)
@@ -45,14 +42,141 @@ pub(super) fn summaries(doc: &XgwxDocument) -> Vec<WasmTask> {
                 } else {
                     "xgk"
                 },
-                definition,
-                expected: task.snapshot().ok(),
-                settings: task.settings().ok(),
+                definition: task.definition,
+                expected: task.expected,
+                settings: task.settings,
                 program_indices,
                 membership_error,
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        io::Write,
+        time::{Duration, Instant},
+    };
+
+    fn document(count: usize) -> XgwxDocument {
+        let tasks = (0..count)
+            .map(|i| {
+                format!("<Task Kind='2' Priority='3' TaskIndex='1' Device='100'>Task{i}</Task>")
+            })
+            .collect::<String>();
+        let xml = format!(
+            "<Project><Configuration Type='1' GUID='native-guid'><Tasks>{tasks}</Tasks></Configuration></Project>"
+        );
+        document_xml(&xml)
+    }
+
+    fn document_xml(xml: &str) -> XgwxDocument {
+        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        gzip.write_all(xml.as_bytes()).unwrap();
+        let mut bytes = b"XG".to_vec();
+        bytes.extend(gzip.finish().unwrap());
+        XgwxDocument::parse(&bytes).unwrap()
+    }
+
+    #[test]
+    fn task_summary_fields_match_selected_task_contracts() {
+        for doc in [
+            XgwxDocument::parse(include_bytes!("../../fixtures/tasks/xgk-native.xgwx")).unwrap(),
+            XgwxDocument::parse(include_bytes!("../../fixtures/tasks/xgi-native.xgwx")).unwrap(),
+            document_xml(
+                "<Project><Task>orphan</Task><Configuration Type='999' GUID='a'>Unknown<Tasks><Task>A</Task><Task>A</Task></Tasks></Configuration><Configuration Type=' 100 ' GUID='b'>IEC<Tasks><Task>B</Task></Tasks><Program Task='B'/></Configuration></Project>",
+            ),
+        ] {
+            let configurations = doc.configurations();
+            for row in summaries(&doc) {
+                let task = doc.task().get(row.index).unwrap();
+                let owner = task.configuration_index();
+                let configuration = owner.and_then(|index| configurations.get(index));
+                assert_eq!(row.configuration_index, owner);
+                assert_eq!(
+                    row.configuration_name,
+                    configuration.and_then(|c| c.name.clone())
+                );
+                assert_eq!(
+                    row.creation_supported,
+                    owner.is_some_and(|index| doc.task().can_create(index))
+                );
+                assert_eq!(
+                    row.device_syntax,
+                    if configuration
+                        .and_then(|c| c.type_code)
+                        .is_some_and(|t| t >= 100)
+                    {
+                        "iec"
+                    } else {
+                        "xgk"
+                    }
+                );
+                assert_eq!(row.definition, task.summary());
+                assert_eq!(row.expected, task.snapshot().ok());
+                assert_eq!(row.settings, task.settings().ok());
+                match task.programs() {
+                    Ok(programs) => {
+                        assert_eq!(
+                            row.program_indices,
+                            programs.iter().map(|p| p.index()).collect::<Vec<_>>()
+                        );
+                        assert!(row.membership_error.is_none());
+                    }
+                    Err(error) => {
+                        assert!(row.program_indices.is_empty());
+                        assert_eq!(row.membership_error, Some(error.to_string()));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn task_summary_scaling_does_not_repeat_document_queries() {
+        for count in [500, 1_000] {
+            let doc = document(count);
+            let start = Instant::now();
+            let tasks = summaries(&doc);
+            let elapsed = start.elapsed();
+            eprintln!("{count} task summaries: {elapsed:?}");
+            assert!(
+                elapsed < Duration::from_secs(5),
+                "summaries took {elapsed:?}"
+            );
+            assert_eq!(tasks.len(), count);
+            assert!(
+                tasks
+                    .iter()
+                    .enumerate()
+                    .all(|(index, task)| task.index == index
+                        && task.expected.is_some()
+                        && task.settings.is_some()
+                        && task.membership_error.is_none())
+            );
+        }
+    }
+
+    #[test]
+    fn task_summary_large_browser_input_keeps_all_tasks() {
+        let doc = document(20_000);
+        let start = Instant::now();
+        let summary = super::super::WasmDocumentSummary::from_document(&doc);
+        let elapsed = start.elapsed();
+        eprintln!("20000-task browser summary: {elapsed:?}");
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "summary took {elapsed:?}"
+        );
+        assert_eq!(summary.tasks.len(), 20_000);
+        assert_eq!(summary.tasks[19_999].index, 19_999);
+        assert_eq!(
+            summary.tasks[19_999].definition.name.as_deref(),
+            Some("Task19999")
+        );
+    }
 }
 #[cfg(feature = "write")]
 fn decode<T: serde::de::DeserializeOwned>(value: &JsValue) -> Result<T, JsValue> {

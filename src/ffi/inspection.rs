@@ -59,16 +59,20 @@ fn attrs(attributes: &[XmlAttribute]) -> Value {
 /// detailed sections allow clients to paginate one view without re-reading all.
 fn page<T>(items: &[T], offset: usize, limit: usize, map: impl Fn(&T) -> Value) -> Value {
     let limit = limit.clamp(1, 1000);
-    let end = offset.saturating_add(limit).min(items.len());
     let selected = items
         .iter()
         .skip(offset)
         .take(limit)
         .map(map)
         .collect::<Vec<_>>();
+    page_result(items.len(), offset, limit, selected)
+}
+
+fn page_result(total: usize, offset: usize, limit: usize, selected: Vec<Value>) -> Value {
+    let end = offset.saturating_add(limit).min(total);
     json!({
-        "items": selected, "total": items.len(), "offset": offset, "limit": limit,
-        "next_offset": if end < items.len() { Some(end) } else { None },
+        "items": selected, "total": total, "offset": offset, "limit": limit,
+        "next_offset": if end < total { Some(end) } else { None },
     })
 }
 
@@ -801,16 +805,17 @@ pub fn inspect(
                 "native_acceptance": "unverified",
             })
         }
-        "tasks" => json!({
-            "tasks": indexed_page(&doc.task().list(), offset, limit, |index, definition| {
-                let task = doc.task().get(index).unwrap();
-                let programs = task.programs();
-                json!({"index":index, "configuration_index":task.configuration_index(),
-                    "expected":task.snapshot().ok(), "definition":definition, "settings":task.settings().ok(),
-                    "program_indices":programs.as_ref().ok().map(|ps| ps.iter().map(|p| p.index()).collect::<Vec<_>>()),
-                    "membership_error":programs.err().map(|e| e.to_string())})
-            }),
-        }),
+        "tasks" => {
+            let limit = limit.clamp(1, 1000);
+            let (total, tasks) = doc.task().inspection_page(offset, limit);
+            let selected = tasks.iter().map(|task| {
+                json!({"index":task.index, "configuration_index":task.configuration_index,
+                    "expected":task.expected, "definition":task.definition, "settings":task.settings,
+                    "program_indices":task.program_indices.as_ref().ok(),
+                    "membership_error":task.program_indices.as_ref().err()})
+            }).collect();
+            json!({"tasks":page_result(total, offset, limit, selected)})
+        }
         "programs" => json!({
             "programs": indexed_page(&doc.program().programs(), offset, limit, program_summary),
             "tasks": indexed_page(&doc.program().tasks(), offset, limit, |index, t| {
