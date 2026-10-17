@@ -6864,6 +6864,35 @@ impl XgwxDocument {
             .ok_or(XgwxError::ProgramNotFound {
                 index: program_index,
             })??;
+        if matches!(expected_name, "AND" | "OR" | "XOR" | "NOT") && pin_name == "OUT" {
+            let symbols = self
+                .iec_local_symbols()
+                .into_iter()
+                .nth(program_index)
+                .ok_or(XgwxError::ProgramNotFound {
+                    index: program_index,
+                })??;
+            for link in program
+                .iec_function_operand_links()
+                .ok_or(XgwxError::UnsupportedLadderLayout)?
+                .into_iter()
+                .filter(|l| l.target_record_offset == block_offset)
+            {
+                let strings = crate::internal::extract_utf16_marker_strings(
+                    &program.data[link.record_offset + 15..],
+                    false,
+                    true,
+                );
+                let expression = strings.first().ok_or(XgwxError::UnsupportedLadderLayout)?;
+                if !expression.value.is_empty()
+                    && classify_iec_bool_expression(&expression.value, &symbols, &program).is_none()
+                {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "bitwise OUT can drive a wire only with BOOL operands; numeric OUT retains its destination",
+                    });
+                }
+            }
+        }
         let updated = crate::iec_output_wire_write::insert(
             &program,
             block_offset,
@@ -9699,7 +9728,7 @@ impl XgwxDocument {
         Ok(())
     }
 
-    /// Place a scalar MOVE, arithmetic, or comparison function in available IEC cells.
+    /// Place a supported scalar function or declared instance block in available IEC cells.
     pub(crate) fn insert_iec_ld_function(
         &mut self,
         program_index: usize,
@@ -9708,6 +9737,211 @@ impl XgwxDocument {
         function_name: &str,
         operands: &[String],
     ) -> Result<(), XgwxError> {
+        let captured_timer = function_name == "TON"
+            && self
+                .ladder_program(program_index)
+                .and_then(Result::ok)
+                .and_then(|p| p.iec_terminal_timer_insertion_sites())
+                .is_some_and(|sites| {
+                    sites
+                        .iter()
+                        .any(|s| s.row_index == row_index && s.raw_x == raw_x)
+                })
+            && self
+                .ladder_program(program_index)
+                .and_then(Result::ok)
+                .is_some_and(|p| {
+                    crate::iec_fresh_block_write::insert(&p, row_index, raw_x, "TON", "Probe", &[])
+                        .is_err()
+                });
+        if crate::iec_fresh_block_write::supports(function_name) && !captured_timer {
+            let program =
+                self.ladder_program(program_index)
+                    .ok_or(XgwxError::ProgramNotFound {
+                        index: program_index,
+                    })??;
+            let block = crate::iec_fresh_block_write::pins(&program, function_name)?;
+            let symbols = self
+                .iec_local_symbols()
+                .into_iter()
+                .nth(program_index)
+                .ok_or(XgwxError::ProgramNotFound {
+                    index: program_index,
+                })??;
+            let stateful = block.instance.is_some();
+            let (instance, values) = if stateful {
+                let instance = operands.first().ok_or(XgwxError::InvalidLadderEdit {
+                    reason: "IEC block requires a declared instance",
+                })?;
+                if symbols
+                    .iter()
+                    .filter(|s| {
+                        s.name == *instance
+                            && s.is_instance
+                            && s.type_reference.as_deref() == Some(function_name)
+                    })
+                    .count()
+                    != 1
+                {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "IEC block instance is missing, ambiguous, or has another type",
+                    });
+                }
+                (instance.as_str(), &operands[1..])
+            } else {
+                ("", operands)
+            };
+            let mut pins = block
+                .pins
+                .iter()
+                .filter(|p| p.reference_ordinal.is_some())
+                .collect::<Vec<_>>();
+            pins.sort_by_key(|p| p.reference_ordinal);
+            let required = pins
+                .iter()
+                .take_while(|p| p.direction == crate::IecFunctionPinDirection::Input)
+                .count();
+            let bitwise = matches!(function_name, "AND" | "OR" | "XOR" | "NOT");
+            let optional_output = stateful
+                || bitwise
+                || pins
+                    .last()
+                    .is_some_and(|p| p.data_type_mask == 1 && !p.is_array);
+            if values.len() < required
+                || values.len() > pins.len()
+                || (!optional_output && values.len() != pins.len())
+                || operands
+                    .iter()
+                    .any(|v| v.encode_utf16().count() > 255 || v.chars().any(char::is_control))
+            {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "IEC block operand count or text is invalid",
+                });
+            }
+            let mut common = 0xfffff;
+            for (pin, value) in pins.iter().zip(values) {
+                let output = pin.direction == crate::IecFunctionPinDirection::Output;
+                if function_name == "WORD_TO_UDINT"
+                    && !output
+                    && !value.starts_with('%')
+                    && !symbols.iter().any(|s| s.name.eq_ignore_ascii_case(value))
+                {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "WORD_TO_UDINT input requires a WORD device address or local symbol",
+                    });
+                }
+                if value.is_empty() && output && optional_output {
+                    continue;
+                }
+                let classified = if pin.data_type_mask==1 {
+                    classify_iec_bool_expression(value,&symbols,&program)
+                } else {classify_iec_function_expression(value,function_name,&symbols,&program)}
+                .ok_or(XgwxError::InvalidLadderEdit {reason:"IEC block operand requires a known scalar expression or device address"})?;
+                if classified.data_type_mask & pin.data_type_mask == 0
+                    || output && !classified.writable
+                {
+                    return Err(XgwxError::InvalidLadderEdit {
+                        reason: "IEC block operand type or writable destination is incompatible with its pin",
+                    });
+                }
+                if !stateful
+                    && function_name != "WORD_TO_UDINT"
+                    && !(output && block.opcode_family == 0x28)
+                {
+                    common &= classified.data_type_mask & pin.data_type_mask;
+                }
+            }
+            if common == 0 {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "IEC block operands have incompatible scalar types",
+                });
+            }
+            if bitwise && values.len() < pins.len() && common & 1 == 0 {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "bitwise numeric OUT requires a destination; only BOOL OUT may be left for wiring",
+                });
+            }
+            let data = crate::iec_fresh_block_write::insert(
+                &program,
+                row_index,
+                raw_x,
+                function_name,
+                instance,
+                values,
+            )?;
+            return self.edit_program_payload_with_validation(
+                program_index,
+                "2",
+                false,
+                false,
+                |payload| {
+                    if payload != program.data {
+                        return Err(XgwxError::LadderCellChanged {
+                            program_index,
+                            offset: 0,
+                        });
+                    }
+                    Ok(data)
+                },
+            );
+        }
+        if function_name == "FF" {
+            if operands.len() != 1 {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "FF requires exactly one declared FF instance",
+                });
+            }
+            let symbols = self
+                .iec_local_symbols()
+                .into_iter()
+                .nth(program_index)
+                .ok_or(XgwxError::ProgramNotFound {
+                    index: program_index,
+                })??;
+            if symbols
+                .iter()
+                .filter(|s| {
+                    s.name == operands[0]
+                        && s.is_instance
+                        && s.type_reference.as_deref() == Some("FF")
+                })
+                .count()
+                != 1
+            {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "FF instance name is missing, ambiguous, or has another type",
+                });
+            }
+            if operands[0].is_empty()
+                || operands[0].encode_utf16().count() > 255
+                || operands[0].chars().any(char::is_control)
+            {
+                return Err(XgwxError::InvalidLadderEdit {
+                    reason: "FF instance name is invalid",
+                });
+            }
+            let program =
+                self.ladder_program(program_index)
+                    .ok_or(XgwxError::ProgramNotFound {
+                        index: program_index,
+                    })??;
+            let data = crate::iec_ff_write::insert(&program, row_index, raw_x, &operands[0])?;
+            return self.edit_program_payload_with_validation(
+                program_index,
+                "2",
+                false,
+                false,
+                |payload| {
+                    if payload != program.data {
+                        return Err(XgwxError::LadderCellChanged {
+                            program_index,
+                            offset: 0,
+                        });
+                    }
+                    Ok(data)
+                },
+            );
+        }
         if function_name == "TON" {
             if operands.len() != 2 || ![10, 19, 22].contains(&raw_x) {
                 return Err(XgwxError::InvalidLadderEdit {
@@ -9733,13 +9967,6 @@ impl XgwxDocument {
                 &operands[1],
                 "",
             );
-        }
-        // Generalized conversion placement still fails native open acceptance.
-        // Keep the separately verified standalone API available.
-        if function_name == "WORD_TO_UDINT" {
-            return Err(XgwxError::InvalidLadderEdit {
-                reason: "general WORD_TO_UDINT placement is not native-validated; use a verified standalone insertion site",
-            });
         }
         let (family, _, count) =
             crate::iec_function_write::spec(function_name).ok_or(XgwxError::InvalidLadderEdit {
@@ -13172,6 +13399,17 @@ fn classify_iec_atomic_expression(
         }
     }
     let upper = expression.to_ascii_uppercase();
+    if let Some((ty, _)) = upper.split_once('#') {
+        if let Some(code) = crate::iec_symbols::iec_primitive_type_code(ty).filter(|c| *c <= 15) {
+            if crate::sfc::valid_primitive_literal(ty, &upper, 0) {
+                return Some(ClassifiedIecExpression {
+                    data_type_mask: 1 << (code - 1),
+                    writable: false,
+                });
+            }
+            return None;
+        }
+    }
     if upper.starts_with('%') {
         return classify_iec_direct_device_address(&upper);
     }

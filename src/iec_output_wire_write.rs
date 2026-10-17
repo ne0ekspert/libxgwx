@@ -1,4 +1,4 @@
-//! Native F5 short wires from scalar function BOOL outputs.
+//! Native F5 short wires from supported function BOOL outputs.
 use crate::{IecRecordKind as K, LadderProgramData, XgwxError};
 
 pub(crate) fn insert(
@@ -18,12 +18,72 @@ pub(crate) fn insert(
     if block.name.value != expected_name {
         return Err(invalid("IEC function changed since selection"));
     }
-    let (family, opcode, count) =
-        crate::iec_function_write::spec(expected_name).ok_or_else(unsupported)?;
-    // Instance blocks and noncanonical bodies retain their existing guarded APIs.
-    let mut canonical =
-        crate::iec_function_write::body(expected_name, block.row_index, block.raw_x);
+    let is_ff = expected_name == "FF";
+    let fresh = crate::iec_fresh_block_write::supports(expected_name);
+    let (family, opcode, count) = if fresh {
+        let proto = crate::iec_fresh_block_write::pins(program, expected_name)?;
+        (proto.opcode_family, proto.opcode, proto.pin_count)
+    } else if is_ff {
+        (0x21, 0x21, 1)
+    } else {
+        crate::iec_function_write::spec(expected_name).ok_or_else(unsupported)?
+    };
+    let mut canonical = if fresh {
+        crate::iec_fresh_block_write::body(
+            program,
+            expected_name,
+            block.row_index,
+            block.raw_x,
+            block.instance.as_ref().map_or("", |i| i.value.as_str()),
+        )?
+    } else if is_ff {
+        let instance = block.instance.as_ref().ok_or_else(unsupported)?;
+        crate::iec_ff_write::body(block.row_index, block.raw_x, &instance.value)
+    } else {
+        crate::iec_function_write::body(expected_name, block.row_index, block.raw_x)
+    };
     canonical[12] = program.data[offset + 12];
+    if fresh {
+        let source = &program.data[offset..block.record_end];
+        if !matches!(source[11], 0 | 4)
+            || !(matches!(source[32], 0 | 2 | 4) || source[32] == block.raw_x)
+        {
+            return Err(unsupported());
+        }
+        canonical[11] = source[11];
+        canonical[32] = source[32];
+        let mut cursor = 38;
+        for descriptor in 0..6 {
+            cursor += 4 + usize::from(canonical[cursor + 3]) * 2;
+            if descriptor == 0 || descriptor == 2 {
+                cursor += 4;
+            }
+            if descriptor == 1 || descriptor == 3 {
+                cursor += 5;
+            }
+        }
+        for ordinal in 1..=count {
+            canonical[cursor + 6] = source[32];
+            cursor += 12;
+            if ordinal == count {
+                break;
+            }
+            for _ in 0..2 {
+                cursor += 4 + usize::from(canonical[cursor + 3]) * 2 + 4;
+                cursor += 4 + usize::from(canonical[cursor + 3]) * 2 + 5;
+            }
+        }
+    }
+    if is_ff {
+        let mode = program.data[offset + 11];
+        if !matches!(mode, 0 | 4) {
+            return Err(unsupported());
+        }
+        canonical[11] = mode;
+        canonical[32] = mode;
+        let tail = canonical.len() - 12;
+        canonical[tail + 6] = mode;
+    }
     if block.opcode_family != family
         || block.opcode != opcode
         || block.pin_count != count
@@ -36,7 +96,12 @@ pub(crate) fn insert(
         .chain(block.pins.iter())
         .find(|p| p.name.value == pin_name && p.direction == crate::IecFunctionPinDirection::Output)
         .ok_or_else(unsupported)?;
-    if pin.data_type_mask != 1 || pin.is_array || !matches!(pin_name, "ENO" | "OUT") {
+    let bitwise = matches!(expected_name, "AND" | "OR" | "XOR" | "NOT") && pin_name == "OUT";
+    if !(pin.data_type_mask == 1 || bitwise && pin.data_type_mask & 1 != 0)
+        || pin.is_array
+        || !(matches!(pin_name, "ENO" | "OUT")
+            || (is_ff || fresh) && matches!(pin_name, "Q" | "QU" | "QD"))
+    {
         return Err(invalid(
             "Only BOOL output pins can drive a ladder wire; numeric OUT needs a destination",
         ));

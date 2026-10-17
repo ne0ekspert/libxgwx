@@ -4009,3 +4009,31 @@ locals retain empty storage classes and absent allocation numbers and widths.
 Thus native editing and Check do not require an eager automatic allocator for
 these two cases. This capture does not establish PLC compilation or download
 behavior, new UDINT/TIME operand cases, or composite declaration support.
+
+## Fresh FF placement (2026-10-17)
+
+`program.iec_ld()?.insert_function(row, x, "FF", &[instance])` now writes native
+FF bodies on two clear rows and after a single leading x1 contact in a normal
+network. It validates a unique local declaration of type FF, native column and
+row bounds, group layout and overlap. It preserves declarations and unrelated
+network records. The native two-row FF body, CLK feed and Q reference are
+constructed directly; the captured refill API remains separate.
+
+VS Code offers `FF <instance>` in the IEC insertion prompt, including at the
+first blank column (the body is placed at x4), with typed instance suggestions.
+The actual selected FF write is dry-run before application; supported overlap
+relocation uses the existing nearby-cell policy. Complex occupied groups and
+branch merges remain guarded, and instance creation is not automatic.
+
+The [synthetic fixtures](../fixtures/iec-ff/README.md) cover native fresh placement,
+exact contact-fed insertion and Check Program/Save As preservation. The generated
+three-position project passed native all-program checking with 0 errors and
+0 warnings. Local browser testing uses real bundled WASM with a mock VS Code
+prompt bridge; it does not prove a native VS Code extension-host prompt.
+
+## Broader fresh IEC blocks (2026-10-17)
+
+Fresh trigger/timer/latch/DINT counter and scalar logic insertion now shares
+native network prototypes across Rust, WASM, the editor, C JSON transactions
+and the MCP package. See [IEC block support](iec-blocks.md) for operand order,
+optional outputs, placement guards and native compiler/Save As evidence.

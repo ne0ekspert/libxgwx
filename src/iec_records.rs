@@ -1833,7 +1833,10 @@ fn parse_function_block(data: &[u8], record: IecRecordFrame) -> Option<IecFuncti
     if control_input.direction != IecFunctionPinDirection::Input
         || control_input.data_type_mask != 1
         || control_input.is_array
-        || !matches!(control_input.name.value.as_str(), "EN" | "IN" | "CLK")
+        || !matches!(
+            control_input.name.value.as_str(),
+            "EN" | "IN" | "CLK" | "S" | "S1" | "S_1" | "R" | "R1" | "R_1" | "CU" | "CD"
+        )
     {
         return None;
     }
@@ -1849,7 +1852,10 @@ fn parse_function_block(data: &[u8], record: IecRecordFrame) -> Option<IecFuncti
     if control_output.direction != IecFunctionPinDirection::Output
         || control_output.data_type_mask != 1
         || control_output.is_array
-        || !matches!(control_output.name.value.as_str(), "ENO" | "Q")
+        || !matches!(
+            control_output.name.value.as_str(),
+            "ENO" | "Q" | "Q1" | "QU" | "QD"
+        )
     {
         return None;
     }
@@ -1930,12 +1936,23 @@ fn parse_function_block(data: &[u8], record: IecRecordFrame) -> Option<IecFuncti
             (pin.direction == IecFunctionPinDirection::Output).then_some(index)
         }))
         .collect::<Vec<_>>();
+    // Native CTUD exposes QD as a direct BOOL wire pin, without a data
+    // reference ordinal. Its input and CV references still use the stored count.
+    if opcode_family == 0x21 && ordered.len() > usize::from(pin_count) {
+        ordered.retain(|&index| {
+            !(pins[index].direction == IecFunctionPinDirection::Output
+                && pins[index].data_type_mask == 1)
+        });
+    }
     if ordered.len() == usize::from(pin_count) {
         for (ordinal, index) in ordered.drain(..).enumerate() {
             pins[index].reference_ordinal = Some(u8::try_from(ordinal + 1).ok()?);
         }
-    } else if ordered.is_empty() && pin_count == 1 {
-        control_output.reference_ordinal = Some(1);
+    } else if opcode_family == 0x21 && ordered.len() + 1 == usize::from(pin_count) {
+        for (ordinal, index) in ordered.drain(..).enumerate() {
+            pins[index].reference_ordinal = Some(u8::try_from(ordinal + 1).ok()?);
+        }
+        control_output.reference_ordinal = Some(pin_count);
     } else {
         return None;
     }

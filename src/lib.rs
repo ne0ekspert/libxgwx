@@ -132,6 +132,10 @@ mod iec_contact_write;
 #[cfg(feature = "write")]
 mod iec_conversion_pair_write;
 #[cfg(feature = "write")]
+mod iec_ff_write;
+#[cfg(feature = "write")]
+mod iec_fresh_block_write;
+#[cfg(feature = "write")]
 mod iec_function_write;
 mod iec_graph;
 mod iec_ld;

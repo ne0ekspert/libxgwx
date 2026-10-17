@@ -8343,7 +8343,7 @@ fn xgi_existing_empty_cells_allow_consecutive_entry_and_guard_conversion() {
 
 #[cfg(feature = "write")]
 #[test]
-fn unverified_general_conversion_placement_is_atomic() {
+fn general_conversion_rejects_incompatible_program_or_unknown_destination_atomically() {
     let mut doc = XgwxDocument::parse(include_bytes!("../fixtures/elements.xgwx")).unwrap();
     let original = doc.to_bytes().unwrap();
     let error = doc
@@ -8355,7 +8355,10 @@ fn unverified_general_conversion_placement_is_atomic() {
             &["%MW100".into(), "Result".into()],
         )
         .unwrap_err();
-    assert!(error.to_string().contains("not native-validated"));
+    assert!(matches!(
+        error,
+        XgwxError::UnsupportedLadderLayout | XgwxError::InvalidLadderEdit { .. }
+    ));
     assert_eq!(doc.to_bytes().unwrap(), original);
 }
 

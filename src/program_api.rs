@@ -1323,7 +1323,7 @@ impl IecLdEditor<'_> {
             operands,
         )
     }
-    /// Place a scalar MOVE, arithmetic, or comparison function in available IEC cells.
+    /// Place a supported scalar function or a declared instance block in available IEC cells.
     pub fn insert_function(
         &mut self,
         row_index: u16,

@@ -228,3 +228,20 @@ Source edits invalidate compiler caches. Serialized source is not compiled by C;
 use XG5000 Check Program and Save As. See [scope and native evidence](user-pous.md).
 The [actual C lifecycle test](../tests/ffi_user_pous.c) demonstrates inspection,
 creation, source/interface edits, stale rejection, atomic rollback and reparse.
+
+### IEC LD block insertion and output wires
+
+The JSON transaction API accepts `insert_iec_ld_function` with
+`program_index`, `expected_object_id`, `row_index`, `raw_x`, `function_name`
+and `operands`. For example, a fresh CTUD_DINT call uses
+`["Counter", "FALSE", "FALSE", "FALSE", "DINT#10"]` for instance, CD, R, LD
+and PV; its optional CV destination can be omitted. The instance must already
+be declared locally with the matching type.
+
+`insert_iec_ld_function_output_wire` takes `program_index`,
+`expected_object_id`, `block_offset`, `expected_name`, `pin_name` and `start_x`.
+It draws one native F5 wire cell or extends its contiguous feed. BOOL Q/QU/QD
+and supported ENO/OUT pins need no output-variable assignment. Numeric outputs
+retain their destination rules. Both operations participate in the existing
+atomic batch and program-identity guards. See [IEC block support](iec-blocks.md)
+for the supported commands and operand order.

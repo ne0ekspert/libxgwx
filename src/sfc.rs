@@ -2,6 +2,8 @@ use crate::{XgwxDocument, XmlElement};
 use std::collections::BTreeMap;
 mod branches;
 mod declarations;
+#[cfg(feature = "write")]
+pub(crate) use declarations::literal as valid_primitive_literal;
 pub use declarations::{SfcArrayBound, SfcDeclaration};
 
 /// Decoded native SFC charts and declarations for one document program.

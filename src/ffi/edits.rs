@@ -42,6 +42,22 @@ struct Transaction {
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum Edit {
+    InsertIecLdFunction {
+        program_index: usize,
+        expected_object_id: String,
+        row_index: u16,
+        raw_x: u8,
+        function_name: String,
+        operands: Vec<String>,
+    },
+    InsertIecLdFunctionOutputWire {
+        program_index: usize,
+        expected_object_id: String,
+        block_offset: usize,
+        expected_name: String,
+        pin_name: String,
+        start_x: u8,
+    },
     CreateUserPou {
         patch: super::user_pou::NewUserPou,
     },
@@ -188,6 +204,44 @@ pub(super) fn apply(doc: &mut XgwxDocument, request: &str) -> Result<()> {
 
 fn apply_one(doc: &mut XgwxDocument, edit: Edit) -> Result<()> {
     match edit {
+        Edit::InsertIecLdFunction {
+            program_index,
+            expected_object_id,
+            row_index,
+            raw_x,
+            function_name,
+            operands,
+        } => {
+            check_program(doc, program_index, &expected_object_id)?;
+            doc.program_mut()
+                .get(program_index)
+                .and_then(|mut p| {
+                    p.iec_ld()?
+                        .insert_function(row_index, raw_x, &function_name, &operands)
+                })
+                .map_err(operation)
+        }
+        Edit::InsertIecLdFunctionOutputWire {
+            program_index,
+            expected_object_id,
+            block_offset,
+            expected_name,
+            pin_name,
+            start_x,
+        } => {
+            check_program(doc, program_index, &expected_object_id)?;
+            doc.program_mut()
+                .get(program_index)
+                .and_then(|mut p| {
+                    p.iec_ld()?.insert_function_output_wire(
+                        block_offset,
+                        &expected_name,
+                        &pin_name,
+                        start_x,
+                    )
+                })
+                .map_err(operation)
+        }
         Edit::CreateUserPou { patch } => {
             doc.user_pou_mut().create(&patch.into()).map_err(operation)
         }

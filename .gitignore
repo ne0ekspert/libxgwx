@@ -12,6 +12,8 @@
 !fixtures/ladder-wire-delete/*.xgwx
 
 !fixtures/function-output-wires/*.xgwx
+!fixtures/iec-ff/*.xgwx
+!fixtures/iec-blocks/*.xgwx
 !fixtures/io-variable-generation/*.xgwx
 
 # Synthetic XG5000 SFC acceptance fixtures

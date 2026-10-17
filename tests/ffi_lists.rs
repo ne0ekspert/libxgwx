@@ -316,3 +316,35 @@ fn user_pou_list_is_snake_case_and_available_without_write() {
     assert_eq!(summary["user_pous"], Value::Array(items));
     assert_eq!(summary["user_pou_creation"], true);
 }
+
+#[cfg(feature = "write")]
+#[test]
+fn iec_block_insert_and_wire_transactions_use_program_identity_and_roll_back() {
+    let input = include_bytes!("../fixtures/iec-blocks/empty-with-instances.xgwx");
+    let doc = Document::parse(input);
+    let parsed = xgwx::XgwxDocument::parse(input).unwrap();
+    let identity = parsed.program().list()[0].object_id.clone().unwrap();
+    assert_ok(doc.apply(json!([{"operation":"insert_iec_ld_function","program_index":0,"expected_object_id":identity,"row_index":0,"raw_x":4,"function_name":"CTUD_DINT","operands":["BothCounter","FALSE","FALSE","FALSE","DINT#10"]}])));
+    let d = xgwx::XgwxDocument::parse(&doc.bytes()).unwrap();
+    let b = d
+        .program()
+        .ladder_programs()
+        .remove(0)
+        .unwrap()
+        .iec_function_blocks()
+        .unwrap()
+        .remove(0);
+    let wire = json!({"operation":"insert_iec_ld_function_output_wire","program_index":0,"expected_object_id":identity,"block_offset":b.record_offset,"expected_name":"CTUD_DINT","pin_name":"QD","start_x":7});
+    let before = doc.bytes();
+    assert_eq!(
+        doc.apply(json!([wire.clone(), wire.clone()])),
+        XGWX_OPERATION_ERROR
+    );
+    assert_eq!(doc.bytes(), before);
+    assert_ok(doc.apply(json!([wire.clone()])));
+    let before = doc.bytes();
+    let mut stale = wire;
+    stale["expected_object_id"] = json!("stale");
+    assert_eq!(doc.apply(json!([stale])), XGWX_OPERATION_ERROR);
+    assert_eq!(doc.bytes(), before);
+}

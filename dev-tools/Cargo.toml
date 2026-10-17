@@ -5,6 +5,14 @@ edition = "2024"
 publish = false
 autobins = false
 
+[[bin]]
+name = "iec_block_prototypes"
+path = "iec_block_prototypes.rs"
+
+[[bin]]
+name = "iec_blocks_acceptance"
+path = "iec_blocks_acceptance.rs"
+
 [dependencies]
 xgwx = { package = "libxgwx", path = ".." }
 base64 = "0.22"
@@ -600,3 +608,8 @@ required-features = ["write"]
 [[bin]]
 name = "user_pou_acceptance"
 path = "user_pou_acceptance.rs"
+
+[[bin]]
+name = "iec_ff_acceptance"
+path = "iec_ff_acceptance.rs"
+required-features = ["write"]

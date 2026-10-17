@@ -433,7 +433,7 @@ fn valid_initial(ty: &str, text: &str, count: u64, array: bool, length: u32) -> 
     total > 0 && total <= count
 }
 #[cfg(feature = "write")]
-fn literal(ty: &str, text: &str, length: u32) -> bool {
+pub(crate) fn literal(ty: &str, text: &str, length: u32) -> bool {
     if ty == "STRING" {
         let Some(inner) = text.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) else {
             return false;

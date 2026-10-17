@@ -64,7 +64,7 @@ const MAX_WASM_LADDER_PROGRAMS: usize = 64;
 const MAX_WASM_LADDER_DECODED_BYTES: usize = 32 * 1024 * 1024;
 const MAX_WASM_LADDER_ITEMS: usize = 100_000;
 
-/// Place one verified scalar IEC function with operands in reference order.
+/// Place one verified IEC function; FF takes one declared FF instance operand.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = insert_xgwx_iec_ld_function)]
 pub fn insert_xgwx_iec_ld_function_wasm(
