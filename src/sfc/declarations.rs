@@ -257,21 +257,30 @@ fn parse_array(text: &str) -> Option<(String, Vec<SfcArrayBound>)> {
 
 #[cfg(feature = "write")]
 pub(super) fn record(patch: &SfcVariablePatch) -> Result<Vec<u8>, crate::XgwxError> {
+    record_with_custom_fb(patch, false)
+}
+
+#[cfg(feature = "write")]
+pub(super) fn record_with_custom_fb(
+    patch: &SfcVariablePatch,
+    custom_fb: bool,
+) -> Result<Vec<u8>, crate::XgwxError> {
     let fail = |s: &str| crate::XgwxError::SfcEdit(s.into());
     let options = patch.declaration.clone().unwrap_or_default();
-    let fb = matches!(
-        patch.data_type.as_str(),
-        "TON"
-            | "TOF"
-            | "TP"
-            | "CTU_DINT"
-            | "CTD_DINT"
-            | "CTUD_DINT"
-            | "R_TRIG"
-            | "F_TRIG"
-            | "RS"
-            | "SR"
-    );
+    let fb = custom_fb
+        || matches!(
+            patch.data_type.as_str(),
+            "TON"
+                | "TOF"
+                | "TP"
+                | "CTU_DINT"
+                | "CTD_DINT"
+                | "CTUD_DINT"
+                | "R_TRIG"
+                | "F_TRIG"
+                | "RS"
+                | "SR"
+        );
     let primitive = crate::iec_symbols::iec_primitive_type_code(&patch.data_type);
     if primitive.is_none() && !fb && patch.data_type != "STRING" {
         return Err(fail("unsupported variable type"));

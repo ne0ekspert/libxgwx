@@ -23,6 +23,7 @@ use std::ptr;
 
 #[cfg(feature = "write")]
 mod edits;
+mod user_pou;
 
 /// Select the installed hardware module list.
 pub const XGWX_LIST_MODULES: u32 = 1;
@@ -36,6 +37,8 @@ pub const XGWX_LIST_VARIABLES: u32 = 4;
 pub const XGWX_LIST_NETWORK_MODULES: u32 = 5;
 /// Select standalone ST/IL source and editability information.
 pub const XGWX_LIST_TEXT_PROGRAMS: u32 = 6;
+/// Select user-defined functions and function blocks in their independent namespace.
+pub const XGWX_LIST_USER_POUS: u32 = 7;
 
 fn json_bytes(value: impl serde::Serialize) -> Result<Vec<u8>> {
     serde_json::to_vec(&value).map_err(operation)
@@ -272,6 +275,8 @@ pub unsafe extern "C" fn xgwx_document_inspect_json(
                 "variables": variables,
                 "variables_error": variables_error,
                 "program_languages": doc.program_languages(),
+                "user_pou_creation": doc.user_pou().can_create(),
+                "user_pous": doc.user_pou().list().into_iter().map(user_pou::UserPou::from).collect::<Vec<_>>(),
             });
             write_buffer(out, serde_json::to_vec(&summary).map_err(operation)?);
         }
@@ -312,6 +317,13 @@ pub unsafe extern "C" fn xgwx_document_list_json(
             buffer_output(out)?;
             let doc = handle(doc)?;
             let items = match list {
+                XGWX_LIST_USER_POUS => serde_json::to_value(
+                    doc.user_pou()
+                        .list()
+                        .into_iter()
+                        .map(user_pou::UserPou::from)
+                        .collect::<Vec<_>>(),
+                ),
                 XGWX_LIST_MODULES => serde_json::to_value(doc.module_summaries()),
                 XGWX_LIST_NETWORKS => serde_json::to_value(doc.networks()),
                 XGWX_LIST_PROGRAMS => serde_json::to_value(doc.programs()),

@@ -596,3 +596,7 @@ path = "xgk_string_acceptance.rs"
 name = "opcua_acceptance"
 path = "opcua_acceptance.rs"
 required-features = ["write"]
+
+[[bin]]
+name = "user_pou_acceptance"
+path = "user_pou_acceptance.rs"

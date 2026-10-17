@@ -25,6 +25,7 @@ typedef int32_t xgwx_status;
 #define XGWX_LIST_VARIABLES      4u
 #define XGWX_LIST_NETWORK_MODULES 5u
 #define XGWX_LIST_TEXT_PROGRAMS  6u
+#define XGWX_LIST_USER_POUS      7u
 
 typedef struct xgwx_document xgwx_document;
 
@@ -59,7 +60,7 @@ void xgwx_buffer_free(xgwx_buffer *buffer);
 
 /* UTF-8 JSON, schema_version 1, snake_case field names. Sections: project,
  * configurations, bases, modules, tasks, programs, networks, network_modules,
- * variables, variables_error, program_languages. A variables decoding error
+ * variables, variables_error, program_languages, user_pous, user_pou_creation. A variables decoding error
  * sets variables to null and variables_error to a message. */
 xgwx_status xgwx_document_inspect_json(const xgwx_document *doc, xgwx_buffer *out);
 /* Full decompressed XML in UTF-8. */

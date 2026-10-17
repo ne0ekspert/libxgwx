@@ -71,7 +71,7 @@ text using its byte length before releasing it through the library.
 | `xgwx_document_parse` | Parse workspace bytes | `ffi` |
 | `xgwx_document_inspect_json` | Inspect project, hardware, programs, networks and globals | `ffi` |
 | `xgwx_document_xml` | Copy complete decompressed XML | `ffi` |
-| `xgwx_document_list_json` | Load modules, networks, programs, globals, network modules or standalone sources | `ffi` |
+| `xgwx_document_list_json` | Load modules, networks, programs, globals, network modules, standalone sources or user POUs | `ffi` |
 | `xgwx_module_catalog_json` | Load selectable XGK models and verified options | `ffi,write` |
 | `xgwx_document_module_options_json` | Read one installed module's option values | `ffi,write` |
 | `xgwx_document_apply_edits_json` | Apply guarded list/metadata/source edits atomically | `ffi,write` |
@@ -137,6 +137,10 @@ Reload lists after success, especially after insertion, deletion or reordering.
 | `delete_program` | `program_index`, `expected_object_id` |
 | `move_program` | `from`, `to`, `expected_object_id`, `expected_target_id` |
 | `update_variable` | `variable_index`, `expected_name`, `patch` |
+| `create_user_pou` | `patch` (complete creation request below) |
+| `edit_user_pou_source` | `expected` (complete inspected POU), `source` |
+| `edit_user_pou_variables` | `expected`, `variables` (complete interface and locals) |
+| `delete_user_pou` | `expected` |
 | `edit_text_program` | `program_index`, `expected_object_id`, `expected_language`, `expected_source`, `source` |
 
 Copy expectation fields from the current list. A module's `expected_name` is its
@@ -183,3 +187,44 @@ cc -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_smoke.c \
 
 These checks validate the language boundary and existing library behavior.
 Native XG5000 acceptance remains the documented Open/Check Program/Save As process.
+
+## User-defined functions and function blocks
+
+`XGWX_LIST_USER_POUS` (7) lists definitions in their own index namespace.
+`inspect_json` also includes `user_pous` and `user_pou_creation` (CPU/layout
+creation capability; writing still requires the `write` feature). Both readers
+work with `ffi` alone. Snapshots contain `index`, `object_id`, `name`, `kind`,
+`language`, `source`, `return_type`, `variables`, `comment`, `editable` and
+`reason`. Unknown layouts remain visible and read only.
+
+Create through `xgwx_document_apply_edits_json`:
+
+```json
+{"schema_version":1,"edits":[{"operation":"create_user_pou","patch":{
+  "name":"Scale","kind":"function",
+  "object_id":"f0000000-0000-4000-8000-000000000001",
+  "symbol_id":"f0000000-0000-4000-8000-000000000002",
+  "return_type":"DINT","source":"Scale := Value * 2;",
+  "variables":[{"name":"Value","data_type":"DINT","scope":"input","description":"Input"}],
+  "comment":"Example"
+}}]}
+```
+
+Choose fresh, distinct unused GUIDs. `kind` is `function` or `function_block`;
+FBs use `return_type:null`. Variable scope is `input`, `output`, `in_out` or
+`local`; `return` is generated automatically for functions on creation.
+Interface replacements include that unchanged return declaration. Each variable
+has `name`, `data_type`, `scope`, and optional `description` (default empty).
+Source is the ST body without FUNCTION or VAR wrappers.
+
+For existing definitions, copy the **entire** item into `expected`:
+`{"operation":"edit_user_pou_source","expected":<item>,"source":"..."}`,
+`{"operation":"edit_user_pou_variables","expected":<item>,"variables":[...]}`,
+or `{"operation":"delete_user_pou","expected":<item>}`. These are edit objects
+inside the same schema-versioned transaction envelope. Refresh inspection after
+success; any stale identity/source/interface aborts the whole batch. Unsupported
+layouts, used declarations, references, type and allocation guards remain enforced.
+Source edits invalidate compiler caches. Serialized source is not compiled by C;
+use XG5000 Check Program and Save As. See [scope and native evidence](user-pous.md).
+The [actual C lifecycle test](../tests/ffi_user_pous.c) demonstrates inspection,
+creation, source/interface edits, stale rejection, atomic rollback and reparse.

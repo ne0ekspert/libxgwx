@@ -258,3 +258,8 @@ pub(crate) use internal::*;
 
 #[cfg(test)]
 mod tests;
+
+mod user_pou;
+#[cfg(feature = "write")]
+pub use user_pou::{NewUserPou, UserPouEditor, UserPouHandle};
+pub use user_pou::{UserPou, UserPouKind, UserPouScope, UserPouVariable, UserPouView};

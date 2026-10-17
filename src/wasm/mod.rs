@@ -2579,6 +2579,8 @@ struct WasmDocumentSummary {
     ladder: Vec<WasmLadderProgramSummary>,
     sfc: Vec<SfcProgram>,
     text_programs: Vec<TextProgram>,
+    user_pous: Vec<UserPou>,
+    user_pou_creation: bool,
     program_languages: Vec<&'static str>,
     #[cfg(all(feature = "write", feature = "il"))]
     vendor_il_programs: Vec<crate::VendorIlProgram>,
@@ -2722,6 +2724,8 @@ impl WasmDocumentSummary {
         Self {
             sfc: sfc_programs,
             text_programs,
+            user_pous: doc.user_pou().list(),
+            user_pou_creation: doc.user_pou().can_create(),
             program_languages: doc.program_languages(),
             #[cfg(all(feature = "write", feature = "il"))]
             vendor_il_programs: doc.vendor_il_programs(),
@@ -3160,6 +3164,71 @@ pub fn edit_xgwx_vendor_il_wasm(bytes: &[u8], patch: JsValue) -> Result<Vec<u8>,
     let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.edit_vendor_il(&patch)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Create a native ST user-defined function or function block.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = create_xgwx_user_pou)]
+pub fn create_xgwx_user_pou_wasm(bytes: &[u8], request: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&request)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("POU request is not JSON"))?;
+    let request: NewUserPou =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.user_pou_mut()
+        .create(&request)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.to_verified_bytes()
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+#[cfg(feature = "write")]
+#[derive(serde::Deserialize)]
+#[serde(tag = "operation", rename_all = "camelCase", deny_unknown_fields)]
+enum UserPouBrowserEdit {
+    Source {
+        expected: UserPou,
+        source: String,
+    },
+    Variables {
+        expected: UserPou,
+        variables: Vec<UserPouVariable>,
+    },
+    Delete {
+        expected: UserPou,
+    },
+}
+/// Apply an identity- and snapshot-checked edit to a native user-defined POU.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = edit_xgwx_user_pou)]
+pub fn edit_xgwx_user_pou_wasm(bytes: &[u8], request: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&request)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("POU edit is not JSON"))?;
+    let request: UserPouBrowserEdit =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = XgwxDocument::parse(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let result = match request {
+        UserPouBrowserEdit::Source { expected, source } => doc
+            .user_pou_mut()
+            .get(expected.index, &expected.object_id)
+            .and_then(|mut p| p.set_source(&expected, &source)),
+        UserPouBrowserEdit::Variables {
+            expected,
+            variables,
+        } => doc
+            .user_pou_mut()
+            .get(expected.index, &expected.object_id)
+            .and_then(|mut p| p.set_variables(&expected, &variables)),
+        UserPouBrowserEdit::Delete { expected } => doc
+            .user_pou_mut()
+            .get(expected.index, &expected.object_id)
+            .and_then(|p| p.delete(&expected)),
+    };
+    result.map_err(|e| JsValue::from_str(&e.to_string()))?;
     doc.to_verified_bytes()
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }

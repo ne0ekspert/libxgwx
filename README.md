@@ -943,3 +943,17 @@ word-width types do not implicitly select signedness.
 IEC variable export flags, arrays, structures and special-module addresses are
 not yet writable. See [native EOPCT acceptance evidence](fixtures/networks/README.md)
 for exact fixtures and the live-device boundary.
+
+### User-defined ST functions and function blocks
+
+XGI projects support native user-defined ST functions and stateful function
+blocks through `doc.user_pou()` and `doc.user_pou_mut()`. Create definitions,
+declare scalar parameters and locals, edit their ST bodies, and instantiate
+custom FB types in calling ST programs. Edits check native identities and stale
+snapshots; referenced definitions cannot be deleted or have their interface
+changed. Unknown definition layouts remain read only.
+
+See [the user-POU workflow and native acceptance evidence](docs/user-pous.md)
+for the complete example and current language/type limits. Native XG5000
+Check Program and Save As cover function calls, custom FB instances and all
+19 supported scalar types.

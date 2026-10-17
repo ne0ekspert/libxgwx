@@ -42,6 +42,20 @@ struct Transaction {
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum Edit {
+    CreateUserPou {
+        patch: super::user_pou::NewUserPou,
+    },
+    EditUserPouSource {
+        expected: super::user_pou::UserPou,
+        source: String,
+    },
+    EditUserPouVariables {
+        expected: super::user_pou::UserPou,
+        variables: Vec<super::user_pou::UserPouVariable>,
+    },
+    DeleteUserPou {
+        expected: super::user_pou::UserPou,
+    },
     UpdateModule {
         base: u32,
         slot: u32,
@@ -174,6 +188,34 @@ pub(super) fn apply(doc: &mut XgwxDocument, request: &str) -> Result<()> {
 
 fn apply_one(doc: &mut XgwxDocument, edit: Edit) -> Result<()> {
     match edit {
+        Edit::CreateUserPou { patch } => {
+            doc.user_pou_mut().create(&patch.into()).map_err(operation)
+        }
+        Edit::EditUserPouSource { expected, source } => {
+            let expected: crate::UserPou = expected.into();
+            doc.user_pou_mut()
+                .get(expected.index, &expected.object_id)
+                .and_then(|mut p| p.set_source(&expected, &source))
+                .map_err(operation)
+        }
+        Edit::EditUserPouVariables {
+            expected,
+            variables,
+        } => {
+            let expected: crate::UserPou = expected.into();
+            let variables = variables.into_iter().map(Into::into).collect::<Vec<_>>();
+            doc.user_pou_mut()
+                .get(expected.index, &expected.object_id)
+                .and_then(|mut p| p.set_variables(&expected, &variables))
+                .map_err(operation)
+        }
+        Edit::DeleteUserPou { expected } => {
+            let expected: crate::UserPou = expected.into();
+            doc.user_pou_mut()
+                .get(expected.index, &expected.object_id)
+                .and_then(|p| p.delete(&expected))
+                .map_err(operation)
+        }
         Edit::UpdateModule {
             base,
             slot,

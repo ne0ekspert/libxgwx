@@ -1,5 +1,7 @@
 #![cfg(all(feature = "ffi", not(target_arch = "wasm32")))]
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(feature = "write")]
+use serde_json::json;
 use std::ffi::CStr;
 use std::ptr;
 use xgwx::ffi::*;
@@ -286,4 +288,31 @@ fn program_lifecycle_and_source_edits_follow_stable_identities() {
     );
     assert_eq!(doc.list(XGWX_LIST_PROGRAMS).len(), 1);
     assert_eq!(doc.list(XGWX_LIST_PROGRAMS)[0]["object_id"], first);
+}
+
+#[test]
+fn user_pou_list_is_snake_case_and_available_without_write() {
+    let doc = Document::parse(include_bytes!(
+        "../fixtures/user-pous/native-roundtrip.xgwx"
+    ));
+    let items = doc.list(XGWX_LIST_USER_POUS);
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["kind"], "function");
+    assert_eq!(items[1]["kind"], "function_block");
+    assert!(items.iter().all(|p| p["editable"] == true));
+    assert!(items[0]["object_id"].is_string());
+    assert!(items[0].get("objectId").is_none());
+    assert_eq!(items[0]["return_type"], "DINT");
+    assert!(
+        items[0]["variables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v["data_type"].is_string())
+    );
+    let mut out = XgwxBuffer::default();
+    assert_ok(unsafe { xgwx_document_inspect_json(doc.0, &mut out) });
+    let summary: Value = serde_json::from_slice(&take_buffer(out)).unwrap();
+    assert_eq!(summary["user_pous"], Value::Array(items));
+    assert_eq!(summary["user_pou_creation"], true);
 }

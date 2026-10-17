@@ -1,0 +1,14 @@
+<UserFunction Comment="" Type="2" En="1" Eno="1" ObjectId="1e2879ca-8c6f-4a2b-8570-f3d0cc4e89ea" Completed="0" Editor="4" LibType="5" FuncType="1050" FBType="2050" MaxInput="0" Return="1" Size="64" Index="2147483649" Column="1" UploadProhibit="0" UDFBUseFBOnlineEdit="0" UDFBInstDefineType="-1" UDFBTotalAllocSize="64" UDFBTotalPulseSize="0" FindProgram="1" FindVar="1" Encrytption="">NativeBlock<InputVariables><Variable Type="0" DataType="2097153" Trigger="0" UDTName="" Display="0" InstMemory="0">EN</Variable>
+						</InputVariables>
+						<OutputVariables><Variable Type="2" DataType="1" Trigger="0" UDTName="" Display="0" InstMemory="0">ENO</Variable>
+						</OutputVariables>
+						<UserFunctionBlockVar Version="Ver 2.0" ProgramKind="1" PulseCount="0" EnState="1" EnoState="1" FBSize="64" IncludeLibrary="0" NotUseExternalVar="0" VARUseFBOnlineEdit="0" VARTotalAllocSize="64" VALTotalPulseSize="0" MultiUserRunEdit="0" FBInstRetain="0" SymDocGUID="87568688_9fc3_4ad4_9b62_dd2919552073"><Symbols Count="0"></Symbols>
+							<TempVar Count="0"></TempVar>
+						</UserFunctionBlockVar>
+						<Body>
+							<ST_Program Version="Ver 1.1" StepCount="0"><CodeList CodeCount="0"></CodeList>
+								<Breakpoints></Breakpoints>
+								<Bookmarks></Bookmarks>
+							</ST_Program>
+						</Body>
+					</UserFunction>

@@ -1,0 +1,17 @@
+<UserFunction Comment="" Type="1" En="1" Eno="1" ObjectId="fe4b8da1-42da-4e6d-a54d-a1827edf7380" Completed="0" Editor="4" LibType="5" FuncType="1050" FBType="2050" MaxInput="0" Return="1" Size="64" Index="2147483648" Column="1" UploadProhibit="0" UDFBUseFBOnlineEdit="0" UDFBInstDefineType="-1" UDFBTotalAllocSize="64" UDFBTotalPulseSize="0" FindProgram="1" FindVar="1" Encrytption="">NativeFunction<InputVariables><Variable Type="0" DataType="2097153" Trigger="0" UDTName="" Display="0" InstMemory="0">EN</Variable>
+						</InputVariables>
+						<OutputVariables><Variable Type="2" DataType="1" Trigger="0" UDTName="" Display="0" InstMemory="0">ENO</Variable>
+							<Variable Type="2" DataType="1" Trigger="0" UDTName="" Display="0" InstMemory="0">NativeFunction</Variable>
+						</OutputVariables>
+						<UserFunctionVar Version="Ver 2.0" FunName="NativeFunction" ReturnType="BOOL" EnState="1" EnoState="1" FunSize="64" IncludeLibrary="0" Comment="" VARUseFBOnlineEdit="0" VARTotalAllocSize="64" MultiUserRunEdit="0" SymDocGUID="75762d93_b8f1_4a09_827a_16c1eb6044e9"><Symbols Count="1" Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWY2kctEAACzvgO5RAIBSEAEBCgoqIYcAAAGgAEhqnijQGTT1AN6kDKI00ZBo
+0YT1PUQQgwuQAa9rKTzm/T75GgoSTFtvqxYMnqhQiABPbJiQXEKQ0qz8XckU4UJCNpHL
+RA==</Symbols>
+							<TempVar Count="0"></TempVar>
+						</UserFunctionVar>
+						<Body>
+							<ST_Program Version="Ver 1.1" StepCount="0"><CodeList CodeCount="0"></CodeList>
+								<Breakpoints></Breakpoints>
+								<Bookmarks></Bookmarks>
+							</ST_Program>
+						</Body>
+					</UserFunction>

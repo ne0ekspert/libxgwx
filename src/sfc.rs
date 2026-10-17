@@ -1522,7 +1522,12 @@ impl XgwxDocument {
             let record = if self.xgk_auto_allocation() {
                 declarations::xgk_record(patch)?
             } else {
-                declarations::record(patch)?
+                let custom_fb = self.user_pou().list().iter().any(|p| {
+                    p.kind == Some(crate::UserPouKind::FunctionBlock)
+                        && p.editable
+                        && p.name == patch.data_type
+                });
+                declarations::record_with_custom_fb(patch, custom_fb)?
             };
             let offset = symbols
                 .iter()

@@ -17,6 +17,12 @@ trap 'rm -rf "$task_ffi_bin"' EXIT HUP INT TERM
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_smoke.c \
   "$task_ffi_target/debug/libxgwx.a" -ldl -lpthread -lm -o "$task_ffi_bin/static-smoke"
 "$task_ffi_bin/static-smoke"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_user_pous.c \
+  -L"$task_ffi_target/debug" -lxgwx -Wl,-rpath,"$task_ffi_target/debug" -o "$task_ffi_bin/user-pous"
+"$task_ffi_bin/user-pous"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_user_pous.c \
+  "$task_ffi_target/debug/libxgwx.a" -ldl -lpthread -lm -o "$task_ffi_bin/static-user-pous"
+"$task_ffi_bin/static-user-pous"
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Iinclude examples/c/inspect.c \
   -L"$task_ffi_target/debug" -lxgwx -Wl,-rpath,"$task_ffi_target/debug" -o "$task_ffi_bin/inspect"
 "$task_ffi_bin/inspect" fixtures/empty-projects/new-xgk.xgwx > "$task_ffi_bin/summary.json"

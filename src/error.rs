@@ -236,6 +236,8 @@ pub enum XgwxError {
     BrowserHardwareEdit(String),
     BrowserNetworkEdit(String),
     SfcEdit(String),
+    /// A user-defined function or function-block edit failed validation.
+    UserPouEdit(String),
     TextProgramEdit(String),
     ProjectRename(String),
     /// A selected document edit cannot safely use the current XML/tree state.
@@ -498,6 +500,7 @@ impl fmt::Display for XgwxError {
             Self::ProjectRename(reason) => write!(f, "project rename rejected: {reason}"),
             Self::ProgramCreation(reason) => write!(f, "program creation rejected: {reason}"),
             Self::TextProgramEdit(reason) => write!(f, "text program edit rejected: {reason}"),
+            Self::UserPouEdit(reason) => write!(f, "user-defined POU edit: {reason}"),
             Self::SfcEdit(reason) => write!(f, "SFC edit rejected: {reason}"),
             Self::BrowserNetworkEdit(reason) => write!(f, "network edit rejected: {reason}"),
             Self::RewriteVerificationFailed => write!(

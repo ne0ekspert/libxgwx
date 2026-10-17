@@ -1,0 +1,41 @@
+<UserFunctions>
+					<UserFunction Comment="" Type="1" En="1" Eno="1" ObjectId="fe4b8da1-42da-4e6d-a54d-a1827edf7380" Completed="1" Editor="4" LibType="5" FuncType="1050" FBType="2050" MaxInput="0" Return="1" Size="192" Index="2147483648" Column="1" UploadProhibit="0" UDFBUseFBOnlineEdit="0" UDFBInstDefineType="-1" UDFBTotalAllocSize="192" UDFBTotalPulseSize="0" FindProgram="1" FindVar="1" Encrytption="">NativeFunction<InputVariables><Variable Type="0" DataType="2097153" Trigger="0" UDTName="" Display="0" InstMemory="0">EN</Variable>
+							<Variable Type="0" DataType="2097280" Trigger="0" UDTName="" Display="0" InstMemory="0">InputValue</Variable>
+							<Variable Type="1" DataType="128" Trigger="0" UDTName="" Display="0" InstMemory="0">SharedValue</Variable>
+						</InputVariables>
+						<OutputVariables><Variable Type="2" DataType="1" Trigger="0" UDTName="" Display="0" InstMemory="0">ENO</Variable>
+							<Variable Type="2" DataType="1" Trigger="0" UDTName="" Display="0" InstMemory="0">NativeFunction</Variable>
+							<Variable Type="2" DataType="128" Trigger="0" UDTName="" Display="0" InstMemory="0">OutputValue</Variable>
+						</OutputVariables>
+						<UserFunctionVar Version="Ver 2.0" FunName="NativeFunction" ReturnType="BOOL" EnState="1" EnoState="1" FunSize="192" IncludeLibrary="0" Comment="" VARUseFBOnlineEdit="0" VARTotalAllocSize="192" MultiUserRunEdit="0" SymDocGUID="75762d93_b8f1_4a09_827a_16c1eb6044e9"><Symbols Count="4" Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWQc/dFUAAKh/wP7ZCIBAAFIQQSGLCm5l1wBAAAABoACVBqTRk0AAGgABiAkU
+RNPUAA0AGjIZNHQnGbLJ854UBPKUQm13TTIF4bGKtpcqQpDqBICQDYgPKG+ABtCcaSIWRjEQ
+Doiz8qfOcwUUqyUsLZZON4fg3BFRBoqgEGDSYMQFdttibqCdWAwSKAReCLiLYH5XwD+LuSKc
+KEgDn7oqgA==</Symbols>
+							<TempVar Count="0"></TempVar>
+						</UserFunctionVar>
+						<Body>
+							<ST_Program Version="Ver 1.1" StepCount="0"><CodeList CodeCount="0"></CodeList>
+								<Breakpoints></Breakpoints>
+								<Bookmarks></Bookmarks>
+							</ST_Program>
+						</Body>
+					</UserFunction>
+					<UserFunction Comment="" Type="2" En="1" Eno="1" ObjectId="1e2879ca-8c6f-4a2b-8570-f3d0cc4e89ea" Completed="1" Editor="4" LibType="5" FuncType="1050" FBType="2050" MaxInput="0" Return="1" Size="128" Index="2147483649" Column="1" UploadProhibit="0" UDFBUseFBOnlineEdit="0" UDFBInstDefineType="-1" UDFBTotalAllocSize="128" UDFBTotalPulseSize="0" FindProgram="1" FindVar="1" Encrytption="">NativeBlock<InputVariables><Variable Type="0" DataType="2097153" Trigger="0" UDTName="" Display="0" InstMemory="0">EN</Variable>
+							<Variable Type="0" DataType="2097280" Trigger="0" UDTName="" Display="0" InstMemory="0">InputValue</Variable>
+						</InputVariables>
+						<OutputVariables><Variable Type="2" DataType="1" Trigger="0" UDTName="" Display="0" InstMemory="0">ENO</Variable>
+							<Variable Type="2" DataType="128" Trigger="0" UDTName="" Display="0" InstMemory="0">OutputValue</Variable>
+						</OutputVariables>
+						<UserFunctionBlockVar Version="Ver 2.0" ProgramKind="1" PulseCount="0" EnState="1" EnoState="1" FBSize="128" IncludeLibrary="0" NotUseExternalVar="0" VARUseFBOnlineEdit="0" VARTotalAllocSize="128" VALTotalPulseSize="0" MultiUserRunEdit="0" FBInstRetain="0" SymDocGUID="87568688_9fc3_4ad4_9b62_dd2919552073"><Symbols Count="2" Compressed="1" dt:dt="bin.base64" xmlns:dt="urn:schemas-microsoft-com:datatypes">QlpoOTFBWSZTWc/X9yEAAFx/gO7YCIBAAFIQUCCDCiIFRgAAAaAAaCVTZRoDQeoDQ0AVU9Um
+gDQABtGo8S0UnoQXFCYiOAZhjcUzHbEjU4PDojJ99KslbKZo3utyIQiB7iY1+L2KUoagsGTQ
+Z2uH8XckU4UJDP1/chA=</Symbols>
+							<TempVar Count="0"></TempVar>
+						</UserFunctionBlockVar>
+						<Body>
+							<ST_Program Version="Ver 1.1" StepCount="0"><CodeList CodeCount="0"></CodeList>
+								<Breakpoints></Breakpoints>
+								<Bookmarks></Bookmarks>
+							</ST_Program>
+						</Body>
+					</UserFunction>
+				</UserFunctions>
