@@ -62,6 +62,12 @@ pub use services_api::{
     HighSpeedLinkBlockRef, HighSpeedLinkRef, HighSpeedLinkView, SafetyRef, SafetyView, TrendRef,
     TrendView,
 };
+mod basic_parameters;
+pub use basic_parameters::{
+    BasicParameterChoice, BasicParameterControl, BasicParameterField, BasicTimingField,
+};
+#[cfg(feature = "write")]
+pub use basic_parameters::{ParameterCollectionEditor, ParameterEditor};
 mod parameter_api;
 pub use parameter_api::{ParameterData, ParameterKind, ParameterRef, ParameterView, PidView};
 mod variable_api;

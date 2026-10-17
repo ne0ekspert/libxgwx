@@ -28,6 +28,9 @@ int main(int argc, char **argv) {
     xgwx_buffer list = {0}, catalog = {0};
     assert(xgwx_document_list_json(doc, XGWX_LIST_PROGRAMS, &list) == XGWX_OK && list.len > 0);
     xgwx_buffer_free(&list);
+    assert(xgwx_document_inspect_section_json(doc, BYTES("{\"section\":\"parameters\"}"), &list) == XGWX_OK);
+    assert(list.len > 0);
+    xgwx_buffer_free(&list);
     if (EXPECTED_FEATURES & XGWX_FEATURE_WRITE) {
         assert(xgwx_document_serialize(doc, &serialized) == XGWX_OK);
         assert(xgwx_project_create(BYTES("XGI-CPUE"), BYTES("ST"), &created) == XGWX_OK);

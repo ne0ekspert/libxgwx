@@ -11,6 +11,7 @@ pub const SECTIONS: &[&str] = &[
     "program",
     "symbols",
     "hardware",
+    "parameters",
     "networks",
     "networks.opcua_tags.<configuration_index>",
     "sfc",
@@ -103,6 +104,24 @@ fn program_summary(index: usize, program: &ProgramSummary) -> Value {
     result["program_index"] = json!(index);
     result["attributes"] = attrs(&program.attributes);
     result
+}
+
+fn parameters(doc: &XgwxDocument, offset: usize, limit: usize) -> Value {
+    json!({"parameters": page(&doc.parameter().list(), offset, limit, |record| {
+        let summary = record.summary();
+        let editable = record.basic_operation_fields().into_iter().map(|field| {
+            let control = match field.control {
+                BasicParameterControl::Number { minimum, maximum } => json!({"kind":"number", "minimum":minimum, "maximum":maximum}),
+                BasicParameterControl::Checkbox { checked, unchecked } => json!({"kind":"checkbox", "checked":checked, "unchecked":unchecked}),
+                BasicParameterControl::Select { choices } => json!({"kind":"select", "choices":choices.into_iter().map(|c| json!({"value":c.value,"label":c.label})).collect::<Vec<_>>()}),
+            };
+            json!({"name":field.name,"label":field.label,"value":field.value,"control":control})
+        }).collect::<Vec<_>>();
+        json!({"parameter_index":record.index(), "configuration_index":record.configuration_index(),
+            "parameter_type":summary.parameter_type, "attributes":attrs(&summary.attributes),
+            "sections":summary.sections.iter().map(|section| json!({"name":section.name,"text":section.text,"child_count":section.child_count,"attributes":attrs(&section.attributes)})).collect::<Vec<_>>(),
+            "basic_operation_fields":editable})
+    })})
 }
 
 fn configuration(value: &ConfigurationSummary) -> Value {
@@ -780,6 +799,7 @@ pub fn inspect(
         }),
         "symbols" => symbols(doc, program_index, offset, limit),
         "hardware" => hardware(doc, offset, limit),
+        "parameters" => parameters(doc, offset, limit),
         section if section.starts_with("networks.opcua_tags.") => {
             let index = section
                 .strip_prefix("networks.opcua_tags.")
@@ -792,7 +812,7 @@ pub fn inspect(
             json!({"configuration_index":index,"tags":page(&tags,offset,limit,|tag|fields!(tag;name,data_type,address_area,address_number,comment))})
         }
         "networks" => networks(doc, offset, limit),
-        #[cfg(feature = "il")]
+        #[cfg(all(feature = "write", feature = "il"))]
         "vendor_il" => {
             let programs = doc
                 .program()

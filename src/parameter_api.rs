@@ -1,5 +1,5 @@
 #![deny(missing_docs)]
-//! Read-only parameter records with explicit PLC ownership and typed decoding.
+//! Parameter records with explicit PLC ownership and typed decoding.
 use crate::{
     ConfigurationRef, HscParameterSummary, ParameterSummary, PidCalParameterSummary,
     PidTuneParameterSummary, PositionParameterSummary, XgwxDocument, XgwxError, XmlElement,

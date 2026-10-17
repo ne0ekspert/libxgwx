@@ -299,3 +299,7 @@ Passwords retain the native encoding and layout limits documented in
 (version 2 and 3), including 138/142-byte protection headers, are supported.
 `tests/ffi_passwords.c` is a compiled C lifecycle example. Serialize and persist
 its returned bytes through the caller's normal file handling.
+
+Basic-parameter inspection and editing are available through semantic inspection
+section `parameters` and the `edit_basic_operation` JSON batch operation. See
+[basic parameter schemas and native encodings](c-api-operations.md#basic-parameters).

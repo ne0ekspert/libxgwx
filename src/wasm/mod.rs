@@ -2520,7 +2520,7 @@ impl WasmDocumentSummary {
         let bases = doc.bases();
         let modules = doc.module_summaries();
         let programs = doc.programs();
-        let parameters = doc.parameter().summaries();
+        let parameters = doc.parameter().list();
         let safety_comm = doc.safety().first().map(|record| record.summary());
         let position_parameters = doc.parameter().position();
         let variable_summaries = match doc.variables() {

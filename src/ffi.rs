@@ -723,7 +723,7 @@ pub unsafe extern "C" fn xgwx_document_inspect_section_json(
         }
         let request: Request = serde_json::from_str(text(request, request_len)?)
             .map_err(|e| invalid(&e.to_string()))?;
-        if request.section == "vendor_il" && !cfg!(feature = "il")
+        if request.section == "vendor_il" && !cfg!(all(feature = "write", feature = "il"))
             || matches!(
                 request.section.as_str(),
                 "catalog.modules" | "io_variables" | "program.edit_sites"

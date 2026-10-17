@@ -1,0 +1,108 @@
+{
+  "date": "2026-10-17",
+  "nativeApplication": "XG5000 4.82.1.0",
+  "offline": true,
+  "cases": [
+    {
+      "case": "xgk-on",
+      "model": "XGK-CPUSN",
+      "generated": "xgk-on-generated.xgwx",
+      "nativeResaved": "xgk-on-resaved.xgwx",
+      "errors": 0,
+      "warnings": 0,
+      "allBasicAttributesPreserved": true,
+      "decodedProgramDataPreserved": true,
+      "generatedSha256": "a32f76f1092bd651a772aa5bd18222853dc17fe3ad3e8c64040569f5bcaf149d",
+      "nativeResavedSha256": "458872591df51c6c0938cb4d81363166a1d20c37a0b67430224a71ef5563bbf8"
+    },
+    {
+      "case": "xgk-off",
+      "model": "XGK-CPUSN",
+      "generated": "xgk-off-generated.xgwx",
+      "nativeResaved": "xgk-off-resaved.xgwx",
+      "errors": 0,
+      "warnings": 0,
+      "allBasicAttributesPreserved": true,
+      "decodedProgramDataPreserved": true,
+      "generatedSha256": "8b231f3892766d311c484e3b8f5da5a42165c872689407f7713f3f1b4a290b40",
+      "nativeResavedSha256": "43f41adc9f5c4981b5dfcf6f72dda5e7c9b020670a28c3db3e3967034afbb814"
+    },
+    {
+      "case": "xgk-overall",
+      "model": "XGK-CPUSN",
+      "generated": "xgk-overall-generated.xgwx",
+      "nativeResaved": "xgk-overall-resaved.xgwx",
+      "errors": 0,
+      "warnings": 0,
+      "allBasicAttributesPreserved": true,
+      "decodedProgramDataPreserved": true,
+      "generatedSha256": "ac70f1b1eabf87d0f9c5ce1884457c7b7eb0ee6332006f9756024ff58a200387",
+      "nativeResavedSha256": "52b49429c3470227899a4a78d307f8b9f80e42670f320f6aceb1ec61267608ec"
+    },
+    {
+      "case": "xgi-on",
+      "model": "XGI-CPUUN",
+      "generated": "xgi-on-generated.xgwx",
+      "nativeResaved": "xgi-on-resaved.xgwx",
+      "errors": 0,
+      "warnings": 0,
+      "allBasicAttributesPreserved": true,
+      "decodedProgramDataPreserved": true,
+      "generatedSha256": "8dd63c8c3f48c647b3bfd8ee1b355937c3516e946153c202aea9198bf325eab4",
+      "nativeResavedSha256": "7e5941caf0b780dd5404a31e69ec0fd5912b8d13bfd10079810b470d030dca83"
+    },
+    {
+      "case": "xgi-off",
+      "model": "XGI-CPUUN",
+      "generated": "xgi-off-generated.xgwx",
+      "nativeResaved": "xgi-off-resaved.xgwx",
+      "errors": 0,
+      "warnings": 0,
+      "allBasicAttributesPreserved": true,
+      "decodedProgramDataPreserved": true,
+      "generatedSha256": "702add907d18b43b0e81bb22820f884e728f3b42dc6410bdb89d1f11651fb449",
+      "nativeResavedSha256": "71021e04846f90da2ab33886317cd0a641bf2eb9efb713eb4536c56ead486f7c"
+    },
+    {
+      "case": "xgi-overall",
+      "model": "XGI-CPUUN",
+      "generated": "xgi-overall-generated.xgwx",
+      "nativeResaved": "xgi-overall-resaved.xgwx",
+      "errors": 0,
+      "warnings": 0,
+      "allBasicAttributesPreserved": true,
+      "decodedProgramDataPreserved": true,
+      "generatedSha256": "30ccba0205bd6fb76bbe75a79af97e4f4037b061a83bc6173103d086b41dca2e",
+      "nativeResavedSha256": "a9dd785ffc502be1470210ba4a6a364575b2e7dc3a0d4526a8c40e5709f28877"
+    }
+  ],
+  "nativeEditor": {
+    "application": "VS Code 1.139.1 extension development host",
+    "navigation": "XG5000 Explorer Parameters row",
+    "apply": true,
+    "undo": true,
+    "redo": true,
+    "save": true,
+    "reopen": true,
+    "watchdogMs": 650,
+    "input": "xgk-on-generated.xgwx",
+    "saved": "native-vscode-saved.xgwx",
+    "savedSha256": "c2a24742355d031ed41162a55a67ec704853e0ffa4e33a17e8530bbdf5054f1f",
+    "onlySelectedXmlAttributeChanged": true
+  },
+  "checks": {
+    "rustTestsPassed": 409,
+    "rustExistingFixtureDependentIgnored": 135,
+    "rustDocTestsPassed": 15,
+    "extensionTestFilesPassed": 51,
+    "browserModels": [
+      "XGK-CPUSN",
+      "XGI-CPUUN"
+    ],
+    "browserViewports": [
+      "1200x900",
+      "720x900"
+    ],
+    "browserErrors": 0
+  }
+}

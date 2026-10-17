@@ -617,3 +617,8 @@ required-features = ["write"]
 [[bin]]
 name = "password_acceptance"
 path = "password_acceptance.rs"
+
+[[bin]]
+name = "basic_parameter_acceptance"
+path = "basic_parameter_acceptance.rs"
+required-features = ["write"]

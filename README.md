@@ -967,3 +967,49 @@ program's `set_password` set, change, or remove native passwords. Protected
 program edits retain their native save layout. Program protection supports
 captured XGK LD and XGI LD/ST/IL/SFC layouts. See [password support](docs/passwords.md)
 for usage, native fixtures, Korean password encoding, and remaining scope.
+
+### Basic operation parameter edits
+
+The XG5000 V3.1 Korean manual (PDF pages 353–354, section 9.1) describes
+the basic-operation tab. `ParameterRef::basic_operation_fields()` exposes
+verified controls for native version-100, size-400 `XGTBasicParam` (XGK)
+and `XGIBasicParam` owned by an XGI configuration. Each field includes its
+label, exact stored value, and legal numeric, checkbox, or dropdown values.
+
+With the `write` feature, select a document-wide parameter index and apply
+an atomic batch of `(field name, expected stored value, replacement u32)`:
+
+```rust
+# fn edit(doc: &mut xgwx::XgwxDocument) -> Result<(), xgwx::XgwxError> {
+let parameter = doc.parameter().list().into_iter()
+    .find(|p| !p.basic_operation_fields().is_empty()).unwrap();
+let index = parameter.index();
+let fields = parameter.basic_operation_fields();
+let filter = fields.iter().find(|f| f.name == "STANDARD_INPUT_FILTER_TIME").unwrap();
+doc.parameter_mut().get(index)?.edit_basic_operation(&[
+    (filter.name.as_str(), filter.value.as_str(), 5),
+])?;
+# Ok(()) }
+```
+
+Supported controls cover fixed-cycle mode/duration, the visible watchdog,
+input filter, output behavior, SOE history, Reset/D.CLR blocking, XGK fixed
+I/O allocation/non-latched-memory clearing, and XGI restart mode. Enabling a full
+switch block also requires its Overall block to be enabled; Overall-only
+blocking is allowed. Debugging
+output has an inverse native encoding; consumers must use the supplied
+control values rather than treating zero as false. XGI's visible watchdog
+edits only `SCAN_WD_TIME_0`, preserving the other three slots.
+
+Unknown layouts and unknown choice/switch encodings stay read-only. Other
+basic-parameter tabs and reserved fields are preserved. Native captures and
+acceptance provenance are under `fixtures/basic-parameters/`. The earlier
+`basic_timing_fields()` / `edit_basic_timing()` API remains available for
+its original XGK timing-only scope.
+
+The C ABI exposes the same guarded edits through `xgwx_document_apply_edits_json`
+with `edit_basic_operation` (or legacy `edit_basic_timing`). Read semantic
+inspection section `parameters` for indices and native control constraints. See
+[the C schema](docs/c-api-operations.md#basic-parameters). The MCP server exposes
+the corresponding typed `xgwx_edit_basic_operation` and `xgwx_edit_basic_timing`
+tools with revision checks, dry runs and backup saves.

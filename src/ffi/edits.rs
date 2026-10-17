@@ -47,8 +47,24 @@ struct Transaction {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BasicParameterChange {
+    name: String,
+    expected: String,
+    replacement: u32,
+}
+
+#[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum Edit {
+    EditBasicOperation {
+        parameter_index: usize,
+        changes: Vec<BasicParameterChange>,
+    },
+    EditBasicTiming {
+        parameter_index: usize,
+        changes: Vec<BasicParameterChange>,
+    },
     InsertIecLdFunction {
         program_index: usize,
         expected_object_id: String,
@@ -234,6 +250,32 @@ pub(super) fn apply(doc: &mut XgwxDocument, request: &str) -> Result<()> {
 
 fn apply_one(doc: &mut XgwxDocument, edit: Edit) -> Result<()> {
     match edit {
+        Edit::EditBasicOperation {
+            parameter_index,
+            changes,
+        } => {
+            let changes: Vec<_> = changes
+                .iter()
+                .map(|c| (c.name.as_str(), c.expected.as_str(), c.replacement))
+                .collect();
+            doc.parameter_mut()
+                .get(parameter_index)
+                .and_then(|mut p| p.edit_basic_operation(&changes))
+                .map_err(operation)
+        }
+        Edit::EditBasicTiming {
+            parameter_index,
+            changes,
+        } => {
+            let changes: Vec<_> = changes
+                .iter()
+                .map(|c| (c.name.as_str(), c.expected.as_str(), c.replacement))
+                .collect();
+            doc.parameter_mut()
+                .get(parameter_index)
+                .and_then(|mut p| p.edit_basic_timing(&changes))
+                .map_err(operation)
+        }
         Edit::InsertIecLdFunction {
             program_index,
             expected_object_id,

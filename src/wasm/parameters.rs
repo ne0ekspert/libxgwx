@@ -20,14 +20,23 @@ impl From<XmlAttribute> for WasmAttribute {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmParameterSummary {
+    pub(super) parameter_index: usize,
+    pub(super) configuration_index: Option<usize>,
+    pub(super) basic_timing_fields: Vec<BasicTimingField>,
+    pub(super) basic_operation_fields: Vec<BasicParameterField>,
     pub(super) parameter_type: Option<String>,
     pub(super) attributes: Vec<WasmAttribute>,
     pub(super) sections: Vec<WasmParameterSectionSummary>,
 }
 
 impl WasmParameterSummary {
-    pub(super) fn from_parameter(parameter: ParameterSummary) -> Self {
+    pub(super) fn from_parameter(record: ParameterRef<'_>) -> Self {
+        let parameter = record.summary();
         Self {
+            parameter_index: record.index(),
+            configuration_index: record.configuration_index(),
+            basic_timing_fields: record.basic_timing_fields(),
+            basic_operation_fields: record.basic_operation_fields(),
             parameter_type: parameter.parameter_type,
             attributes: parameter
                 .attributes
@@ -512,4 +521,64 @@ fn format_pid_p_address(value: u32) -> String {
     let high = value / 16;
     let low = value % 16;
     format!("P{high:04}{low:X}")
+}
+
+/// Apply an atomic, stale-checked basic timing patch to a selected parameter.
+#[cfg(feature = "write")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = edit_xgwx_basic_timing)]
+pub fn edit_xgwx_basic_timing(
+    bytes: &[u8],
+    index: usize,
+    changes: wasm_bindgen::JsValue,
+) -> Result<Vec<u8>, wasm_bindgen::JsValue> {
+    basic_operation_edit(bytes, index, changes, true)
+}
+
+/// Edit captured native basic-operation controls in one stale-checked batch.
+#[cfg(feature = "write")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = edit_xgwx_basic_parameters)]
+pub fn edit_xgwx_basic_parameters(
+    bytes: &[u8],
+    index: usize,
+    changes: wasm_bindgen::JsValue,
+) -> Result<Vec<u8>, wasm_bindgen::JsValue> {
+    basic_operation_edit(bytes, index, changes, false)
+}
+#[cfg(feature = "write")]
+fn basic_operation_edit(
+    bytes: &[u8],
+    index: usize,
+    changes: wasm_bindgen::JsValue,
+    timing_only: bool,
+) -> Result<Vec<u8>, wasm_bindgen::JsValue> {
+    use wasm_bindgen::JsValue;
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Change {
+        name: String,
+        expected: String,
+        replacement: u32,
+    }
+    let json = js_sys::JSON::stringify(&changes)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("invalid timing patch"))?;
+    let changes: Vec<Change> =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let borrowed = changes
+        .iter()
+        .map(|c| (c.name.as_str(), c.expected.as_str(), c.replacement))
+        .collect::<Vec<_>>();
+    let mut doc =
+        super::parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.parameter_mut()
+        .get(index)
+        .and_then(|mut p| {
+            if timing_only {
+                p.edit_basic_timing(&borrowed)
+            } else {
+                p.edit_basic_operation(&borrowed)
+            }
+        })
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    super::serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
 }

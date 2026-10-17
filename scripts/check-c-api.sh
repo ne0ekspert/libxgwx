@@ -23,6 +23,12 @@ trap 'rm -rf "$task_ffi_bin"' EXIT HUP INT TERM
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_user_pous.c \
   "$task_ffi_target/debug/libxgwx.a" -ldl -lpthread -lm -o "$task_ffi_bin/static-user-pous"
 "$task_ffi_bin/static-user-pous"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_basic_parameters.c \
+  -L"$task_ffi_target/debug" -lxgwx -Wl,-rpath,"$task_ffi_target/debug" -o "$task_ffi_bin/basic-parameters"
+"$task_ffi_bin/basic-parameters"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Iinclude tests/ffi_basic_parameters.c \
+  "$task_ffi_target/debug/libxgwx.a" -ldl -lpthread -lm -o "$task_ffi_bin/static-basic-parameters"
+"$task_ffi_bin/static-basic-parameters"
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Iinclude examples/c/inspect.c \
   -L"$task_ffi_target/debug" -lxgwx -Wl,-rpath,"$task_ffi_target/debug" -o "$task_ffi_bin/inspect"
 "$task_ffi_bin/inspect" fixtures/empty-projects/new-xgk.xgwx > "$task_ffi_bin/summary.json"

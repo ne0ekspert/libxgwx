@@ -80,7 +80,9 @@ void xgwx_buffer_free(xgwx_buffer *buffer);
 xgwx_status xgwx_document_inspect_json(const xgwx_document *doc, xgwx_buffer *out);
 /* Semantic inspection: {"section":"overview","program_index":0,"offset":0,"limit":100}.
  * program_index is optional. Overview lists all sections. Result uses schema_version=1.
- * Pagination applies independently to each list; collect all pages for edit snapshots. */
+ * Pagination applies independently to each list; collect all pages for edit snapshots.
+ * Section "parameters" returns document-wide parameter_index, configuration_index,
+ * raw metadata and basic_operation_fields (exact value and native control constraints). */
 xgwx_status xgwx_document_inspect_section_json(const xgwx_document *doc,
     const uint8_t *request, size_t request_len, xgwx_buffer *out);
 /* Full decompressed XML in UTF-8. */
@@ -97,6 +99,9 @@ xgwx_status xgwx_document_module_options_json(const xgwx_document *doc,
                                             xgwx_buffer *out);
 /* Atomic batch: {"schema_version":1,"edits":[{"operation":..., ...}]}.
  * UTF-8 JSON, strict snake_case keys. See docs/c-api.md for operation schemas.
+ * edit_basic_operation and legacy XGK-only edit_basic_timing take parameter_index
+ * and changes:[{name,expected,replacement}]. expected is the exact stored string;
+ * replacement is a native u32 from the inspected control constraints.
  * All guards and final serialization must succeed before any change is committed. */
 xgwx_status xgwx_document_apply_edits_json(xgwx_document *doc,
                                          const uint8_t *json, size_t len);

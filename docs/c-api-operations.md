@@ -8,6 +8,8 @@ Read `programs` with `xgwx_document_inspect_section_json` to capture `object_id`
 
 | Operation | Fields |
 | --- | --- |
+| `edit_basic_operation` | `parameter_index: usize`, `changes: Vec<BasicParameterChange>` |
+| `edit_basic_timing` | Same fields; legacy XGK timing subset only |
 | `edit_ld_label` | `program_index: usize`, `expected_object_id: String`, `raw_y: u32`, `expected: Option<String>`, `replacement: Option<String>` |
 | `edit_opcua_settings` | `base: u32`, `slot: u32`, `changes: Vec<OpcUaFieldEdit>` |
 | `edit_opcua_tag` | `configuration_index: usize`, `expected_tags: Vec<OpcUaTag>`, `index: Option<usize>`, `tag: Option<OpcUaTag>` |
@@ -156,3 +158,29 @@ Read `programs` with `xgwx_document_inspect_section_json` to capture `object_id`
 | `SfcDeclaration` | `dimensions: Vec<SfcArrayBound>`, `initial_value: String`, `retain: bool` |
 
 SFC `action_qualifier`, `action_time`, `action_code`, `transition_code`, `position`, `branch_end`, and `declaration` default to null; `dimensions` defaults to `[]`, `initial_value` to `""`, `retain` and `update` to false. Transport snapshots from `sfc`, `sfc.variables`, `sfc.block.<index>`, and `text.variables` can be passed directly into the matching expected lists. Collect every page first. Arrays, advanced types, unsupported CPU families, and layouts remain subject to the native writer limits.
+
+## Basic parameters
+
+Read `xgwx_document_inspect_section_json` with `{"section":"parameters"}`.
+The result's `data.parameters` is paginated. Each item retains document-wide
+`parameter_index`, owning `configuration_index` (nullable), raw attributes/sections,
+and `basic_operation_fields`. Unsupported layouts have an empty editable list.
+Each field contains `name`, exact stored string `value`, `label`, and `control`:
+`number` has inclusive `minimum`/`maximum`; `checkbox` has native `checked`/`unchecked`
+values; `select` has `choices` containing integer `value` and `label`.
+
+`BasicParameterChange` is a strict object with `name: String`, `expected: String`,
+and `replacement: u32`. For example, after inspecting a current watchdog of 1000:
+
+```json
+{"schema_version":1,"edits":[{"operation":"edit_basic_operation","parameter_index":0,"changes":[{"name":"SCAN_WD_TIME","expected":"1000","replacement":650}]}]}
+```
+
+The full writer supports the native-validated XGK/XGI layouts. XGI's visible
+watchdog is `SCAN_WD_TIME_0`; hidden slots remain intact. Checkbox encodings must
+come from inspection: debugging output uses checked `0`, unchecked `43536`.
+Full reset/D.CLR blocking requires the matching Overall flag in the resulting
+state; send coupled changes in one operation. Overall-only blocking is supported.
+Unknown fields/layouts, stale values, duplicates, invalid choices and ranges are
+rejected atomically. `edit_basic_timing` retains the legacy XGK-only timing subset.
+Read-only `ffi` builds can inspect; editing requires `write`.
