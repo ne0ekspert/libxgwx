@@ -2,9 +2,11 @@ use crate::{XgwxDocument, XmlElement};
 use std::collections::BTreeMap;
 mod branches;
 mod declarations;
+mod limits;
 #[cfg(feature = "write")]
 pub(crate) use declarations::literal as valid_primitive_literal;
 pub use declarations::{SfcArrayBound, SfcDeclaration};
+pub(crate) use limits::validate_source_expansion;
 
 /// Decoded native SFC charts and declarations for one document program.
 /// This is an owned inspection snapshot; edit the document through its selected program handle.
@@ -1114,7 +1116,7 @@ impl XgwxDocument {
 }
 
 // Native ST CodeList contains exactly CodeCount UTF-16 units, compressed with bzip2.
-pub(crate) fn read_st_source(block: &XmlElement) -> Option<String> {
+fn st_code(block: &XmlElement) -> Option<(&XmlElement, usize)> {
     let st = block.children.iter().find(|n| n.name == "ST_Program")?;
     if st.attribute("Version") != Some("Ver 1.1")
         || st.attributes.len() != 2
@@ -1147,6 +1149,11 @@ pub(crate) fn read_st_source(block: &XmlElement) -> Option<String> {
     if count > 65536 {
         return None;
     }
+    Some((code, count))
+}
+
+pub(crate) fn read_st_source(block: &XmlElement) -> Option<String> {
+    let (code, count) = st_code(block)?;
     let raw = if code.text.trim().is_empty() {
         Vec::new()
     } else {
@@ -1164,6 +1171,61 @@ pub(crate) fn read_st_source(block: &XmlElement) -> Option<String> {
     )
     .ok()
 }
+fn st_source_kind(block: &XmlElement) -> Option<u32> {
+    let kind = number(block, "LanguageType")?;
+    if !matches!(kind, 1 | 2)
+        || number(block, "Language") != Some(4)
+        || block.attribute("MainBlock") != Some("0")
+        || block.attribute("Comment") != Some("")
+        || block.attributes.len() != 5
+        || block.children.len() != if kind == 1 { 3 } else { 2 }
+        || block.children.iter().any(|n| {
+            !["SFC_ProgramData", "SFC_ProgramDataAction", "ST_Program"].contains(&n.name.as_str())
+        })
+    {
+        return None;
+    }
+    if let Some(action) = block
+        .children
+        .iter()
+        .find(|n| n.name == "SFC_ProgramDataAction")
+    {
+        if kind != 1
+            || action.attributes.len() != 1
+            || action.attribute("ActionPostScan") != Some("0")
+            || !action.children.is_empty()
+            || !action.text.trim().is_empty()
+        {
+            return None;
+        }
+    }
+    let cache = block
+        .children
+        .iter()
+        .find(|n| n.name == "SFC_ProgramData")?;
+    if !cache.children.is_empty()
+        || !cache.text.trim().is_empty()
+        || cache.attributes.len() != 9
+        || cache.attributes.iter().any(|a| {
+            ![
+                "UploadProgramSize",
+                "DocRungTableOffset",
+                "DocRungTableSize",
+                "PreDocStepCount",
+                "PostDocStepCount",
+                "Variable",
+                "InitVariable",
+                "NFE",
+                "NFE1",
+            ]
+            .contains(&a.name.as_str())
+        })
+    {
+        return None;
+    }
+    Some(kind)
+}
+
 fn st_sources(list: &XmlElement) -> Option<BTreeMap<String, (u32, String)>> {
     let mut result = BTreeMap::new();
     let mut main_count = 0;
@@ -1172,58 +1234,7 @@ fn st_sources(list: &XmlElement) -> Option<BTreeMap<String, (u32, String)>> {
             main_count += 1;
             continue;
         }
-        let kind = number(block, "LanguageType")?;
-        if !matches!(kind, 1 | 2)
-            || number(block, "Language") != Some(4)
-            || block.attribute("MainBlock") != Some("0")
-            || block.attribute("Comment") != Some("")
-            || block.attributes.len() != 5
-            || block.children.len() != if kind == 1 { 3 } else { 2 }
-            || block.children.iter().any(|n| {
-                !["SFC_ProgramData", "SFC_ProgramDataAction", "ST_Program"]
-                    .contains(&n.name.as_str())
-            })
-        {
-            return None;
-        }
-        if let Some(action) = block
-            .children
-            .iter()
-            .find(|n| n.name == "SFC_ProgramDataAction")
-        {
-            if kind != 1
-                || action.attributes.len() != 1
-                || action.attribute("ActionPostScan") != Some("0")
-                || !action.children.is_empty()
-                || !action.text.trim().is_empty()
-            {
-                return None;
-            }
-        }
-        let cache = block
-            .children
-            .iter()
-            .find(|n| n.name == "SFC_ProgramData")?;
-        if !cache.children.is_empty()
-            || !cache.text.trim().is_empty()
-            || cache.attributes.len() != 9
-            || cache.attributes.iter().any(|a| {
-                ![
-                    "UploadProgramSize",
-                    "DocRungTableOffset",
-                    "DocRungTableSize",
-                    "PreDocStepCount",
-                    "PostDocStepCount",
-                    "Variable",
-                    "InitVariable",
-                    "NFE",
-                    "NFE1",
-                ]
-                .contains(&a.name.as_str())
-            })
-        {
-            return None;
-        }
+        let kind = st_source_kind(block)?;
         let name = block.attribute("PragramName")?.to_string();
         if result
             .insert(name, (kind, read_st_source(block)?))

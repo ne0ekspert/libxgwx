@@ -12,6 +12,18 @@ Unknown binary sections are preserved so callers can inspect them later.
 
 ## Known limitations
 
+### SFC source expansion limits
+
+Parsing and XML replacement reject excessive SFC source expansion with
+`XgwxError::ResourceLimitExceeded` before decompressing ST sources or cloning
+them into rows. The document budget is 16 MiB, conservatively estimated at three
+UTF-8 bytes per declared UTF-16 unit, for decoded definitions plus every resolved
+action/transition reference. Repeated sources, branch actions, unreferenced
+definitions, and nested program snapshots count toward the same budget.
+Preflight and repeated-list traversal are limited to 4,000,000 estimated node
+visits. Accepted charts retain their complete sources; over-budget sources are
+never truncated.
+
 ### Typed module inspection resource limits
 
 Parsing and XML replacement reject excessive typed module expansion with

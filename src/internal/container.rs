@@ -218,6 +218,7 @@ pub(crate) fn parse_xml(xml: &str) -> Result<XmlElement, XgwxError> {
     let root = document.root_element();
     let root = xml_element_from_node(root);
     crate::modules::validate_module_associations(&root)?;
+    crate::sfc::validate_source_expansion(&root)?;
     Ok(root)
 }
 
