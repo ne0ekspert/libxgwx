@@ -5,6 +5,9 @@ use crate::{
     XgpdConfigInfoSummary, XgwxDocument, XmlElement,
 };
 
+mod limits;
+pub(crate) use limits::validate_module_associations;
+
 /// Common metadata for an installed hardware module, distinct from a PLC rack/base.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HardwareModule {
@@ -337,27 +340,7 @@ impl<'a> Inventory<'a> {
     }
 
     fn scopes(&self, owner: Option<usize>, module: &NetworkModuleSummary) -> Vec<Option<usize>> {
-        if let Some(owner) = owner {
-            return vec![Some(owner)];
-        }
-        if let Some(name) = module
-            .config_name
-            .as_deref()
-            .filter(|name| !name.trim().is_empty())
-        {
-            return self
-                .names
-                .iter()
-                .enumerate()
-                .filter(|(_, candidate)| candidate.as_deref() == Some(name))
-                .map(|(index, _)| Some(index))
-                .collect();
-        }
-        if self.names.is_empty() {
-            vec![None]
-        } else {
-            (0..self.names.len()).map(Some).collect()
-        }
+        network_scopes(&self.names, owner, module)
     }
 
     fn resolved_networks(&self) -> Vec<NetworkModule> {
@@ -420,6 +403,33 @@ impl<'a> Inventory<'a> {
                 }
             })
             .collect()
+    }
+}
+
+fn network_scopes(
+    names: &[Option<String>],
+    owner: Option<usize>,
+    module: &NetworkModuleSummary,
+) -> Vec<Option<usize>> {
+    if let Some(owner) = owner {
+        return vec![Some(owner)];
+    }
+    if let Some(name) = module
+        .config_name
+        .as_deref()
+        .filter(|name| !name.trim().is_empty())
+    {
+        return names
+            .iter()
+            .enumerate()
+            .filter(|(_, candidate)| candidate.as_deref() == Some(name))
+            .map(|(index, _)| Some(index))
+            .collect();
+    }
+    if names.is_empty() {
+        vec![None]
+    } else {
+        (0..names.len()).map(Some).collect()
     }
 }
 

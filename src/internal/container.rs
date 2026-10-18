@@ -216,7 +216,9 @@ pub(crate) fn validate_gzip_trailer(
 pub(crate) fn parse_xml(xml: &str) -> Result<XmlElement, XgwxError> {
     let document = roxmltree::Document::parse(xml).map_err(XgwxError::Xml)?;
     let root = document.root_element();
-    Ok(xml_element_from_node(root))
+    let root = xml_element_from_node(root);
+    crate::modules::validate_module_associations(&root)?;
+    Ok(root)
 }
 
 pub(crate) fn xml_element_from_node(node: roxmltree::Node<'_, '_>) -> XmlElement {

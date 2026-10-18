@@ -12,6 +12,17 @@ Unknown binary sections are preserved so callers can inspect them later.
 
 ## Known limitations
 
+### Typed module inspection resource limits
+
+Parsing and XML replacement reject excessive typed module expansion with
+`XgwxError::ResourceLimitExceeded`, before building owned candidate lists. For
+documents containing `NetworkModule` records, limits are 200,000 module-related
+records, 4,096 matching hardware/settings associations, 4,000,000 estimated
+matching-work units, and 256 MiB of conservatively estimated summary allocation.
+Estimates include Cnet ports, attributes, scoped-view copies, and repeated
+per-base inventories in the web summary. Accepted documents retain every
+candidate in document order; ambiguous results are never truncated.
+
 ### Default-network names are not preserved by XG5000
 
 In native tests with XG5000 **4.82.1.0**, changing the tested default network's
