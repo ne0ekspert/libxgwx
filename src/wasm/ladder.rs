@@ -162,6 +162,22 @@ impl WasmLadderProgramSummary {
         program: &LadderProgramData,
         cpu_model: Option<&str>,
     ) -> Self {
+        let source_texts: HashMap<usize, &str> =
+            program
+                .strings
+                .iter()
+                .fold(HashMap::new(), |mut texts, item| {
+                    texts.entry(item.offset).or_insert(item.value.as_str());
+                    texts
+                });
+        #[cfg(feature = "write")]
+        let instruction_capabilities = if program.version.as_deref() == Some("LD VER 1.1")
+            && program.project_type == Some(1)
+        {
+            crate::ladder_write::instruction_capabilities(&program.data, &source_texts)
+        } else {
+            HashMap::new()
+        };
         let iec_rows = program.iec_row_frames().unwrap_or_default();
         let iec_records = program.iec_record_frames().unwrap_or_default();
         let iec_functions = program.iec_function_blocks().unwrap_or_default();
@@ -513,17 +529,16 @@ impl WasmLadderProgramSummary {
                 };
                 #[cfg(feature = "write")]
                 {
+                    let mut cell_counts = HashMap::new();
+                    for rung in &program.structure.rungs {
+                        cell_counts.entry(rung.raw_y).or_insert(rung.cells.len());
+                    }
                     match crate::ladder_write::editable_ladder_rows(&program.data) {
                         Ok(rows) => rows
                             .into_iter()
                             .map(|raw_y| WasmLadderRungSummary {
                                 raw_y,
-                                cell_count: program
-                                    .structure
-                                    .rungs
-                                    .iter()
-                                    .find(|row| row.raw_y == raw_y)
-                                    .map_or(0, |row| row.cells.len()),
+                                cell_count: cell_counts.get(&raw_y).copied().unwrap_or(0),
                             })
                             .collect(),
                         Err(_) => decoded(),
@@ -539,7 +554,14 @@ impl WasmLadderProgramSummary {
                 .rungs
                 .iter()
                 .flat_map(|rung| rung.cells.iter())
-                .map(|cell| WasmLadderCellSummary::from_cell(cell, program))
+                .map(|cell| {
+                    WasmLadderCellSummary::from_cell(
+                        cell,
+                        &source_texts,
+                        #[cfg(feature = "write")]
+                        &instruction_capabilities,
+                    )
+                })
                 .collect(),
             vertical_lines: program
                 .structure
@@ -1482,7 +1504,14 @@ pub(super) struct WasmLadderCellSummary {
 }
 
 impl WasmLadderCellSummary {
-    pub(super) fn from_cell(cell: &LadderCell, program: &LadderProgramData) -> Self {
+    pub(super) fn from_cell(
+        cell: &LadderCell,
+        source_texts: &HashMap<usize, &str>,
+        #[cfg(feature = "write")] instruction_capabilities: &HashMap<
+            usize,
+            crate::ladder_write::InstructionCapabilities,
+        >,
+    ) -> Self {
         let mnemonic = ladder_mnemonic_info(&cell.value);
         Self {
             offset: cell.offset,
@@ -1498,23 +1527,9 @@ impl WasmLadderCellSummary {
             instruction_text_editing: {
                 #[cfg(feature = "write")]
                 {
-                    program.version.as_deref() == Some("LD VER 1.1")
-                        && program.project_type == Some(1)
-                        && program
-                            .strings
-                            .iter()
-                            .find(|s| s.offset == cell.offset)
-                            .is_some_and(|s| {
-                                matches!(
-                                    crate::ladder_write::update_instruction_text(
-                                        &program.data,
-                                        cell.offset,
-                                        &s.value,
-                                        &s.value,
-                                    ),
-                                    Ok(Some(_))
-                                )
-                            })
+                    instruction_capabilities
+                        .get(&cell.offset)
+                        .is_some_and(|capabilities| capabilities.text_editing)
                 }
                 #[cfg(not(feature = "write"))]
                 {
@@ -1524,31 +1539,18 @@ impl WasmLadderCellSummary {
             instruction_deletion: {
                 #[cfg(feature = "write")]
                 {
-                    program.version.as_deref() == Some("LD VER 1.1")
-                        && program.project_type == Some(1)
-                        && program
-                            .strings
-                            .iter()
-                            .find(|s| s.offset == cell.offset)
-                            .is_some_and(|s| {
-                                crate::ladder_write::delete_ladder_instruction(
-                                    &program.data,
-                                    cell.offset,
-                                    &s.value,
-                                )
-                                .is_ok()
-                            })
+                    instruction_capabilities
+                        .get(&cell.offset)
+                        .is_some_and(|capabilities| capabilities.deletion)
                 }
                 #[cfg(not(feature = "write"))]
                 {
                     false
                 }
             },
-            source_text: program
-                .strings
-                .iter()
-                .find(|string| string.offset == cell.offset)
-                .map(|string| string.value.clone()),
+            source_text: source_texts
+                .get(&cell.offset)
+                .map(|text| (*text).to_string()),
         }
     }
 }

@@ -1,5 +1,137 @@
 //! Structural editing for decoded LD rows and branch references.
 use crate::{XgwxError, ladder_records::*};
+#[cfg(feature = "wasm")]
+use std::collections::HashMap;
+
+/// Read-only capabilities for an instruction string in a decoded program.
+#[cfg(feature = "wasm")]
+#[derive(Clone, Copy, Default)]
+pub(crate) struct InstructionCapabilities {
+    pub(crate) text_editing: bool,
+    pub(crate) deletion: bool,
+}
+
+/// Inspect each instruction once. Summary construction must not run the editing
+/// writers for every cell: those writers parse and serialize the whole program.
+#[cfg(feature = "wasm")]
+pub(crate) fn instruction_capabilities(
+    bytes: &[u8],
+    source_texts: &HashMap<usize, &str>,
+) -> HashMap<usize, InstructionCapabilities> {
+    let Ok(program) = EditableProgram::parse(bytes) else {
+        return HashMap::new();
+    };
+    let mut result = HashMap::new();
+    let mut position = program.header.len();
+    let mut groups = program.group_headers.iter().peekable();
+    for (row_index, row) in program.rows.iter().enumerate() {
+        let unbranched = if groups.peek().is_some_and(|(first, _)| *first == row_index) {
+            let (_, header) = groups.next().unwrap();
+            position += header.len();
+            u16_at(header, 8).ok() == Some(1)
+        } else {
+            false
+        };
+        position += row.prefix.len();
+        for (record_index, record) in row.records.iter().enumerate() {
+            if record.bytes.starts_with(&[0, 34]) {
+                let offset = position + 19;
+                if let Some(expected) = source_texts.get(&offset) {
+                    result.insert(
+                        offset,
+                        InstructionCapabilities {
+                            text_editing: instruction_text_can_edit(record, expected),
+                            deletion: unbranched
+                                && instruction_can_delete(row, record_index, expected),
+                        },
+                    );
+                }
+            }
+            position += record.bytes.len();
+        }
+    }
+    result
+}
+
+#[cfg(feature = "wasm")]
+fn instruction_text_can_edit(record: &Record, expected: &str) -> bool {
+    let Ok((original, end)) = string_at(&record.bytes, 19) else {
+        return false;
+    };
+    let Ok(count) = u16_at(&record.bytes, end) else {
+        return false;
+    };
+    let Some(original_parts) = crate::internal::ladder_instruction_parts(&original, false) else {
+        return false;
+    };
+    if original != expected || original_parts.len() != count {
+        return false;
+    }
+    let parts = original_parts
+        .iter()
+        .map(|part| part.trim())
+        .collect::<Vec<_>>();
+    if crate::instruction_operands::validate_raw_operands(parts[0], &parts[1..]).is_err() {
+        return false;
+    }
+    let known_operandless_application = count == 1
+        && record.bytes[11] == 32
+        && crate::ladder_instruction_catalog().iter().any(|spec| {
+            spec.operand_count == 0
+                && spec.mnemonic == original_parts[0]
+                && spec.opcode == u32::from_le_bytes(record.bytes[15..19].try_into().unwrap())
+        });
+    if count < 2 && !known_operandless_application {
+        return false;
+    }
+    if parts
+        .iter()
+        .any(|part| !valid_instruction_operand_text(part))
+        || parts.join(",").encode_utf16().count() > 255
+    {
+        return false;
+    }
+    let mut next = end + 2;
+    for part in &original_parts {
+        let Ok((stored, stop)) = string_at(&record.bytes, next + 10) else {
+            return false;
+        };
+        if stored != *part {
+            return false;
+        }
+        next = stop;
+    }
+    if record.bytes[11] == 0 && usize::from(record.x) + (count - 1) * 3 > 25 {
+        return false;
+    }
+    true
+}
+
+#[cfg(feature = "wasm")]
+fn instruction_can_delete(row: &Row, index: usize, expected: &str) -> bool {
+    let record = &row.records[index];
+    let Ok((text, end)) = string_at(&record.bytes, 19) else {
+        return false;
+    };
+    let opcode = u32::from_le_bytes(record.bytes[15..19].try_into().unwrap());
+    let Some(spec) = crate::ladder_instruction_catalog()
+        .iter()
+        .find(|spec| spec.opcode == opcode && text.split(',').next() == Some(spec.mnemonic))
+    else {
+        return false;
+    };
+    let count = spec.operand_count + 1;
+    text == expected
+        && u16_at(&record.bytes, end).ok() == Some(count)
+        && record.bytes[9..15] == [1, 0, 32, 0, 0, 0]
+        && record_end_x(record) == 94
+        && row.prefix[13] == 0
+        && !row
+            .records
+            .iter()
+            .any(|r| r.bytes.starts_with(&[0, 0]) || matches!(r.bytes[1], 0x3f | 0x40))
+        && index + count == row.records.len()
+}
 
 /// Optimistic edit at a physical cell. `expected: None` means no element;
 /// `replacement: None` removes the actual record, leaving a wiring gap.
@@ -1090,9 +1222,15 @@ pub(crate) fn delete_ladder_annotation(
 #[cfg(feature = "wasm")]
 pub(crate) fn editable_ladder_rows(bytes: &[u8]) -> Result<Vec<u32>, XgwxError> {
     let program = EditableProgram::parse(bytes)?;
+    let comment_rows = program
+        .rows
+        .iter()
+        .filter(|row| row.prefix[13] != 0)
+        .map(|row| row.y)
+        .collect::<std::collections::HashSet<_>>();
     Ok((0..row_count(&program.header)?)
         .map(|index| (index * 4) as u32)
-        .filter(|y| !program.rows.iter().any(|r| r.y == *y && r.prefix[13] != 0))
+        .filter(|y| !comment_rows.contains(y))
         .collect())
 }
 
@@ -1684,6 +1822,83 @@ pub(crate) fn insert_ladder_row(bytes: &[u8], raw_y: u32) -> Result<Vec<u8>, Xgw
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "wasm")]
+    #[test]
+    fn read_only_instruction_capabilities_match_writer_probes() {
+        for bytes in [
+            include_bytes!("../fixtures/ladder-edit/instructions/comparison_output.bin").as_slice(),
+            include_bytes!("../fixtures/ladder-edit/instructions/comparisons_first_half.bin")
+                .as_slice(),
+            include_bytes!("../fixtures/ladder-edit/instructions/operandless.bin").as_slice(),
+            include_bytes!("../fixtures/ladder-edit/instructions/string_literals.bin").as_slice(),
+            include_bytes!("../fixtures/ladder-edit/instructions/comparison_dword.bin").as_slice(),
+        ] {
+            let program = EditableProgram::parse(bytes).unwrap();
+            let mut texts = HashMap::<usize, String>::new();
+            let mut position = program.header.len();
+            let mut groups = program.group_headers.iter().peekable();
+            for (row_index, row) in program.rows.iter().enumerate() {
+                if groups.peek().is_some_and(|(first, _)| *first == row_index) {
+                    position += groups.next().unwrap().1.len();
+                }
+                position += row.prefix.len();
+                for record in &row.records {
+                    if record.bytes.starts_with(&[0, 34]) {
+                        let (text, _) = string_at(&record.bytes, 19).unwrap();
+                        texts.insert(position + 19, text);
+                    }
+                    position += record.bytes.len();
+                }
+            }
+            let borrowed = texts
+                .iter()
+                .map(|(offset, text)| (*offset, text.as_str()))
+                .collect();
+            let flags = instruction_capabilities(bytes, &borrowed);
+            for (offset, text) in &texts {
+                let actual = flags.get(offset).unwrap();
+                assert_eq!(
+                    actual.text_editing,
+                    matches!(
+                        update_instruction_text(bytes, *offset, text, text),
+                        Ok(Some(_))
+                    ),
+                    "text editing at {offset} in {} bytes",
+                    bytes.len()
+                );
+                assert_eq!(
+                    actual.deletion,
+                    delete_ladder_instruction(bytes, *offset, text).is_ok(),
+                    "deletion at {offset} in {} bytes",
+                    bytes.len()
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "wasm")]
+    #[test]
+    fn editable_rows_keep_sparse_blanks_and_omit_comment_rows() {
+        let bytes = include_bytes!("../fixtures/ladder-edit/instructions/comparison_output.bin");
+        let mut program = EditableProgram::parse(bytes).unwrap();
+        let physical_count = row_count(&program.header).unwrap();
+        set_row_count(&mut program.header, physical_count + 3);
+        let rows = editable_ladder_rows(&program.encode()).unwrap();
+        assert_eq!(
+            rows.len(),
+            physical_count + 3
+                - program
+                    .rows
+                    .iter()
+                    .filter(|row| row.prefix[13] != 0)
+                    .count()
+        );
+        assert!(rows.contains(&((physical_count + 2) as u32 * 4)));
+        for row in &program.rows {
+            assert_eq!(rows.contains(&row.y), row.prefix[13] == 0);
+        }
+    }
     #[test]
     fn wide_rows_preserve_function_comment_and_branch_coordinates_across_shifts() {
         let mut bytes =
