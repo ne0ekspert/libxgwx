@@ -82,6 +82,8 @@ fn element_count(bounds: &[SfcArrayBound]) -> Option<usize> {
         .filter(|n| *n <= 65536)
 }
 fn element_name(name: &str, bounds: &[SfcArrayBound], mut index: usize) -> String {
+    #[cfg(test)]
+    ELEMENT_NAME_CALLS.with(|calls| calls.set(calls.get() + 1));
     let mut indices = Vec::new();
     for d in bounds.iter().rev() {
         let width = (i64::from(d.upper) - i64::from(d.lower) + 1) as usize;
@@ -90,6 +92,10 @@ fn element_name(name: &str, bounds: &[SfcArrayBound], mut index: usize) -> Strin
     }
     indices.reverse();
     format!("{name}[{}]", indices.join(","))
+}
+#[cfg(test)]
+std::thread_local! {
+    static ELEMENT_NAME_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 fn compact_values(values: &[String]) -> String {
     let mut parts = Vec::new();
@@ -158,9 +164,14 @@ pub(super) fn normalize(bytes: &mut Vec<u8>) -> Result<BTreeMap<String, usize>, 
 }
 pub(super) fn metadata(
     bytes: &[u8],
+    expected_count: usize,
 ) -> Result<BTreeMap<String, (String, SfcDeclaration)>, crate::XgwxError> {
+    let items = records(bytes)?;
+    if items.len() != expected_count {
+        return Err(crate::XgwxError::InvalidVariableRecord { index: 0 });
+    }
     let mut result = BTreeMap::new();
-    for f in records(bytes)? {
+    for f in items {
         if f.len() < 8 {
             return Err(fail());
         }
@@ -203,21 +214,14 @@ pub(super) fn metadata(
                 }
             }
             let mut values = Vec::new();
-            let mut gap = false;
-            for index in 0..count {
-                if let Some(value) =
-                    entries.remove(&element_name(&f[1].value, &options.dimensions, index))
-                {
-                    if gap {
-                        return Err(fail());
-                    }
-                    values.push(value);
-                } else {
-                    gap = true;
-                }
-            }
-            if !entries.is_empty() {
-                return Err(fail());
+            // Stored initializers must be exactly a canonical contiguous prefix.
+            // Enumerate supplied entries, never the (possibly huge) capacity.
+            // Across the table, work is bounded by decoded payload bytes.
+            for index in 0..entries.len() {
+                let value = entries
+                    .remove(&element_name(&f[1].value, &options.dimensions, index))
+                    .ok_or_else(fail)?;
+                values.push(value);
             }
             let _ = string(bytes, &mut at)?;
             let _ = string(bytes, &mut at)?;
@@ -510,6 +514,74 @@ fn expand_values(text: &str) -> Vec<String> {
 mod tests {
     use super::*;
     #[test]
+    fn array_metadata_work_tracks_stored_initializers() {
+        let mut bytes = Vec::new();
+        for index in 0..32 {
+            bytes.extend(
+                record(&SfcVariablePatch {
+                    program_index: 0,
+                    expected_variables: vec![],
+                    name: format!("Array{index}"),
+                    data_type: "BOOL".into(),
+                    description: String::new(),
+                    remove: false,
+                    update: false,
+                    declaration: Some(SfcDeclaration {
+                        dimensions: vec![SfcArrayBound {
+                            lower: 0,
+                            upper: 65535,
+                        }],
+                        ..Default::default()
+                    }),
+                })
+                .unwrap(),
+            );
+        }
+        ELEMENT_NAME_CALLS.with(|calls| calls.set(0));
+        let start = std::time::Instant::now();
+        let result = metadata(&bytes, 32).unwrap();
+        let elapsed = start.elapsed();
+        let calls = ELEMENT_NAME_CALLS.with(|calls| calls.get());
+        eprintln!(
+            "32 empty maximum-capacity arrays: {calls} generated element names in {elapsed:?}"
+        );
+        assert_eq!(result.len(), 32);
+        assert_eq!(
+            calls, 0,
+            "empty initializer maps must not enumerate array capacity"
+        );
+    }
+    #[test]
+    fn one_initializer_does_not_scan_remaining_capacity_or_a_false_count() {
+        let bytes = record(&SfcVariablePatch {
+            program_index: 0,
+            expected_variables: vec![],
+            name: "Values".into(),
+            data_type: "BOOL".into(),
+            description: String::new(),
+            remove: false,
+            update: false,
+            declaration: Some(SfcDeclaration {
+                dimensions: vec![SfcArrayBound {
+                    lower: 0,
+                    upper: 65535,
+                }],
+                initial_value: "TRUE".into(),
+                ..Default::default()
+            }),
+        })
+        .unwrap();
+        ELEMENT_NAME_CALLS.with(|calls| calls.set(0));
+        assert!(matches!(
+            metadata(&bytes, 0),
+            Err(crate::XgwxError::InvalidVariableRecord { index: 0 })
+        ));
+        assert_eq!(ELEMENT_NAME_CALLS.with(|calls| calls.get()), 0);
+        let result = metadata(&bytes, 1).unwrap();
+        assert_eq!(result["Values"].1.initial_value, "TRUE");
+        assert_eq!(ELEMENT_NAME_CALLS.with(|calls| calls.get()), 1);
+    }
+    #[test]
     fn duplicate_names_cannot_redirect_original_record_offsets() {
         let patch = SfcVariablePatch {
             program_index: 0,
@@ -524,7 +596,7 @@ mod tests {
         let one = record(&patch).unwrap();
         let mut bytes = [one.clone(), one].concat();
         let original = bytes.clone();
-        assert!(metadata(&bytes).is_err());
+        assert!(metadata(&bytes, 2).is_err());
         assert!(normalize(&mut bytes).is_err());
         assert_eq!(bytes, original);
     }

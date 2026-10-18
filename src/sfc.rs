@@ -1314,13 +1314,16 @@ impl XgwxDocument {
             .next()
             .and_then(|n| n.descendants_named("Symbols").next())
             .ok_or_else(|| crate::XgwxError::SfcEdit("symbols are absent".into()))?;
+        let expected_count = crate::attr_u32(table, "Count")
+            .ok_or(crate::XgwxError::InvalidVariableRecord { index: 0 })?
+            as usize;
         let mut bytes =
             crate::decode_base64_payload(&table.text, table.attribute("Compressed") == Some("1"))?
                 .data;
         if self.xgk_auto_allocation() {
             declarations::normalize_xgk_types(&mut bytes)?;
         }
-        let metadata = declarations::metadata(&bytes)?;
+        let metadata = declarations::metadata(&bytes, expected_count)?;
         Ok(self
             .sfc_symbols_from_program(program)?
             .into_iter()
