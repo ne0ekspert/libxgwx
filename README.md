@@ -12,6 +12,18 @@ Unknown binary sections are preserved so callers can inspect them later.
 
 ## Known limitations
 
+### I/O variable planning limits
+
+Digital I/O symbol preview and generation validate XGK rack and module positions
+before decoding global symbols. Projects may retain eight base records, including
+empty reservations for CPUs with fewer supported bases. Populated modules must
+fit the selected CPU, and plans contain at most 6,144 generated rows. Collision
+lookup indexes existing symbols once; a plan is rejected with
+`XgwxError::ResourceLimitExceeded` if matching symbols would create more than
+65,536 row-to-symbol associations or copy more than 16 MiB of existing names
+into preview rows. Scoped previews and generation enforce the same full-project
+limits.
+
 ### SFC source expansion limits
 
 Parsing and XML replacement reject excessive SFC source expansion with
