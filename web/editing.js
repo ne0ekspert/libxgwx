@@ -118,6 +118,8 @@ export function createEditor(api) {
     panel.replaceChildren();
     if (!summary) { const p = document.createElement('p'); p.textContent = 'Open an .xgwx file to edit its PLC programs.'; panel.append(p); return; }
     const workspace=ladderEditor.render(summary,!!supportError);panel.append(workspace);
+    const localWarning=(summary.warnings??[]).find(w=>w.startsWith('IEC local symbols:'));
+    if(localWarning){const p=document.createElement('p');p.className='warning';p.textContent=localWarning;panel.append(p);}
     const properties=workspace.querySelector('.workspace-properties');
     const metadata=document.createElement('details');metadata.className='sidebar-metadata';metadata.open=true;
     const metadataTitle=document.createElement('summary');metadataTitle.textContent='Program / variable properties';metadata.append(metadataTitle);properties.append(metadata);metadata.hidden=!!workspace.querySelector('.project-setting-view')&&!(variablePropertiesOpen&&workspace.querySelector('.global-variables-view'));

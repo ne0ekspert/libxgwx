@@ -19,6 +19,12 @@ Supported edits:
 - Existing decoded global variable description, retaining its exact UTF-16
   code-unit length. Binary offsets remain stable.
 
+The browser summary includes up to 4,096 IEC local symbols across programs.
+When a program table would exceed that budget, the editor omits that table and
+shows a warning; operand edits for the omitted program are unavailable. Selecting
+a record searches its compatible declarations on demand and shows at most 256
+options at once. Use the declared-symbol search field to reach later matches.
+
 Missing fields are disabled. Tasks, IDs, XGK ladder edits, new IEC placements,
 function/instance changes, free expressions, variable names/types/addresses,
 CPU, module model/ID/location, module insertion/deletion, networks, parameter settings and local variable declarations

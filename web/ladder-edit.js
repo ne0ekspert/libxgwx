@@ -10,10 +10,11 @@ const kinds = new Map([
  ['Output coil variable','OUTPUT'],['Inverse output coil variable','INVERSE'],['Set coil variable','SET'],
  ['Reset coil variable','RESET'],['Rising-edge coil variable','RISING'],['Falling-edge coil variable','FALLING']
 ]);
+const MAX_LOCAL_SYMBOLS = 4096;
+const MAX_VISIBLE_CHOICES = 256;
 export function ladderTargets(summary, programIndex) {
  const ladder = (summary.ladder ?? []).find(p => p.programIndex === programIndex);
  if (!ladder || ladder.projectType !== 2 || ladder.version !== 'LD VER 1.1') return [];
- const symbols = (summary.localVariables?.[programIndex] ?? []).filter(v => !v.isInstance && v.dataTypeCode >= 1 && v.dataTypeCode <= 19);
  return (ladder.sourceStrings ?? []).flatMap((source, ordinal) => {
   const kind = kinds.get(source.iecElementKind);
   let output = false, mask = 1, block, pin;
@@ -25,21 +26,37 @@ export function ladderTargets(summary, programIndex) {
    if (!link || !block || !pin || link.isArray) return [];
    mask = link.dataTypeMask; output = link.isOutput;
   } else return [];
-  const choices = symbols.filter(v => (!output || v.storageClass !== 'I') && (mask & 2 ** (v.dataTypeCode - 1))).map(v => ({name:v.name,type:v.dataType,storage:v.storageClass}));
   return [{key:`${programIndex}:${ordinal}`, programIndex, ordinal, offset:source.offset,
    expectedKind:kind ?? block.name, value:source.value, row:source.iecRowIndex ?? 0, group:source.iecGroupIndex,
    position:source.iecPosition, cellOffset:kind ? source.iecRecordOffset : block.recordOffset, category:kind ? (output ? 'coil' : 'contact') : 'function', output,
    label:kind ? `${output ? 'Coil' : 'Contact'} ${kind}` : `${block.name}.${pin.name} · ${output ? 'output' : 'input'} · ${pin.dataType ?? pin.typeExpression ?? 'typed'}`,
-   choices, kindChoices:kind ? (output ? coils : contacts) : []}];
+   mask, kindChoices:kind ? (output ? coils : contacts) : []}];
  });
 }
+// Resolve only the selected record's compatible symbols. A search keeps the
+// select small without hiding later declarations from the editor.
+export function ladderChoices(summary, target, query='') {
+ const symbols = summary.localVariables?.[target.programIndex] ?? [];
+ if(symbols.length>MAX_LOCAL_SYMBOLS)return {choices:[],total:0,limited:true};
+ const needle=query.toLowerCase();let total=0;const choices=[];
+ for(const symbol of symbols){
+  if(symbol.isInstance || symbol.dataTypeCode<1 || symbol.dataTypeCode>19 ||
+     (target.output && symbol.storageClass==='I') ||
+     !(target.mask & 2 ** (symbol.dataTypeCode-1)))continue;
+  if(needle && !symbol.name.toLowerCase().includes(needle))continue;
+  total++;
+  if(choices.length<MAX_VISIBLE_CHOICES)choices.push({name:symbol.name,type:symbol.dataType,storage:symbol.storageClass});
+ }
+ return {choices,total,limited:false};
+}
 export function createLadderEditor(api) {
- let selectedProgram = 0, selectedKey, targets = [], target, action = 'operand', draft = false, capturedRevision;
+ let selectedProgram = 0, selectedKey, targets = [], target, action = 'operand', draft = false, capturedRevision, activeSummary;
  let section, inspector, selectedSettingKey, settingsSelect;
  const el = (tag, text, cls) => {const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
  function discard() {draft=false;api.onDraft();}
  function canLeave() {return !draft || window.confirm('Discard unapplied ladder change?');}
  function render(summary, readonly) {
+  activeSummary=summary;
   section=el('section',undefined,'edit-card ladder-edit');section.id='ladder-edit';
   const title=el('div',undefined,'workspace-title');title.append(el('h3','PLC program editor'),el('span','Local copy'));section.append(title);
   const layout=el('div',undefined,'ladder-edit-layout');
@@ -137,14 +154,25 @@ export function createLadderEditor(api) {
   const form=el('form');form.id='ladder-change-form';const label=el('label',action==='kind'?'Replacement kind':'Declared symbol');
   const value=el('select');value.id='ladder-replacement';value.setAttribute('aria-label',label.textContent);
   const current=action==='kind'?target.expectedKind:target.value;
-  const choices=action==='kind'?target.kindChoices.map(name=>({name,type:''})):target.choices;
-  if(!choices.some(c=>c.name===current)){const option=el('option',`${current} (current, retained)`);option.value=current;value.append(option);}
-  choices.forEach(c=>{const option=el('option',`${c.name}${c.type?` · ${c.type}`:''}`);option.value=c.name;value.append(option);});value.value=current;
-  value.disabled=readonly || !choices.length;value.addEventListener('change',()=>{draft=value.value!==current;api.onDraft();});label.append(value);form.append(label);
-  const actions=el('div',undefined,'edit-actions');const apply=el('button','Apply ladder change');apply.id='apply-ladder-change';apply.type='submit';apply.disabled=readonly || !choices.length;
+  const search=el('input');search.type='search';search.setAttribute('aria-label','Search declared symbols');
+  if(action==='operand'){search.placeholder='Search declared symbols';form.append(search);}
+  value.addEventListener('change',()=>{draft=value.value!==current;api.onDraft();});label.append(value);form.append(label);
+  const actions=el('div',undefined,'edit-actions');const apply=el('button','Apply ladder change');apply.id='apply-ladder-change';apply.type='submit';apply.disabled=true;
   const cancel=el('button','Cancel ladder change');cancel.type='button';cancel.addEventListener('click',()=>{discard();capturedRevision=api.getRevision();showInspector(readonly);});actions.append(apply,cancel);form.append(actions);
-  const help=readonly?'This container is read-only.':!choices.length?'No compatible declared variable is available.':'Choose a compatible declared variable. New elements and wiring are not supported.';
-  form.append(el('p',help,'edit-help'));
+  const help=el('p',undefined,'edit-help');form.append(help);
+  const updateChoices=()=>{
+   const result=action==='kind'?{choices:target.kindChoices.map(name=>({name,type:''})),total:target.kindChoices.length,limited:false}:ladderChoices(activeSummary,target,search.value);
+   value.replaceChildren();
+   if(!result.choices.some(c=>c.name===current)){const option=el('option',`${current} (current, retained)`);option.value=current;value.append(option);}
+   result.choices.forEach(c=>{const option=el('option',`${c.name}${c.type?` · ${c.type}`:''}`);option.value=c.name;value.append(option);});value.value=current;
+   value.disabled=readonly || !result.total || result.limited;apply.disabled=value.disabled;
+   if(result.limited)help.textContent='This program exceeds the browser symbol limit; operand editing is unavailable.';
+   else if(readonly)help.textContent='This container is read-only.';
+   else if(!result.total)help.textContent=search.value?'No matching declared variable.':'No compatible declared variable is available.';
+   else help.textContent=`${result.total>result.choices.length?`Showing ${result.choices.length} of ${result.total} matches. Search by name. `:''}Choose a compatible declared variable. New elements and wiring are not supported.`;
+   draft=false;api.onDraft();
+  };
+  search.addEventListener('input',updateChoices);updateChoices();
   form.addEventListener('submit',e=>{e.preventDefault();if(!draft){api.message('No ladder change to apply.');return;}if(capturedRevision!==api.getRevision()){api.message('The workspace changed; cancel and reopen this record before applying.',true);return;}
    const patch={operation:action==='kind'?'kind':target.category==='function'?'functionOperand':'elementOperand',offset:target.offset,expectedKind:target.expectedKind,expectedValue:target.value,replacement:value.value};
    api.apply(target.programIndex,patch,capturedRevision);});

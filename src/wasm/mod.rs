@@ -62,6 +62,7 @@ pub fn edit_xgwx_browser_hardware_wasm(bytes: &[u8], patch: JsValue) -> Result<V
 }
 
 const MAX_WASM_VARIABLES: usize = 65536;
+const MAX_WASM_IEC_LOCAL_SYMBOLS: usize = 4096;
 const MAX_WASM_LADDER_PROGRAMS: usize = 64;
 const MAX_WASM_LADDER_DECODED_BYTES: usize = 32 * 1024 * 1024;
 const MAX_WASM_LADDER_ITEMS: usize = 100_000;
@@ -2540,12 +2541,14 @@ impl WasmDocumentSummary {
             .map(|program| program.program_index)
             .chain(text_programs.iter().map(|program| program.program_index))
             .collect::<std::collections::HashSet<_>>();
+        let mut local_symbol_budget = MAX_WASM_IEC_LOCAL_SYMBOLS;
+        let mut local_variable_count = 0usize;
+        let mut omitted_local_tables = 0usize;
         let local_variables = doc
-            .iec_local_symbols()
-            .into_iter()
-            .zip(doc.root.descendants_named("Program"))
+            .root
+            .descendants_named("Program")
             .enumerate()
-            .map(|(program_index, (result, program))| {
+            .map(|(program_index, program)| {
                 if sfc_indices.contains(&program_index) {
                     if let Err(error) = doc
                         .require_open_program_element(program_index, program)
@@ -2555,11 +2558,33 @@ impl WasmDocumentSummary {
                     }
                     return Vec::new();
                 }
+                if let Err(error) = doc.require_open_program_element(program_index, program) {
+                    warnings.push(format!("program {program_index} local symbols: {error}"));
+                    return Vec::new();
+                }
+                let Some(symbols_element) = program
+                    .descendants_named("LocalVar")
+                    .next()
+                    .and_then(|local| local.descendants_named("Symbols").next())
+                else {
+                    return Vec::new();
+                };
+                let declared =
+                    crate::internal::attr_u32(symbols_element, "Count").unwrap_or(0) as usize;
+                if declared > local_symbol_budget {
+                    omitted_local_tables += 1;
+                    return Vec::new();
+                }
+                let result = IecLocalSymbol::from_symbols_element(symbols_element);
                 match result {
-                    Ok(symbols) => symbols
-                        .into_iter()
-                        .map(WasmIecLocalSymbolSummary::from_symbol)
-                        .collect(),
+                    Ok(symbols) => {
+                        local_symbol_budget -= symbols.len();
+                        local_variable_count += symbols.len();
+                        symbols
+                            .into_iter()
+                            .map(WasmIecLocalSymbolSummary::from_symbol)
+                            .collect()
+                    }
                     Err(error) => {
                         warnings.push(format!("program {program_index} local symbols: {error}"));
                         Vec::new()
@@ -2567,7 +2592,11 @@ impl WasmDocumentSummary {
                 }
             })
             .collect::<Vec<Vec<WasmIecLocalSymbolSummary>>>();
-        let local_variable_count = local_variables.iter().map(Vec::len).sum::<usize>();
+        if omitted_local_tables > 0 {
+            warnings.push(format!(
+                "IEC local symbols: omitted {omitted_local_tables} program table(s) exceeding the {MAX_WASM_IEC_LOCAL_SYMBOLS}-symbol browser budget; operand editing is unavailable for those programs"
+            ));
+        }
         let variables_for_output = variable_summaries
             .map(|variables| {
                 variables
@@ -2848,6 +2877,28 @@ fn decode_browser_ladder(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_skips_oversized_local_table_before_decoding_payload() {
+        use std::io::Write;
+        let xml = format!(
+            "<Project><Program><LocalVar><Symbols Count='{}'>invalid base64</Symbols></LocalVar></Program></Project>",
+            MAX_WASM_IEC_LOCAL_SYMBOLS + 1
+        );
+        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        gzip.write_all(xml.as_bytes()).unwrap();
+        let mut bytes = b"XG".to_vec();
+        bytes.extend(gzip.finish().unwrap());
+        let doc = XgwxDocument::parse(&bytes).unwrap();
+        let summary = WasmDocumentSummary::from_document(&doc);
+        assert!(summary.local_variables[0].is_empty());
+        assert!(
+            summary
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("IEC local symbols: omitted 1 program table(s)"))
+        );
+    }
 
     #[test]
     fn program_enumeration_large_browser_summary_keeps_all_slots() {
