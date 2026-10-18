@@ -4,7 +4,7 @@
 //! masks, and native reference ordinals. Their end is accepted only when the
 //! entire row has exactly one valid segmentation matching its record count.
 use crate::{LadderProgramData, LadderString};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Recognized native IEC ladder record category, retaining kind bytes where relevant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -640,21 +640,27 @@ impl LadderProgramData {
                 sites.push(site);
             }
         }
-        for row in &rows {
+        let mut first_record_by_row = HashMap::new();
+        for record in &records {
+            first_record_by_row
+                .entry((record.group_index, record.row_index))
+                .or_insert(record);
+        }
+        for (row_index, row) in rows.iter().enumerate() {
             let start = row.start.checked_sub(10)?;
-            let same_group = rows
-                .iter()
-                .filter(|r| r.group_index == row.group_index)
-                .count();
-            let Some(contact) = records
-                .iter()
-                .find(|r| r.group_index == row.group_index && r.row_index == row.row_index)
-            else {
+            let same_group = row_index
+                .checked_sub(1)
+                .and_then(|previous| rows.get(previous))
+                .is_some_and(|previous| previous.group_index == row.group_index)
+                || rows
+                    .get(row_index + 1)
+                    .is_some_and(|next| next.group_index == row.group_index);
+            let Some(contact) = first_record_by_row.get(&(row.group_index, row.row_index)) else {
                 continue;
             };
-            let next = rows.iter().find(|r| r.group_index == row.group_index + 1);
+            let next = rows.get(row_index + 1);
             if row.row_index > u16::MAX / 4 - 2
-                || same_group != 1
+                || same_group
                 || row.record_count != 1
                 || contact.kind != IecRecordKind::Contact(6)
                 || contact.end != row.end
@@ -1164,37 +1170,38 @@ impl LadderProgramData {
         let blocks = self.iec_function_blocks()?;
         let references = self.iec_function_references()?;
         let mut sites = Vec::new();
-        for first_row in &rows {
-            let group_rows = rows
-                .iter()
-                .filter(|row| row.group_index == first_row.group_index)
-                .collect::<Vec<_>>();
+        let block_groups = blocks
+            .iter()
+            .map(|block| block.group_index)
+            .collect::<HashSet<_>>();
+        let reference_groups = references
+            .iter()
+            .map(|reference| reference.group_index)
+            .collect::<HashSet<_>>();
+        let mut records_by_row: HashMap<(usize, u16), Vec<&IecRecordFrame>> = HashMap::new();
+        for record in &records {
+            records_by_row
+                .entry((record.group_index, record.row_index))
+                .or_default()
+                .push(record);
+        }
+        for group_rows in rows.chunk_by(|left, right| left.group_index == right.group_index) {
+            let first_row = &group_rows[0];
             if group_rows.len() != 2
-                || group_rows[0].row_index != first_row.row_index
                 || group_rows[1].row_index != first_row.row_index + 1
-                || blocks
-                    .iter()
-                    .any(|block| block.group_index == first_row.group_index)
-                || references
-                    .iter()
-                    .any(|reference| reference.group_index == first_row.group_index)
+                || block_groups.contains(&first_row.group_index)
+                || reference_groups.contains(&first_row.group_index)
             {
                 continue;
             }
-            let top = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == first_row.group_index
-                        && record.row_index == first_row.row_index
-                })
-                .collect::<Vec<_>>();
-            let bottom = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == first_row.group_index
-                        && record.row_index == first_row.row_index + 1
-                })
-                .collect::<Vec<_>>();
+            let top = records_by_row
+                .get(&(first_row.group_index, first_row.row_index))
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let bottom = records_by_row
+                .get(&(first_row.group_index, group_rows[1].row_index))
+                .map(Vec::as_slice)
+                .unwrap_or_default();
             if top.len() < 2
                 || bottom.is_empty()
                 || !matches!(top[0].kind, IecRecordKind::Contact(6..=11))
@@ -1260,30 +1267,21 @@ impl LadderProgramData {
         let rows = self.iec_row_frames()?;
         let records = self.iec_record_frames()?;
         let mut sites = Vec::new();
-        for window in rows.windows(2) {
-            let [top, lower] = window else { continue };
-            if top.group_index != lower.group_index
-                || lower.row_index != top.row_index.saturating_add(1)
-                || rows
-                    .iter()
-                    .filter(|row| row.group_index == top.group_index)
-                    .count()
-                    != 2
-            {
+        let mut record_cursor = 0;
+        for group in rows.chunk_by(|left, right| left.group_index == right.group_index) {
+            let group_records = group
+                .iter()
+                .map(|row| row.record_count as usize)
+                .sum::<usize>();
+            let end = record_cursor + group_records;
+            let records_in_group = records.get(record_cursor..end)?;
+            record_cursor = end;
+            let [top, lower] = group else { continue };
+            if lower.row_index != top.row_index.saturating_add(1) {
                 continue;
             }
-            let upper = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == top.group_index && record.row_index == top.row_index
-                })
-                .collect::<Vec<_>>();
-            let lower_records = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == lower.group_index && record.row_index == lower.row_index
-                })
-                .collect::<Vec<_>>();
+            let upper = records_in_group.get(..top.record_count as usize)?;
+            let lower_records = records_in_group.get(top.record_count as usize..)?;
             if upper.len() != top.record_count as usize
                 || upper.len() < 3
                 || !matches!(upper[0].kind, IecRecordKind::Contact(6..=11))
@@ -1329,16 +1327,11 @@ impl LadderProgramData {
         let records = self.iec_record_frames()?;
         let rows = self.iec_row_frames()?;
         let mut sites = Vec::new();
+        let mut record_cursor = 0;
         for row in rows {
-            let row_records = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == row.group_index && record.row_index == row.row_index
-                })
-                .collect::<Vec<_>>();
-            if row_records.len() != row.record_count as usize {
-                continue;
-            }
+            let end = record_cursor + row.record_count as usize;
+            let row_records = records.get(record_cursor..end)?;
+            record_cursor = end;
             for wire in row_records
                 .iter()
                 .filter(|record| record.kind == IecRecordKind::LongWire)
@@ -1369,16 +1362,11 @@ impl LadderProgramData {
         let records = self.iec_record_frames()?;
         let rows = self.iec_row_frames()?;
         let mut sites = Vec::new();
+        let mut record_cursor = 0;
         for row in rows {
-            let row_records = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == row.group_index && record.row_index == row.row_index
-                })
-                .collect::<Vec<_>>();
-            if row_records.len() != row.record_count as usize {
-                continue;
-            }
+            let end = record_cursor + row.record_count as usize;
+            let row_records = records.get(record_cursor..end)?;
+            record_cursor = end;
             for wire in row_records
                 .into_iter()
                 .filter(|record| record.kind == IecRecordKind::ShortWire)
@@ -1412,17 +1400,12 @@ impl LadderProgramData {
         let records = self.iec_record_frames()?;
         let rows = self.iec_row_frames()?;
         let mut sites = Vec::new();
+        let mut record_cursor = 0;
         for row in &rows {
-            let parts = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == row.group_index && record.row_index == row.row_index
-                })
-                .collect::<Vec<_>>();
-            if parts.len() != row.record_count as usize {
-                continue;
-            }
-            if let [contact, endpoint] = parts.as_slice()
+            let end = record_cursor + row.record_count as usize;
+            let parts = records.get(record_cursor..end)?;
+            record_cursor = end;
+            if let [contact, endpoint] = parts
                 && let IecRecordKind::Contact(contact_code @ 6..=11) = contact.kind
                 && endpoint.kind == IecRecordKind::BranchEnd
                 && self.data.get(contact.offset + 5) == Some(&1)
@@ -1439,10 +1422,11 @@ impl LadderProgramData {
             if row.record_count < 3 {
                 continue;
             }
-            let group_rows = rows
-                .iter()
-                .filter(|candidate| candidate.group_index == row.group_index)
-                .collect::<Vec<_>>();
+            let group_start =
+                rows.partition_point(|candidate| candidate.group_index < row.group_index);
+            let group_end =
+                rows.partition_point(|candidate| candidate.group_index <= row.group_index);
+            let group_rows = &rows[group_start..group_end];
             if group_rows.len() == 2
                 && group_rows[0].row_index == row.row_index
                 && group_rows[1].row_index == row.row_index.saturating_add(1)
@@ -1457,11 +1441,13 @@ impl LadderProgramData {
                 && parts
                     .last()
                     .is_some_and(|record| matches!(record.kind, IecRecordKind::Coil(_)))
-                && records.iter().any(|record| {
-                    record.group_index == row.group_index
-                        && record.row_index == group_rows[1].row_index
-                        && record.kind == IecRecordKind::BranchEnd
-                })
+                && records
+                    .get(record_cursor..record_cursor + group_rows[1].record_count as usize)
+                    .is_some_and(|bottom| {
+                        bottom
+                            .iter()
+                            .any(|record| record.kind == IecRecordKind::BranchEnd)
+                    })
                 && self.data.get(parts[0].offset + 5) == Some(&1)
                 && self.data.get(parts[1].offset + 5) == Some(&4)
             {
@@ -1546,16 +1532,14 @@ impl LadderProgramData {
         let records = self.iec_record_frames()?;
         let rows = self.iec_row_frames()?;
         let mut sites = Vec::new();
+        let mut record_cursor = 0;
         for row in rows {
+            let end = record_cursor + row.record_count as usize;
+            let parts = records.get(record_cursor..end)?;
+            record_cursor = end;
             if row.record_count < 5 {
                 continue;
             }
-            let parts = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == row.group_index && record.row_index == row.row_index
-                })
-                .collect::<Vec<_>>();
             if parts.len() != row.record_count as usize
                 || !parts
                     .last()
@@ -1615,13 +1599,13 @@ impl LadderProgramData {
             .into_iter()
             .filter(|site| site.raw_x == 1)
         {
-            let parts = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == leading.group_index
-                        && record.row_index == leading.row_index
-                })
-                .collect::<Vec<_>>();
+            let first = records.partition_point(|record| {
+                (record.group_index, record.row_index) < (leading.group_index, leading.row_index)
+            });
+            let last = records.partition_point(|record| {
+                (record.group_index, record.row_index) <= (leading.group_index, leading.row_index)
+            });
+            let parts = &records[first..last];
             if parts.len() >= 3
                 && parts[0].offset == leading.contact_offset
                 && matches!(parts[1].kind, IecRecordKind::Contact(6..=11))
@@ -1640,16 +1624,14 @@ impl LadderProgramData {
         let records = self.iec_record_frames()?;
         let rows = self.iec_row_frames()?;
         let mut sites = Vec::new();
+        let mut record_cursor = 0;
         for row in rows {
+            let end = record_cursor + row.record_count as usize;
+            let parts = records.get(record_cursor..end)?;
+            record_cursor = end;
             if row.record_count < 3 {
                 continue;
             }
-            let parts = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == row.group_index && record.row_index == row.row_index
-                })
-                .collect::<Vec<_>>();
             if parts.len() != row.record_count as usize {
                 continue;
             }
@@ -1736,13 +1718,11 @@ impl LadderProgramData {
         let records = self.iec_record_frames()?;
         let rows = self.iec_row_frames()?;
         let mut sites = Vec::new();
+        let mut record_cursor = 0;
         for row in rows {
-            let parts = records
-                .iter()
-                .filter(|record| {
-                    record.group_index == row.group_index && record.row_index == row.row_index
-                })
-                .collect::<Vec<_>>();
+            let end = record_cursor + row.record_count as usize;
+            let parts = records.get(record_cursor..end)?;
+            record_cursor = end;
             for (index, triple) in parts.windows(3).enumerate() {
                 let [left, wire, right] = triple else {
                     continue;

@@ -3050,6 +3050,46 @@ mod tests {
         assert!(json.pointer("/ladder/0/projectType").is_some());
         assert!(json.pointer("/ladder/0/sourceStrings/0/value").is_some());
     }
+
+    #[test]
+    fn browser_summary_handles_many_iec_row_groups() {
+        let doc = XgwxDocument::parse(include_bytes!(
+            "../../fixtures/canvas-rows/iec-row300-native.xgwx"
+        ))
+        .unwrap();
+        let mut program = doc.program().ladder_programs().remove(0).unwrap();
+        for (group_count, rows_per_group) in [(4_096u16, 1u16), (2_048, 2), (682, 6)] {
+            let count = group_count * rows_per_group;
+            let mut data = vec![0; 8];
+            data[4..6].copy_from_slice(&count.to_le_bytes());
+            data[6..8].copy_from_slice(&group_count.to_le_bytes());
+            for group in 0..u32::from(group_count) {
+                data.extend_from_slice(&group.to_le_bytes());
+                data.extend_from_slice(&[0; 4]);
+                data.extend_from_slice(&rows_per_group.to_le_bytes());
+                for local_row in 0..u32::from(rows_per_group) {
+                    let index = group * u32::from(rows_per_group) + local_row;
+                    let mut row = [0u8; 35];
+                    row[..4].copy_from_slice(&index.to_le_bytes());
+                    row[4..6].copy_from_slice(&[0xff, 0x43]);
+                    let y = (index as u16 * 4).to_le_bytes();
+                    for offset in [21, 29] {
+                        row[offset] = 94;
+                        row[offset + 1..offset + 3].copy_from_slice(&y);
+                    }
+                    data.extend_from_slice(&row);
+                }
+            }
+            program.data = data;
+            program.decoded_len = program.data.len();
+            let summary = WasmLadderProgramSummary::from_program(0, &program, None);
+            assert_eq!(summary.iec_rows.len(), count as usize);
+            assert!(summary.iec_terminal_timer_insertion_sites.is_empty());
+            assert!(summary.iec_function_cell_insertion_sites.is_empty());
+            assert!(summary.iec_leading_contact_insertion_sites.is_empty());
+        }
+    }
+
     #[test]
     fn browser_summary_exposes_only_recognized_compact_profile() {
         let doc = XgwxDocument::from_path("fixtures/XGB_Enet01.xgwx").unwrap();

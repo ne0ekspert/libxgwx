@@ -303,15 +303,16 @@ fn row_frames(program: &LadderProgramData) -> Option<Vec<IecRowFrame>> {
     }
 
     let mut frames = Vec::with_capacity(rows.len());
+    let mut row_cursor = 0;
     for (group_index, &(head_start, first_row, count)) in groups.iter().enumerate() {
         let group_end = groups
             .get(group_index + 1)
             .map_or(data.len(), |next| next.0);
-        let selected = rows
-            .iter()
-            .copied()
-            .filter(|(start, _, _)| *start >= first_row && *start < group_end)
-            .collect::<Vec<_>>();
+        let first = row_cursor;
+        while row_cursor < rows.len() && rows[row_cursor].0 < group_end {
+            row_cursor += 1;
+        }
+        let selected = &rows[first..row_cursor];
         if selected.len() != count || selected[0].0 != first_row || head_start + 10 != first_row {
             return None;
         }
@@ -331,7 +332,7 @@ fn row_frames(program: &LadderProgramData) -> Option<Vec<IecRowFrame>> {
             });
         }
     }
-    (frames.len() == rows.len()).then_some(frames)
+    (row_cursor == rows.len() && frames.len() == rows.len()).then_some(frames)
 }
 
 #[cfg(any(feature = "write", feature = "wasm"))]

@@ -1,18 +1,55 @@
 //! Native MOVE at the end of a six-row contact mesh.
 use crate::iec_function_write::{body, branch_end, branch_start, expression, wire};
-use crate::{IecRecordKind as K, LadderProgramData, XgwxError};
+use crate::{
+    IecFunctionBlock, IecFunctionOperandLink, IecFunctionReference, IecRecordFrame,
+    IecRecordKind as K, IecRowFrame, LadderProgramData, XgwxError,
+};
+
+fn group_slice<T>(items: &[T], group_index: usize, key: impl Fn(&T) -> usize) -> &[T] {
+    let first = items.partition_point(|item| key(item) < group_index);
+    let last = items.partition_point(|item| key(item) <= group_index);
+    &items[first..last]
+}
 
 fn layout(program: &LadderProgramData, row: u16, filled: bool) -> Option<usize> {
+    let rows = program.iec_row_frames()?;
+    let top = rows.iter().find(|r| r.row_index == row)?;
+    let group = group_slice(&rows, top.group_index, |row| row.group_index);
+    if group.len() != 6 {
+        return None;
+    }
+    let records = program.iec_record_frames()?;
+    let blocks = program.iec_function_blocks()?;
+    let links = program.iec_function_operand_links()?;
+    let refs = program.iec_function_references()?;
+    layout_from_frames(
+        program,
+        row,
+        filled,
+        group,
+        group_slice(&records, top.group_index, |record| record.group_index),
+        group_slice(&blocks, top.group_index, |block| block.group_index),
+        group_slice(&links, top.group_index, |link| link.group_index),
+        group_slice(&refs, top.group_index, |reference| reference.group_index),
+    )
+}
+
+fn layout_from_frames(
+    program: &LadderProgramData,
+    row: u16,
+    filled: bool,
+    group: &[IecRowFrame],
+    records: &[IecRecordFrame],
+    blocks: &[IecFunctionBlock],
+    links: &[IecFunctionOperandLink],
+    refs: &[IecFunctionReference],
+) -> Option<usize> {
     if row > u16::MAX / 4 - 5 {
         return None;
     }
-    let rows = program.iec_row_frames()?;
-    let top = rows.iter().find(|r| r.row_index == row)?;
-    let group = rows
-        .iter()
-        .filter(|r| r.group_index == top.group_index)
-        .collect::<Vec<_>>();
+    let top = group.first()?;
     if group.len() != 6
+        || top.row_index != row
         || group
             .iter()
             .enumerate()
@@ -21,16 +58,7 @@ fn layout(program: &LadderProgramData, row: u16, filled: bool) -> Option<usize> 
     {
         return None;
     }
-    let records = program.iec_record_frames()?;
-    let blocks = program.iec_function_blocks()?;
-    let links = program.iec_function_operand_links()?;
-    let refs = program.iec_function_references()?;
-    if blocks
-        .iter()
-        .filter(|b| b.group_index == top.group_index)
-        .count()
-        != usize::from(filled)
-    {
+    if blocks.len() != usize::from(filled) {
         return None;
     }
     let mut shapes = vec![
@@ -191,21 +219,76 @@ pub(crate) fn leading_contact_sites(
 ) -> Option<Vec<(usize, u16, usize, u8)>> {
     let rows = program.iec_row_frames()?;
     let records = program.iec_record_frames()?;
-    Some(
-        rows.iter()
-            .filter_map(|row| {
-                let group = layout(program, row.row_index, true)
-                    .or_else(|| layout(program, row.row_index, false))?;
-                let first = records.iter().find(|r| r.offset == row.records_start)?;
-                let code = match first.kind {
-                    K::Contact(code @ 6..=11) if present => code,
-                    K::BranchStart if !present => 6,
-                    _ => return None,
-                };
-                Some((group, row.row_index, first.offset, code))
-            })
-            .collect(),
-    )
+    if !rows
+        .chunk_by(|left, right| left.group_index == right.group_index)
+        .any(|group| group.len() == 6)
+    {
+        return Some(Vec::new());
+    }
+    let Some(blocks) = program.iec_function_blocks() else {
+        return Some(Vec::new());
+    };
+    let Some(links) = program.iec_function_operand_links() else {
+        return Some(Vec::new());
+    };
+    let Some(refs) = program.iec_function_references() else {
+        return Some(Vec::new());
+    };
+    let mut sites = Vec::new();
+    let mut record_cursor = 0;
+    for group in rows.chunk_by(|left, right| left.group_index == right.group_index) {
+        let count = group
+            .iter()
+            .map(|row| row.record_count as usize)
+            .sum::<usize>();
+        let end = record_cursor + count;
+        let group_records = records.get(record_cursor..end)?;
+        record_cursor = end;
+        if group.len() != 6 {
+            continue;
+        }
+        let row = &group[0];
+        let group_blocks = group_slice(&blocks, row.group_index, |block| block.group_index);
+        let group_links = group_slice(&links, row.group_index, |link| link.group_index);
+        let group_refs = group_slice(&refs, row.group_index, |reference| reference.group_index);
+        let Some(group_index) = layout_from_frames(
+            program,
+            row.row_index,
+            true,
+            group,
+            group_records,
+            group_blocks,
+            group_links,
+            group_refs,
+        )
+        .or_else(|| {
+            layout_from_frames(
+                program,
+                row.row_index,
+                false,
+                group,
+                group_records,
+                group_blocks,
+                group_links,
+                group_refs,
+            )
+        }) else {
+            continue;
+        };
+        let Some(first) = group_records
+            .iter()
+            .find(|record| record.offset == row.records_start)
+        else {
+            continue;
+        };
+        let code = match first.kind {
+            K::Contact(code @ 6..=11) if present => code,
+            K::BranchStart if !present => 6,
+            _ => continue,
+        };
+        sites.push((group_index, row.row_index, first.offset, code));
+    }
+    Some(sites)
 }
 
 pub(crate) fn edit_leading_contact(

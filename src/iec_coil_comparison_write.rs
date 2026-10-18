@@ -54,20 +54,53 @@ pub(crate) fn scaffold(program: &LadderProgramData, row: u16, x: u8) -> Option<u
 pub(crate) fn sites(
     program: &LadderProgramData,
 ) -> Option<Vec<crate::IecWiredComparisonInsertionSite>> {
-    Some(
-        program
-            .iec_row_frames()?
-            .iter()
-            .filter_map(|r| {
-                let row = r.row_index.checked_sub(1)?;
-                Some(crate::IecWiredComparisonInsertionSite {
-                    group_index: scaffold(program, row, 7)?,
-                    row_index: row,
-                    raw_x: 7,
-                })
-            })
-            .collect(),
-    )
+    let rows = program.iec_row_frames()?;
+    let records = program.iec_record_frames()?;
+    let mut sites = Vec::new();
+    let mut record_cursor = 0;
+    for (index, result) in rows.iter().enumerate() {
+        let end = record_cursor + result.record_count as usize;
+        let row_records = records.get(record_cursor..end)?;
+        record_cursor = end;
+        let Some(row) = result.row_index.checked_sub(1) else {
+            continue;
+        };
+        if row > u16::MAX / 4 - 3
+            || result.record_count != 2
+            || index > 0 && rows[index - 1].group_index == result.group_index
+            || rows
+                .get(index + 1)
+                .is_some_and(|next| next.group_index == result.group_index)
+            || index > 0 && rows[index - 1].row_index >= row
+            || rows
+                .get(index + 1)
+                .is_some_and(|next| next.row_index <= row + 3)
+            || program.data.get(result.start - 6..result.start - 2) != Some(&[0; 4])
+            || program.data.get(result.start + 17..result.start + 21)
+                != Some(&50u32.to_le_bytes()[..])
+            || program.data.get(result.start + 29) != Some(&7)
+        {
+            continue;
+        }
+        let [feed, coil] = row_records else {
+            continue;
+        };
+        if feed.kind != K::LongWire
+            || coil.kind != K::Coil(14)
+            || program.data.get(feed.offset..feed.end)? != wire(result.row_index, 10, 91)
+            || program.data.get(coil.offset + 5) != Some(&94)
+            || program.data.get(coil.offset + 9..coil.offset + 15)
+                != Some(&[1, 0, 0x20, 0, 0, 0][..])
+        {
+            continue;
+        }
+        sites.push(crate::IecWiredComparisonInsertionSite {
+            group_index: result.group_index,
+            row_index: row,
+            raw_x: 7,
+        });
+    }
+    Some(sites)
 }
 
 pub(crate) fn remove(program: &LadderProgramData, offset: usize) -> Result<Vec<u8>, XgwxError> {
