@@ -198,6 +198,17 @@ enum Edit {
         expected_object_id: String,
         expected_target_id: String,
     },
+    InsertVariable {
+        name: String,
+        data_type: String,
+        address_area: String,
+        address_number: u32,
+        description: String,
+    },
+    DeleteVariable {
+        variable_index: usize,
+        expected_name: String,
+    },
     UpdateVariable {
         variable_index: usize,
         expected_name: String,
@@ -584,6 +595,33 @@ fn apply_one(doc: &mut XgwxDocument, edit: Edit) -> Result<()> {
         } => doc
             .move_program(from, to, &expected_object_id, &expected_target_id)
             .map_err(operation),
+        Edit::InsertVariable {
+            name,
+            data_type,
+            address_area,
+            address_number,
+            description,
+        } => doc
+            .variable_mut()
+            .insert(&crate::NewGlobalVariable {
+                name,
+                data_type,
+                address_area,
+                address_number,
+                description,
+            })
+            .map(|_| ())
+            .map_err(operation),
+        Edit::DeleteVariable {
+            variable_index,
+            expected_name,
+        } => {
+            let variable = doc.variable_mut().get(variable_index).map_err(operation)?;
+            if variable.summary().name.as_deref() != Some(expected_name.as_str()) {
+                return Err(operation("stale global variable selection"));
+            }
+            variable.delete().map_err(operation)
+        }
         Edit::UpdateVariable {
             variable_index,
             expected_name,

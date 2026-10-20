@@ -707,6 +707,44 @@ pub fn update_xgwx_variable_wasm(
     serialize_in_wasm_session(&doc, true).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Insert a scalar global device alias and return verified rewritten bytes.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = insert_xgwx_variable)]
+pub fn insert_xgwx_variable_wasm(bytes: &[u8], variable: JsValue) -> Result<Vec<u8>, JsValue> {
+    let json = js_sys::JSON::stringify(&variable)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("variable is not JSON-serializable"))?;
+    let variable: crate::NewGlobalVariable =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.variable_mut()
+        .insert(&variable)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Delete the global record with the captured name, rejecting stale selections.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = delete_xgwx_variable)]
+pub fn delete_xgwx_variable_wasm(
+    bytes: &[u8],
+    index: usize,
+    expected_name: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let mut doc = parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let variable = doc
+        .variable_mut()
+        .get(index)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    if variable.summary().name.as_deref() != Some(expected_name) {
+        return Err(JsValue::from_str("stale global variable selection"));
+    }
+    variable
+        .delete()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serialize_in_wasm_session(&doc, true).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Change a captured IEC program-local BOOL symbol's mapped address.
 #[cfg(feature = "write")]
 #[wasm_bindgen(js_name = update_xgwx_iec_local_symbol_address)]

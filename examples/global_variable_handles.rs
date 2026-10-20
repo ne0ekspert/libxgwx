@@ -1,5 +1,5 @@
-//! Generate supported I/O variables, inspect selected records, and update one safely.
-use xgwx::{VariablePatch, create_project};
+//! Generate I/O variables and insert, update, inspect and delete global records.
+use xgwx::{NewGlobalVariable, VariablePatch, create_project};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut doc = create_project("XGK-CPUSN", "LD")?;
     doc.base_mut().by_number(0)?.insert_module(0, "XGI-D21A")?;
@@ -20,6 +20,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
     println!("Updated: {:?}", variable.summary());
+    let index = doc.variable_mut().insert(&NewGlobalVariable {
+        name: "Ready".into(),
+        data_type: "BIT".into(),
+        address_area: "M".into(),
+        address_number: 42,
+        description: "Machine ready".into(),
+    })?;
+    let expected = doc.variable().get(index)?.summary().clone();
+    doc.variable_mut().get_if(index, &expected)?.delete()?;
     let bytes = doc.to_verified_bytes()?;
     xgwx::XgwxDocument::parse(&bytes)?;
     Ok(())

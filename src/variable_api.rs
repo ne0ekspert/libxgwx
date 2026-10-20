@@ -89,7 +89,7 @@ mod editors {
     use crate::{VariableEditor, VariablePatch};
     /// Exclusive global variable editor with a bound record index and decoded snapshot.
     /// Updating names and descriptions may resize native strings; other string fields
-    /// retain the backend's encoded-length restrictions. Insertion and deletion are unsupported.
+    /// retain the backend's encoded-length restrictions. Deletion consumes the selection.
     pub struct GlobalVariableEditor<'a> {
         doc: &'a mut XgwxDocument,
         index: usize,
@@ -173,6 +173,45 @@ mod editors {
             self.expected = after[self.index].clone();
             *self.doc = candidate;
             Ok(())
+        }
+        /// Delete this selected global record, preserving all other record bytes.
+        /// References by name in decoded XGK program strings prevent deletion.
+        pub fn delete(self) -> Result<(), XgwxError> {
+            self.doc.ensure_consistent_api_tree()?;
+            if globals(self.doc)?.get(self.index) != Some(&self.expected) {
+                return Err(XgwxError::GlobalVariableEdit(
+                    "stale global variable selection; inspect again".into(),
+                ));
+            }
+            let name = self
+                .expected
+                .name
+                .as_deref()
+                .ok_or(XgwxError::InvalidVariableRecord { index: self.index })?;
+            for i in 0..self.doc.program().list().len() {
+                let program = self
+                    .doc
+                    .ladder_program(i)
+                    .ok_or(XgwxError::ProgramNotFound { index: i })??;
+                if program.project_type != Some(1) {
+                    return Err(XgwxError::GlobalVariableEdit(
+                        "global deletion requires decoded XGK programs".into(),
+                    ));
+                }
+                if crate::internal::extract_utf16_marker_strings(&program.data, false, false)
+                    .iter()
+                    .any(|s| {
+                        s.value
+                            .split(|c: char| !c.is_alphanumeric() && c != '_')
+                            .any(|token| token.to_lowercase() == name.to_lowercase())
+                    })
+                {
+                    return Err(XgwxError::GlobalVariableEdit(
+                        "global variable is referenced by a program".into(),
+                    ));
+                }
+            }
+            self.doc.splice_global(self.index, None)
         }
         /// Rename the selected variable with the same native uniqueness and length guards.
         pub fn rename(&mut self, name: &str) -> Result<(), XgwxError> {

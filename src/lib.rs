@@ -78,6 +78,10 @@ mod parameter_api;
 pub use parameter_api::{ParameterData, ParameterKind, ParameterRef, ParameterView, PidView};
 mod variable_api;
 #[cfg(feature = "write")]
+mod global_variable_lifecycle;
+#[cfg(feature = "write")]
+pub use global_variable_lifecycle::NewGlobalVariable;
+#[cfg(feature = "write")]
 pub use variable_api::GlobalVariableEditor;
 pub use variable_api::GlobalVariableRef;
 mod project_api;

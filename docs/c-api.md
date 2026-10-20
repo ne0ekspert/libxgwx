@@ -138,6 +138,8 @@ Reload lists after success, especially after insertion, deletion or reordering.
 | `create_program` | `name`, `language`, `object_id`, `symbol_id` |
 | `delete_program` | `program_index`, `expected_object_id` |
 | `move_program` | `from`, `to`, `expected_object_id`, `expected_target_id` |
+| `insert_variable` | `name`, `data_type`, `address_area`, `address_number`, `description` (XGK scalar alias) |
+| `delete_variable` | `variable_index`, `expected_name` (unreferenced XGK alias) |
 | `update_variable` | `variable_index`, `expected_name`, `patch` |
 | `create_user_pou` | `patch` (complete creation request below) |
 | `edit_user_pou_source` | `expected` (complete inspected POU), `source` |
