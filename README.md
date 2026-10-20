@@ -870,8 +870,14 @@ doc.configuration_mut().get(0)?.select_cpu("XGK-CPUUN")?;
 `ProjectEditor::rename_if(expected_name, replacement)` retains a previously
 captured name check for editor transactions. Project options and other metadata
 remain read-only. Configuration selection uses document indices, so repeated
-PLC names remain distinct. CPU selection still requires one configuration and
-uses the existing native migration and hardware-limit guards. See
+PLC names remain distinct. `configuration.programs()` and `configuration.tasks()`
+list only that PLC's children while retaining document-wide record indices;
+`program.configuration_index()` identifies its owning PLC. XGK CPU selection
+supports multiple PLCs and checks only the selected PLC's hardware, preserving
+all sibling XML. XGI CPU migrations still require one configuration. Existing
+native migration and hardware-limit guards remain in force. Adding or removing
+PLCs remains unsupported. WASM and MCP CPU adapters expose an explicit
+configuration index; legacy selector-free operations require exactly one PLC. See
 `examples/project_configuration_handles.rs` for a runnable example.
 
 Global variables also have selected record handles:

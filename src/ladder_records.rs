@@ -124,6 +124,8 @@ pub(crate) fn u16_at(bytes: &[u8], start: usize) -> Result<usize, XgwxError> {
 /// Supported physical rows in the XGK ladder editor (manual section 5.1).
 pub(crate) const XGK_MAX_ROWS: usize = 65535;
 
+/// Read the three-byte little-endian y component following an x byte.
+/// Callers validate the containing record's bounds before using this helper.
 pub(crate) fn y_at(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes([bytes[offset], bytes[offset + 1], bytes[offset + 2], 0])
 }
@@ -142,6 +144,8 @@ pub(crate) fn xy(x: u8, y: u32) -> [u8; 4] {
     [x, b[0], b[1], b[2]]
 }
 pub(crate) fn row_count(header: &[u8]) -> Result<usize, XgwxError> {
+    // 0xffff escapes the short count; the following u32 then carries the
+    // extent. In either form, the group count occupies the final two bytes.
     let short = u16_at(header, 4)?;
     if short != 65535 {
         return Ok(short);
@@ -156,6 +160,8 @@ pub(crate) fn header_size(header: &[u8]) -> Result<usize, XgwxError> {
 pub(crate) fn set_row_count(header: &mut Vec<u8>, count: usize) {
     let old_size = header_size(header).unwrap();
     let groups = u16_at(header, old_size - 2).unwrap() as u16;
+    // Rebuild the variable-size count field while retaining the group count;
+    // crossing 0xffff changes the header size by four bytes.
     header.truncate(4);
     if count >= 65535 {
         header.extend_from_slice(&65535u16.to_le_bytes());
@@ -166,6 +172,8 @@ pub(crate) fn set_row_count(header: &mut Vec<u8>, count: usize) {
     header.extend_from_slice(&groups.to_le_bytes());
 }
 
+/// Decode FF FE FF, a one-byte UTF-16 code-unit count, and UTF-16LE text.
+/// Return the exclusive byte end so callers can locate the next record field.
 pub(crate) fn string_at(bytes: &[u8], start: usize) -> Result<(String, usize), XgwxError> {
     if bytes.get(start..start + 3) != Some(&[255, 254, 255]) {
         return Err(unsupported());
@@ -188,6 +196,9 @@ pub(crate) fn coordinate(bytes: &[u8], offset: usize, y: u32) -> Result<u8, Xgwx
 }
 
 impl EditableProgram {
+    /// Accept only the supported XGK framing and reciprocal branch links.
+    /// Keep opaque prefix/record bytes for later encoding rather than rebuilding
+    /// native fields whose meanings are not decoded here.
     pub(crate) fn parse(bytes: &[u8]) -> Result<Self, XgwxError> {
         if bytes.len() < 8 || bytes[..4] != [0; 4] {
             return Err(unsupported());
@@ -216,6 +227,8 @@ impl EditableProgram {
             for _ in 0..count {
                 let prefix = bytes.get(pos..pos + 35).ok_or_else(unsupported)?.to_vec();
                 let index = u32::from_le_bytes(prefix[..4].try_into().unwrap()) as usize;
+                // Physical row indices and native y coordinates use different
+                // units: one row advances the stored coordinate by four.
                 let y = (index * 4) as u32;
                 if index >= row_count
                     || rows.last().is_some_and(|r: &Row| r.y >= y)
@@ -253,6 +266,8 @@ impl EditableProgram {
                 rows.push(Row { prefix, y, records });
             }
         }
+        // Unknown trailing bytes could contain records requiring coordinate
+        // updates, so partial parsing is insufficient for structural edits.
         if pos != bytes.len() {
             return Err(unsupported());
         }
@@ -307,6 +322,8 @@ impl EditableProgram {
     #[cfg(feature = "write")]
     pub(crate) fn encode(&self) -> Vec<u8> {
         let mut bytes = self.header.clone();
+        // The header describes the row extent, including gaps, rather than the
+        // number of stored row records. Retain it unless the last row exceeds it.
         let count = row_count(&self.header)
             .unwrap()
             .max(self.rows.last().map_or(0, |r| (r.y as usize) / 4 + 1));
@@ -329,6 +346,9 @@ impl EditableProgram {
     }
 }
 
+/// Check horizontal occupancy and instruction argument back-references.
+/// Argument references share the owning instruction's anchor; they do not
+/// independently consume another cell in the occupancy check.
 fn validate_row_records(records: &[Record]) -> Result<(), XgwxError> {
     let mut occupied = 0;
     for (index, r) in records.iter().enumerate() {

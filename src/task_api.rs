@@ -57,6 +57,11 @@ fn task_error(reason: &str) -> XgwxError {
     XgwxError::TaskEdit(reason.into())
 }
 impl<'a> TaskRef<'a> {
+    /// Bind an index already validated by the document ownership traversal.
+    pub(crate) fn from_index(doc: &'a XgwxDocument, index: usize) -> Self {
+        Self { doc, index }
+    }
+
     /// Capture the complete definition and unique PLC identity for stale-edit checks.
     pub fn snapshot(self) -> Result<TaskSnapshot, XgwxError> {
         let configs = self.doc.configurations();
@@ -96,15 +101,11 @@ impl<'a> TaskRef<'a> {
     }
     /// Owning PLC configuration, if the task is inside a configuration.
     pub fn configuration_index(self) -> Option<usize> {
-        let xml = roxmltree::Document::parse(&self.doc.xml).ok()?;
-        let node = xml
-            .descendants()
-            .filter(|n| n.has_tag_name("Task"))
-            .nth(self.index)?;
-        let owner = node.ancestors().find(|n| n.has_tag_name("Configuration"))?;
-        xml.descendants()
-            .filter(|n| n.has_tag_name("Configuration"))
-            .position(|n| n == owner)
+        self.doc
+            .configuration_record_owners("Task")
+            .get(self.index)
+            .copied()
+            .flatten()
     }
     /// Programs attached to this task, in their execution/list order.
     /// Ambiguous duplicate task names are rejected instead of conflating membership.

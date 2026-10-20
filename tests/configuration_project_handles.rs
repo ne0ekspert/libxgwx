@@ -47,6 +47,11 @@ fn absent_and_unknown_cpu_metadata_remains_inspectable() {
 #[cfg(feature = "write")]
 mod writes {
     use super::*;
+    fn editable_document(xml: &str) -> XgwxDocument {
+        let mut doc = xgwx::create_project("XGK-CPUH", "LD").unwrap();
+        doc.container_mut().replace_xml(xml.to_owned()).unwrap();
+        doc
+    }
     #[test]
     fn selected_xgk_conversion_preserves_programs_networks_and_options() {
         let mut doc = xgwx::create_project("XGK-CPUH", "LD").unwrap();
@@ -133,19 +138,143 @@ mod writes {
         }
     }
     #[test]
-    fn selecting_a_record_does_not_enable_multi_configuration_cpu_writes() {
-        let mut doc = document(
-            r#"<Project><Configuration Type="17">PLC</Configuration><Configuration Type="17">PLC</Configuration></Project>"#,
+    fn selected_cpu_changes_ignore_sibling_limits_and_preserve_sibling_xml() {
+        let mut doc = editable_document(
+            r#"<Project WksNodeCount="7">Factory<Configuration Type="17">PLC<Base Base="0" SlotCount="8"/></Configuration><!-- keep --><Configuration Type="16">PLC<Base Base="7" SlotCount="12"/></Configuration><Options Details="keep"/></Project>"#,
+        );
+        let original = doc.container().xml().to_owned();
+        doc.configuration_mut()
+            .get(0)
+            .unwrap()
+            .select_cpu("XGK-CPUH")
+            .unwrap();
+        assert_eq!(
+            doc.container().xml(),
+            original.replacen("Type=\"17\"", "Type=\"0\"", 1)
         );
         let before = doc.clone();
-        for index in [0, 1] {
-            assert!(matches!(
+        assert!(
+            doc.configuration_mut()
+                .get(1)
+                .unwrap()
+                .select_cpu("XGK-CPUSN")
+                .is_err()
+        );
+        assert_eq!(doc, before);
+        // The second PLC is also independently selectable.
+        doc.configuration_mut()
+            .get(1)
+            .unwrap()
+            .select_cpu("XGK-CPUUN")
+            .unwrap();
+        assert_eq!(
+            doc.configuration().get(0).unwrap().cpu().unwrap().model,
+            "XGK-CPUH"
+        );
+        let saved = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
+        assert_eq!(saved.container().root(), doc.container().root());
+    }
+    #[test]
+    fn selected_module_limits_do_not_include_sibling_modules() {
+        let mut first = xgwx::create_project("XGK-CPUH", "LD").unwrap();
+        first
+            .base_mut()
+            .by_number(0)
+            .unwrap()
+            .insert_module(0, "XGL-EFMT(B)")
+            .unwrap();
+        let xml = first.container().xml();
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let configuration = parsed
+            .descendants()
+            .find(|n| n.has_tag_name("Configuration"))
+            .unwrap();
+        let sibling = xml[configuration.range()].replace("Base=\"0\"", "Base=\"7\"");
+        let mut combined = xml.to_owned();
+        combined.insert_str(configuration.range().end, &sibling);
+        // Trim unused high racks only on the first PLC so CPUSN is legal there.
+        let mut unused = configuration
+            .descendants()
+            .filter(|node| {
+                node.has_tag_name("Base")
+                    && node
+                        .attribute("Base")
+                        .and_then(|value| value.parse::<u32>().ok())
+                        .is_some_and(|base| base >= 4)
+            })
+            .map(|node| node.range())
+            .collect::<Vec<_>>();
+        unused.sort_by_key(|range| std::cmp::Reverse(range.start));
+        for range in unused {
+            combined.replace_range(range, "");
+        }
+        let mut doc = editable_document(&combined);
+        doc.configuration_mut()
+            .get(0)
+            .unwrap()
+            .select_cpu("XGK-CPUSN")
+            .unwrap();
+        let before = doc.clone();
+        assert!(
+            doc.configuration_mut()
+                .get(1)
+                .unwrap()
+                .select_cpu("XGK-CPUSN")
+                .is_err()
+        );
+        assert_eq!(doc, before);
+        let type_range = configuration
+            .attributes()
+            .find(|attribute| attribute.name() == "Type")
+            .unwrap()
+            .range_value();
+        let mut expected = combined.clone();
+        expected.replace_range(type_range, "17");
+        assert_eq!(doc.container().xml(), expected);
+        let saved = XgwxDocument::parse(&doc.to_verified_bytes().unwrap()).unwrap();
+        assert_eq!(saved.configuration().list().len(), 2);
+        assert_eq!(saved.modules(), doc.modules());
+    }
+    #[test]
+    fn unowned_hardware_does_not_bypass_selected_cpu_limits() {
+        let mut doc = document(
+            r#"<Project><Configuration Type="0">PLC</Configuration><Base Base="7" SlotCount="12"/></Project>"#,
+        );
+        let before = doc.clone();
+        assert!(
+            doc.configuration_mut()
+                .get(0)
+                .unwrap()
+                .select_cpu("XGK-CPUSN")
+                .is_err()
+        );
+        assert_eq!(doc, before);
+    }
+    #[test]
+    fn selected_cpu_noops_and_unsupported_migrations_are_atomic_in_multi_plc_files() {
+        let mut doc = document(
+            r#"<Project><Configuration Type="17">PLC</Configuration><Configuration Type="111">PLC</Configuration></Project>"#,
+        );
+        let before = doc.clone();
+        doc.configuration_mut()
+            .get(0)
+            .unwrap()
+            .select_cpu("XGK-CPUSN")
+            .unwrap();
+        doc.configuration_mut()
+            .get(1)
+            .unwrap()
+            .select_cpu("XGI-CPUUN")
+            .unwrap();
+        assert_eq!(doc, before);
+        for (index, model) in [(0, "XGI-CPUUN"), (1, "XGI-CPUH"), (0, "unknown")] {
+            assert!(
                 doc.configuration_mut()
                     .get(index)
                     .unwrap()
-                    .select_cpu("XGK-CPUSN"),
-                Err(XgwxError::AmbiguousConfiguration)
-            ));
+                    .select_cpu(model)
+                    .is_err()
+            );
             assert_eq!(doc, before);
         }
     }
@@ -196,5 +325,24 @@ mod writes {
             assert!(doc.project_mut().rename("Changed").is_err());
             assert_eq!(doc, before);
         }
+    }
+}
+
+#[test]
+fn programs_and_tasks_remain_scoped_with_repeated_names_and_orphans() {
+    let doc = document(
+        r#"<Project><Program Name="orphan"/><Task Name="orphan"/><Configuration Type="17">PLC<Programs><Program Name="Main" Task="Scan"/></Programs><Tasks><Task Name="Scan"/></Tasks></Configuration><Configuration Type="111">PLC<Programs><Program Name="Main" Task="Scan"/></Programs><Tasks><Task Name="Scan"/></Tasks></Configuration></Project>"#,
+    );
+    assert_eq!(doc.program().get(0).unwrap().configuration_index(), None);
+    for index in 0..2 {
+        let plc = doc.configuration().get(index).unwrap();
+        let programs = plc.programs();
+        let tasks = plc.tasks();
+        assert_eq!(programs.len(), 1);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(programs[0].index(), index + 1);
+        assert_eq!(programs[0].configuration_index(), Some(index));
+        assert_eq!(tasks[0].index(), index + 1);
+        assert_eq!(tasks[0].configuration_index(), Some(index));
     }
 }

@@ -976,12 +976,33 @@ impl XgwxDocument {
     /// parameters and compatible rack modules. Other model changes require
     /// a migration and are rejected. Selecting the current type is a no-op.
     pub(crate) fn select_cpu(&mut self, model: &str) -> Result<(), XgwxError> {
+        self.hardware_cpu()?;
+        self.select_configuration_cpu(0, model)
+    }
+
+    /// Change only the explicitly selected PLC; sibling hardware is outside its limits.
+    pub(crate) fn select_configuration_cpu(
+        &mut self,
+        index: usize,
+        model: &str,
+    ) -> Result<(), XgwxError> {
         let entry = crate::cpu::find_cpu(model)?;
-        let current = self.hardware_cpu()?;
+        let configuration = self.configuration().get(index)?;
+        let type_code = configuration
+            .summary()
+            .type_code
+            .ok_or(XgwxError::MissingConfigurationAttribute { attribute: "Type" })?;
+        let current = crate::cpu::cpu_for_type(type_code)
+            .ok_or(XgwxError::UnsupportedCpuHardware { type_code })?;
         if current.type_code == entry.type_code {
             return Ok(());
         }
         if current.family == "XGI" && entry.family == "XGI" {
+            // XGI migrations also update workspace counts and native defaults.
+            // Keep their existing single-PLC guard until scoped migration is validated.
+            if self.configurations().len() != 1 {
+                return Err(XgwxError::AmbiguousConfiguration);
+            }
             return self.select_xgi_source_cpu(current, entry);
         }
         if current.family != "XGK" || entry.family != "XGK" {
@@ -990,7 +1011,19 @@ impl XgwxDocument {
                 to: entry.model.into(),
             });
         }
-        for base in self.base_summaries() {
+        // Unowned hardware cannot safely be assigned to either PLC.
+        if self
+            .bases()
+            .iter()
+            .any(|base| base.configuration_index().is_none())
+            || self
+                .hardware_modules()
+                .iter()
+                .any(|module| module.configuration_index.is_none())
+        {
+            return Err(XgwxError::AmbiguousConfiguration);
+        }
+        for base in configuration.bases().into_iter().map(|base| base.summary()) {
             let number = base.base.ok_or(XgwxError::UnsupportedCpuHardware {
                 type_code: current.type_code,
             })?;
@@ -1005,7 +1038,12 @@ impl XgwxDocument {
                 });
             }
         }
-        for module in self.module_summaries() {
+        for module in self
+            .hardware_modules()
+            .into_iter()
+            .filter(|module| module.configuration_index == Some(index))
+            .map(|module| module.hardware)
+        {
             let base = module.base.ok_or(XgwxError::UnsupportedCpuHardware {
                 type_code: current.type_code,
             })?;
@@ -1023,7 +1061,8 @@ impl XgwxDocument {
         let document = roxmltree::Document::parse(&changed.xml).map_err(XgwxError::Xml)?;
         let configuration = document
             .descendants()
-            .find(|node| node.has_tag_name("Configuration"))
+            .filter(|node| node.has_tag_name("Configuration"))
+            .nth(index)
             .ok_or(XgwxError::MissingConfiguration)?;
         let range = configuration
             .attributes()

@@ -534,3 +534,27 @@ fn sfc_and_text_declarations_use_exact_c_inspection_snapshots() {
             .any(|v| v["name"] == "CFlag")
     );
 }
+
+#[cfg(feature = "write")]
+#[test]
+fn legacy_cpu_operation_cannot_implicitly_choose_the_first_of_multiple_plcs() {
+    let mut native = xgwx::create_project("XGK-CPUH", "LD").unwrap();
+    let xml = native.container().xml();
+    let parsed = roxmltree::Document::parse(xml).unwrap();
+    let plc = parsed
+        .descendants()
+        .find(|node| node.has_tag_name("Configuration"))
+        .unwrap();
+    let mut combined = xml.to_owned();
+    combined.insert_str(plc.range().end, &xml[plc.range()]);
+    native.container_mut().replace_xml(combined).unwrap();
+    let input = native.to_verified_bytes().unwrap();
+    let doc = Document::parse(&input);
+    for model in ["XGK-CPUH", "XGK-CPUUN"] {
+        assert_eq!(
+            doc.apply(json!([{"operation":"select_cpu","model":model}])),
+            XGWX_OPERATION_ERROR
+        );
+        assert_eq!(doc.bytes(), input);
+    }
+}

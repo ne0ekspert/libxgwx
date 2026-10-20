@@ -56,6 +56,7 @@ pub(super) struct WasmCounts {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WasmProgramSummary {
+    pub(super) configuration_index: Option<usize>,
     pub(super) name: Option<String>,
     pub(super) task: Option<String>,
     pub(super) kind: Option<u32>,
@@ -67,6 +68,7 @@ pub(super) struct WasmProgramSummary {
 impl WasmProgramSummary {
     pub(super) fn from_program(program: ProgramSummary) -> Self {
         Self {
+            configuration_index: None,
             name: program.name,
             task: program.task,
             kind: program.kind,

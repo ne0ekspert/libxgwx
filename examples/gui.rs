@@ -169,7 +169,7 @@ fn render_ladder(ui: &mut egui::Ui, program: &LadderProgramData, zoom: f32, show
                 Pos2::new(origin.x - 14.0 * zoom, y),
                 Pos2::new(origin.x - 14.0 * zoom, y + layout.rung_gap * 0.35),
             ],
-            Stroke::new(1.5, colors.rail),
+            Stroke::new(1.5_f32, colors.rail),
         );
     }
 
@@ -362,7 +362,7 @@ fn draw_horizontal_line(
     if end > start {
         painter.line_segment(
             [Pos2::new(start, y), Pos2::new(end, y)],
-            Stroke::new(1.5, color),
+            Stroke::new(1.5_f32, color),
         );
     }
 }
@@ -381,7 +381,7 @@ fn draw_vertical(
     let y2 = origin.y + layout.y_for(vertical.raw_y_end);
     painter.line_segment(
         [Pos2::new(origin.x + x, y1), Pos2::new(origin.x + x, y2)],
-        Stroke::new(1.5, color),
+        Stroke::new(1.5_f32, color),
     );
 }
 
@@ -424,7 +424,7 @@ fn draw_cell(
                     rect,
                     4.0,
                     colors.block_fill,
-                    Stroke::new(1.0, colors.stroke),
+                    Stroke::new(1.0_f32, colors.stroke),
                 );
                 painter.text(
                     rect.center(),
@@ -463,7 +463,7 @@ fn draw_contact(
         rect,
         4.0,
         colors.contact_fill,
-        Stroke::new(1.0, colors.stroke),
+        Stroke::new(1.0_f32, colors.stroke),
     );
     let left = rect.left() + 15.0;
     let right = rect.right() - 15.0;
@@ -472,14 +472,14 @@ fn draw_contact(
             Pos2::new(left, rect.top() + 5.0),
             Pos2::new(left, rect.bottom() - 5.0),
         ],
-        Stroke::new(1.5, colors.stroke),
+        Stroke::new(1.5_f32, colors.stroke),
     );
     painter.line_segment(
         [
             Pos2::new(right, rect.top() + 5.0),
             Pos2::new(right, rect.bottom() - 5.0),
         ],
-        Stroke::new(1.5, colors.stroke),
+        Stroke::new(1.5_f32, colors.stroke),
     );
     if cell.contact == Some(LadderContact::NormallyClosed) {
         painter.line_segment(
@@ -487,7 +487,7 @@ fn draw_contact(
                 Pos2::new(left - 3.0, rect.bottom() - 5.0),
                 Pos2::new(right + 3.0, rect.top() + 5.0),
             ],
-            Stroke::new(1.2, colors.stroke),
+            Stroke::new(1.2_f32, colors.stroke),
         );
     }
     painter.text(
@@ -510,17 +510,17 @@ fn draw_coil(
         rect,
         4.0,
         colors.block_fill,
-        Stroke::new(1.0, colors.stroke),
+        Stroke::new(1.0_f32, colors.stroke),
     );
     painter.circle_stroke(
         Pos2::new(rect.left() + 17.0, rect.center().y),
         9.0,
-        Stroke::new(1.4, colors.stroke),
+        Stroke::new(1.4_f32, colors.stroke),
     );
     painter.circle_stroke(
         Pos2::new(rect.right() - 17.0, rect.center().y),
         9.0,
-        Stroke::new(1.4, colors.stroke),
+        Stroke::new(1.4_f32, colors.stroke),
     );
     painter.text(
         rect.center(),

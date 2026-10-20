@@ -1,3 +1,5 @@
+//! Decode XML-embedded binary payloads: Base64 may wrap a bzip2 stream,
+//! while hexadecimal attributes are decoded separately.
 use super::*;
 
 use base64::Engine;
@@ -5,8 +7,11 @@ use bzip2::read::BzDecoder;
 use std::io::Read;
 
 pub(crate) struct Base64Payload {
+    /// Base64 byte count after removing ASCII whitespace.
     pub(crate) encoded_len: usize,
+    /// Byte count after Base64 decoding, before optional bzip2 decompression.
     pub(crate) raw_len: usize,
+    /// Final payload bytes, decompressed when requested.
     pub(crate) data: Vec<u8>,
 }
 
@@ -117,6 +122,8 @@ pub(crate) fn decoded_payload_summary(
     })
 }
 
+/// Prefer explicit payload metadata; infer unmarked payloads only for known
+/// tags. The text heuristic is a candidate check, not Base64 validation.
 pub(crate) fn is_base64_payload_element(element: &XmlElement) -> bool {
     if element.attribute("Compressed").is_some() {
         return true;
@@ -169,6 +176,8 @@ fn compact_ascii_bytes(text: &str) -> Vec<u8> {
         .collect()
 }
 
+/// Enforce the output limit while reading, before extending the result buffer;
+/// a compressed-input limit alone would not bound decompression expansion.
 fn decompress_bzip2(raw: &[u8]) -> Result<Vec<u8>, XgwxError> {
     let mut decoder = BzDecoder::new(raw);
     let mut decompressed = Vec::new();

@@ -325,21 +325,25 @@ fn hardware(doc: &XgwxDocument, offset: usize, limit: usize) -> Value {
             .map(|filter| json!(super::inspection_types::ModuleInputFilter::from(filter)))
             .unwrap_or(Value::Null);
         result["input_filter_label"] = m.input_filter.map(|filter| filter.to_string()).into();
-        #[cfg(feature="write")]
-        { result["option_values"] = match (m.base, m.slot) {
-            (Some(base), Some(slot)) if ambiguous_coordinates.get(&(base, slot)) == Some(&true) =>
-                json!({"status": "unsupported", "error": XgwxError::AmbiguousModule { base, slot }.to_string()}),
-            (Some(base), Some(slot)) => match doc
-                .module()
-                .at(base, slot)
-                .and_then(|selected_record| selected_record.option_values())
-            {
-                Ok(options) => json!({"status": "decoded", "items": options.iter()
+        #[cfg(feature = "write")]
+        {
+            result["option_values"] = match (m.base, m.slot) {
+                (Some(base), Some(slot))
+                    if ambiguous_coordinates.get(&(base, slot)) == Some(&true) =>
+                {
+                    json!({"status": "unsupported", "error": XgwxError::AmbiguousModule { base, slot }.to_string()})
+                }
+                (Some(base), Some(slot)) => match doc
+                    .module()
+                    .at(base, slot)
+                    .and_then(|selected_record| selected_record.option_values())
+                {
+                    Ok(options) => json!({"status": "decoded", "items": options.iter()
                 .map(|o| fields!(o; key, index, value)).collect::<Vec<_>>()}),
-                Err(error) => json!({"status": "unsupported", "error": error.to_string()}),
-            },
-            _ => json!({"status": "unsupported", "error": "Module has no base/slot identity"}),
-        };
+                    Err(error) => json!({"status": "unsupported", "error": error.to_string()}),
+                },
+                _ => json!({"status": "unsupported", "error": "Module has no base/slot identity"}),
+            };
         }
         result
     });

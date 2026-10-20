@@ -268,8 +268,43 @@ pub fn cpu_catalog_wasm() -> Result<JsValue, JsValue> {
 pub fn select_xgwx_cpu_wasm(bytes: &[u8], model: &str) -> Result<Vec<u8>, JsValue> {
     let mut doc =
         parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    if doc.configuration().list().len() != 1 {
+        return Err(JsValue::from_str(
+            &crate::XgwxError::AmbiguousConfiguration.to_string(),
+        ));
+    }
     doc.configuration_mut()
         .get(0)
+        .and_then(|mut configuration| configuration.select_cpu(model))
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+/// Select an explicitly indexed PLC's CPU, retaining native migration guards.
+#[cfg(feature = "write")]
+#[wasm_bindgen(js_name = select_xgwx_configuration_cpu)]
+pub fn select_xgwx_configuration_cpu_wasm(
+    bytes: &[u8],
+    configuration_index: JsValue,
+    model: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let configuration_index = configuration_index
+        .as_f64()
+        .ok_or_else(|| JsValue::from_str("configuration_index must be a number"))?;
+    if !configuration_index.is_finite()
+        || configuration_index.fract() != 0.0
+        || configuration_index < 0.0
+        || configuration_index > u32::MAX as f64
+    {
+        return Err(JsValue::from_str(
+            "configuration_index must be a nonnegative integer within the document index range",
+        ));
+    }
+    let configuration_index = configuration_index as usize;
+    let mut doc =
+        parse_in_wasm_session(bytes).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    doc.configuration_mut()
+        .get(configuration_index)
         .and_then(|mut configuration| configuration.select_cpu(model))
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     serialize_in_wasm_session(&doc, false).map_err(|error| JsValue::from_str(&error.to_string()))
@@ -2497,6 +2532,7 @@ struct WasmDocumentSummary {
     password_protection: WasmPasswordProtection,
     project: WasmProjectSummary,
     cpu: Option<WasmCpuSummary>,
+    configurations: Vec<WasmConfigurationSummary>,
     counts: WasmCounts,
     programs: Vec<WasmProgramSummary>,
     tasks: Vec<tasks::WasmTask>,
@@ -2543,20 +2579,66 @@ struct WasmCpuSummary {
     family: Option<&'static str>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmConfigurationSummary {
+    configuration_index: usize,
+    name: Option<String>,
+    guid: Option<String>,
+    cpu: WasmCpuSummary,
+    program_indices: Vec<usize>,
+    task_indices: Vec<usize>,
+    base_indices: Vec<usize>,
+}
+
 impl WasmDocumentSummary {
     fn from_document(doc: &XgwxDocument) -> Self {
         let mut warnings = Vec::new();
         let project = doc.project().info();
         let configurations = doc.configuration().list();
-        let cpu = configurations.first().map(|configuration| {
-            let entry = configuration.type_code.and_then(crate::cpu::cpu_for_type);
-            WasmCpuSummary {
-                configuration_name: configuration.name.clone(),
-                type_code: configuration.type_code,
-                model: entry.map(|entry| entry.model),
-                family: entry.map(|entry| entry.family),
-            }
-        });
+        let program_owners = doc.configuration_record_owners("Program");
+        let configuration_summaries = configurations
+            .iter()
+            .enumerate()
+            .map(|(index, configuration)| {
+                let selected = doc
+                    .configuration()
+                    .get(index)
+                    .expect("configuration exists");
+                let entry = selected.cpu();
+                WasmConfigurationSummary {
+                    configuration_index: index,
+                    name: configuration.name.clone(),
+                    guid: configuration.guid.clone(),
+                    cpu: WasmCpuSummary {
+                        configuration_name: configuration.name.clone(),
+                        type_code: configuration.type_code,
+                        model: entry.map(|entry| entry.model),
+                        family: entry.map(|entry| entry.family),
+                    },
+                    program_indices: selected
+                        .programs()
+                        .iter()
+                        .map(|program| program.index())
+                        .collect(),
+                    task_indices: selected.tasks().iter().map(|task| task.index()).collect(),
+                    base_indices: selected.bases().iter().map(|base| base.index()).collect(),
+                }
+            })
+            .collect();
+        // Legacy workspace-wide CPU metadata is meaningful only with one PLC.
+        let cpu = configurations
+            .first()
+            .filter(|_| configurations.len() == 1)
+            .map(|configuration| {
+                let entry = configuration.type_code.and_then(crate::cpu::cpu_for_type);
+                WasmCpuSummary {
+                    configuration_name: configuration.name.clone(),
+                    type_code: configuration.type_code,
+                    model: entry.map(|entry| entry.model),
+                    family: entry.map(|entry| entry.family),
+                }
+            });
         let networks = doc.networks();
         let bases = doc.bases();
         let modules = doc.module_summaries();
@@ -2700,6 +2782,7 @@ impl WasmDocumentSummary {
                 file_last_write_time: project.file_last_write_time,
             },
             cpu,
+            configurations: configuration_summaries,
             counts: WasmCounts {
                 configurations: configurations.len(),
                 networks: networks.len(),
@@ -2719,7 +2802,12 @@ impl WasmDocumentSummary {
             },
             programs: programs
                 .into_iter()
-                .map(WasmProgramSummary::from_program)
+                .enumerate()
+                .map(|(index, program)| {
+                    let mut summary = WasmProgramSummary::from_program(program);
+                    summary.configuration_index = program_owners.get(index).copied().flatten();
+                    summary
+                })
                 .collect(),
             variables: variables_for_output,
             local_variables,
@@ -2828,14 +2916,8 @@ fn decode_browser_ladder(
     let mut errors = 0;
     let mut decoded_bytes = 0usize;
     let mut item_count = 0usize;
-    let cpu_model = doc
-        .configuration()
-        .list()
-        .first()
-        .and_then(|configuration| configuration.type_code)
-        .and_then(crate::cpu::cpu_for_type)
-        .map(|cpu| cpu.model);
 
+    let program_owners = doc.configuration_record_owners("Program");
     for (program_index, element) in doc
         .root
         .descendants_named("Program")
@@ -2850,6 +2932,13 @@ fn decode_browser_ladder(
         {
             continue;
         }
+        let cpu_model = program_owners
+            .get(program_index)
+            .copied()
+            .flatten()
+            .and_then(|index| doc.configuration().get(index).ok())
+            .and_then(|configuration| configuration.cpu())
+            .map(|cpu| cpu.model);
         let cached = previous.get(program_index).filter(|cached| {
             cached.summary.program_index == program_index
                 && cached.cpu_model == cpu_model

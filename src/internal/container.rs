@@ -1,7 +1,12 @@
+//! Container framing and XML inspection. Gzip members are decoded individually
+//! so their exact end offsets remain available to locate the workspace trailer.
 use super::*;
 
 use flate2::{Decompress, FlushDecompress, Status};
 
+/// Read the marker-prefixed UTF-16LE label and the following opaque word.
+/// The last value is the position after that word, even if the word is absent;
+/// callers must still bounds-check any subsequent header fields.
 pub(crate) fn parse_header_label(raw: &[u8]) -> (Option<String>, Option<u32>, Option<usize>) {
     let Some(marker_offset) = raw
         .windows(3)
@@ -14,6 +19,7 @@ pub(crate) fn parse_header_label(raw: &[u8]) -> (Option<String>, Option<u32>, Op
         return (None, None, None);
     };
 
+    // The one-byte length counts UTF-16 code units, not Unicode characters.
     let start = marker_offset + 4;
     let end = start + unit_count.saturating_mul(2);
     let Some(encoded) = raw.get(start..end) else {
@@ -57,6 +63,8 @@ pub(crate) fn find_trailer_gzip_members(bytes: &[u8], trailer_start: usize) -> V
                 members.push(member);
             }
             Err(_) => {
+                // Magic bytes can occur in opaque trailer data. A failed
+                // candidate must not hide a later, valid gzip member.
                 search_from = offset + 1;
             }
         }
@@ -67,6 +75,7 @@ pub(crate) fn find_trailer_gzip_members(bytes: &[u8], trailer_start: usize) -> V
 
 pub(crate) fn parse_gzip_member(bytes: &[u8], offset: usize) -> Result<GzipMember, XgwxError> {
     let deflate_start = parse_gzip_header(bytes, offset)?;
+    // The gzip header is already consumed; inflate a raw DEFLATE stream here.
     let mut decompressor = Decompress::new(false);
     let mut data = Vec::new();
     let mut input = &bytes[deflate_start..];
@@ -103,6 +112,8 @@ pub(crate) fn parse_gzip_member(bytes: &[u8], offset: usize) -> Result<GzipMembe
 
     let deflate_len = usize::try_from(decompressor.total_in())
         .map_err(|_| XgwxError::TruncatedGzipMember { offset })?;
+    // Use the inflater's consumed byte count rather than scanning for another
+    // magic sequence: compressed data and the trailer may contain those bytes.
     let trailer_start = deflate_start + deflate_len;
     let end_offset = trailer_start + GZIP_TRAILER_LEN;
     let trailer = bytes
@@ -139,6 +150,7 @@ pub(crate) fn parse_gzip_header(bytes: &[u8], offset: usize) -> Result<usize, Xg
 
     let mut cursor = offset + GZIP_HEADER_LEN;
 
+    // FEXTRA: a little-endian byte count precedes the optional extra field.
     if flags & 0x04 != 0 {
         let xlen_bytes = bytes
             .get(cursor..cursor + 2)
@@ -150,6 +162,7 @@ pub(crate) fn parse_gzip_header(bytes: &[u8], offset: usize) -> Result<usize, Xg
         }
     }
 
+    // FNAME and FCOMMENT are independent NUL-terminated fields.
     if flags & 0x08 != 0 {
         cursor = skip_zero_terminated(bytes, cursor, offset)?;
     }
@@ -158,6 +171,8 @@ pub(crate) fn parse_gzip_header(bytes: &[u8], offset: usize) -> Result<usize, Xg
         cursor = skip_zero_terminated(bytes, cursor, offset)?;
     }
 
+    // FHCRC occupies two bytes. This parser skips it; it validates the data
+    // CRC32 below, but does not verify the optional header checksum.
     if flags & 0x02 != 0 {
         cursor += 2;
         if cursor > bytes.len() {
@@ -222,6 +237,9 @@ pub(crate) fn parse_xml(xml: &str) -> Result<XmlElement, XgwxError> {
     Ok(root)
 }
 
+/// Build the inspection tree, concatenating direct text children only.
+/// Child element text remains in its own node; this is not a lossless XML
+/// representation for serialization (mixed-content ordering is not retained).
 pub(crate) fn xml_element_from_node(node: roxmltree::Node<'_, '_>) -> XmlElement {
     let name = node.tag_name().name().to_owned();
     let attributes = node
@@ -269,6 +287,8 @@ impl<'a> Iterator for XmlDescendantsNamed<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(element) = self.stack.pop() {
+            // Reverse the push order so the LIFO stack visits siblings in
+            // source order. The initial root is eligible for a match too.
             self.stack.extend(element.children.iter().rev());
             if element.name == self.name {
                 return Some(element);

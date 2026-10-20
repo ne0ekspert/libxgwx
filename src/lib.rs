@@ -78,9 +78,9 @@ mod native_parameters;
 mod parameter_api;
 pub use native_parameters::{NativeParameterChange, NativeParameterField, NativeParameterTarget};
 pub use parameter_api::{ParameterData, ParameterKind, ParameterRef, ParameterView, PidView};
-mod variable_api;
 #[cfg(feature = "write")]
 mod global_variable_lifecycle;
+mod variable_api;
 #[cfg(feature = "write")]
 pub use global_variable_lifecycle::NewGlobalVariable;
 #[cfg(feature = "write")]

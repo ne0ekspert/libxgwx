@@ -14,6 +14,33 @@ pub struct ConfigurationRef<'a> {
     index: usize,
 }
 impl XgwxDocument {
+    /// Resolve record ownership in one tree traversal, retaining orphan records.
+    pub(crate) fn configuration_record_owners(&self, name: &str) -> Vec<Option<usize>> {
+        fn visit(
+            node: &crate::XmlElement,
+            name: &str,
+            owner: Option<usize>,
+            next: &mut usize,
+            out: &mut Vec<Option<usize>>,
+        ) {
+            let owner = if node.name == "Configuration" {
+                let index = *next;
+                *next += 1;
+                Some(index)
+            } else {
+                owner
+            };
+            if node.name == name {
+                out.push(owner);
+            }
+            for child in &node.children {
+                visit(child, name, owner, next, out);
+            }
+        }
+        let mut out = Vec::new();
+        visit(&self.root, name, None, &mut 0, &mut out);
+        out
+    }
     /// Borrow the configuration namespace for metadata and CPU inspection.
     pub fn configuration(&self) -> ConfigurationView<'_> {
         ConfigurationView { doc: self }
@@ -57,6 +84,27 @@ impl<'a> ConfigurationRef<'a> {
     /// Current variant recognition requires a single-configuration document.
     pub fn hardware_profile(self) -> Option<&'static CpuHardwareProfile> {
         self.doc.cpu_hardware_profile()
+    }
+    /// Programs owned by this PLC, preserving document indices and native order.
+    /// Repeated names in sibling PLCs do not affect membership.
+    pub fn programs(self) -> Vec<crate::ProgramRef<'a>> {
+        self.doc
+            .configuration_record_owners("Program")
+            .into_iter()
+            .enumerate()
+            .filter(|(_, owner)| *owner == Some(self.index))
+            .map(|(index, _)| crate::ProgramRef::from_index(self.doc, index))
+            .collect()
+    }
+    /// Tasks owned by this PLC, preserving document indices and native order.
+    pub fn tasks(self) -> Vec<crate::TaskRef<'a>> {
+        self.doc
+            .configuration_record_owners("Task")
+            .into_iter()
+            .enumerate()
+            .filter(|(_, owner)| *owner == Some(self.index))
+            .map(|(index, _)| crate::TaskRef::from_index(self.doc, index))
+            .collect()
     }
     /// Bases owned by this configuration, preserving their document indices.
     pub fn bases(self) -> Vec<crate::Base<'a>> {
@@ -112,16 +160,12 @@ mod editors {
             }
         }
         /// Select a supported CPU model while preserving validated program and hardware data.
-        /// Multiple configurations, unsupported migrations and hardware limits are rejected
-        /// without changing the document. Selecting the current model is a no-op.
+        /// XGK changes validate only this PLC's hardware and preserve sibling PLCs.
+        /// XGI migrations currently require a single PLC. Unsupported migrations and
+        /// hardware limits leave the document unchanged. The current model is a no-op.
         pub fn select_cpu(&mut self, model: &str) -> Result<(), XgwxError> {
             self.doc.ensure_consistent_api_tree()?;
-            // The backend is deliberately single-configuration. An index must not
-            // make it appear to support converting a different PLC in a workspace.
-            if self.index != 0 || self.doc.configurations().len() != 1 {
-                return Err(XgwxError::AmbiguousConfiguration);
-            }
-            self.doc.select_cpu(model)
+            self.doc.select_configuration_cpu(self.index, model)
         }
     }
 }

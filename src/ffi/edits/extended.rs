@@ -2000,6 +2000,10 @@ fn apply_select_cpu(doc: &mut XgwxDocument, args: SelectCpuArgs) -> Result<(), S
 }
 
 fn execute_select_cpu(doc: &mut XgwxDocument, args: &SelectCpuArgs) -> Result<(), String> {
+    // This legacy C operation has no explicit PLC selector.
+    if doc.configuration().list().len() != 1 {
+        return Err(crate::XgwxError::AmbiguousConfiguration.to_string());
+    }
     doc.configuration_mut()
         .get(0)
         .and_then(|mut plc| plc.select_cpu(&args.model))

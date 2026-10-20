@@ -22,10 +22,23 @@ impl<'a> ProgramView<'a> {
     }
 }
 
-impl ProgramRef<'_> {
+impl<'a> ProgramRef<'a> {
+    /// Bind an index already validated by the document ownership traversal.
+    pub(crate) fn from_index(doc: &'a XgwxDocument, index: usize) -> Self {
+        Self { doc, index }
+    }
+
     /// Return the zero-based program index bound to this view or editor.
     pub fn index(&self) -> usize {
         self.index
+    }
+    /// Owning PLC in document configuration order, if the program is inside one.
+    pub fn configuration_index(&self) -> Option<usize> {
+        self.doc
+            .configuration_record_owners("Program")
+            .get(self.index)
+            .copied()
+            .flatten()
     }
     /// Read current program metadata as a detached owned snapshot.
     pub fn summary(&self) -> ProgramSummary {
