@@ -102,6 +102,9 @@ xgwx_status xgwx_document_module_options_json(const xgwx_document *doc,
  * edit_basic_operation and legacy XGK-only edit_basic_timing take parameter_index
  * and changes:[{name,expected,replacement}]. expected is the exact stored string;
  * replacement is a native u32 from the inspected control constraints.
+ * edit_native_parameters takes parameter_index and changes with target, name,
+ * expected and replacement; parameters inspection supplies native_fields.
+ * See docs/native-parameters.md for target selectors and raw integer domains.
  * All guards and final serialization must succeed before any change is committed. */
 xgwx_status xgwx_document_apply_edits_json(xgwx_document *doc,
                                          const uint8_t *json, size_t len);

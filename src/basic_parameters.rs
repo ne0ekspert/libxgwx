@@ -299,7 +299,7 @@ impl ParameterRef<'_> {
     }
 }
 
-/// Exclusively borrowed parameter collection for guarded basic-operation edits.
+/// Exclusively borrowed parameter collection for guarded native edits.
 #[cfg(feature = "write")]
 pub struct ParameterCollectionEditor<'a> {
     doc: &'a mut XgwxDocument,
@@ -307,8 +307,8 @@ pub struct ParameterCollectionEditor<'a> {
 /// Editor bound to one document-wide parameter index.
 #[cfg(feature = "write")]
 pub struct ParameterEditor<'a> {
-    doc: &'a mut XgwxDocument,
-    index: usize,
+    pub(crate) doc: &'a mut XgwxDocument,
+    pub(crate) index: usize,
 }
 #[cfg(feature = "write")]
 impl XgwxDocument {

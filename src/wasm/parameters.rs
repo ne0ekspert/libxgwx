@@ -24,6 +24,9 @@ pub(super) struct WasmParameterSummary {
     pub(super) configuration_index: Option<usize>,
     pub(super) basic_timing_fields: Vec<BasicTimingField>,
     pub(super) basic_operation_fields: Vec<BasicParameterField>,
+    pub(super) io_module_indices: Vec<usize>,
+    pub(super) io_base_indices: Vec<usize>,
+    pub(super) native_fields: Vec<NativeParameterField>,
     pub(super) parameter_type: Option<String>,
     pub(super) attributes: Vec<WasmAttribute>,
     pub(super) sections: Vec<WasmParameterSectionSummary>,
@@ -37,6 +40,9 @@ impl WasmParameterSummary {
             configuration_index: record.configuration_index(),
             basic_timing_fields: record.basic_timing_fields(),
             basic_operation_fields: record.basic_operation_fields(),
+            native_fields: record.native_fields(),
+            io_module_indices: record.io_module_indices(),
+            io_base_indices: record.io_base_indices(),
             parameter_type: parameter.parameter_type,
             attributes: parameter
                 .attributes
@@ -626,4 +632,45 @@ fn basic_operation_edit(
         })
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     super::serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Atomically edit existing captured HSC, PID or positioning fields.
+/// Changes use NativeParameterChange's snake_case native-storage wire format.
+#[cfg(feature = "write")]
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = edit_xgwx_native_parameters)]
+pub fn edit_xgwx_native_parameters(
+    bytes: &[u8],
+    index: usize,
+    changes: wasm_bindgen::JsValue,
+) -> Result<Vec<u8>, wasm_bindgen::JsValue> {
+    use wasm_bindgen::JsValue;
+    let json = js_sys::JSON::stringify(&changes)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("invalid native parameter patch"))?;
+    let changes: Vec<crate::NativeParameterChange> =
+        serde_json::from_str(&json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let mut doc =
+        super::parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    doc.parameter_mut()
+        .get(index)
+        .and_then(|mut p| p.edit_native(&changes))
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    super::serialize_in_wasm_session(&doc, false).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Inspect exact values and bounds for guarded native parameter edits.
+#[wasm_bindgen::prelude::wasm_bindgen(js_name = inspect_xgwx_native_parameter_fields)]
+pub fn inspect_xgwx_native_parameter_fields(
+    bytes: &[u8],
+    index: usize,
+) -> Result<wasm_bindgen::JsValue, wasm_bindgen::JsValue> {
+    use wasm_bindgen::JsValue;
+    let doc = super::parse_in_wasm_session(bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let fields = doc
+        .parameter()
+        .get(index)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?
+        .native_fields();
+    let json = serde_json::to_string(&fields).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    js_sys::JSON::parse(&json)
 }

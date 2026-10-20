@@ -37,3 +37,7 @@
 
 # Controlled native password fixtures
 !fixtures/passwords/*.xgwx
+
+# Native parameter writer acceptance fixtures
+!fixtures/native-parameters/*.xgwx
+!fixtures/fenet-io-parameters/*.xgwx

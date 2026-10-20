@@ -104,7 +104,7 @@ checksum = "0864a00c8d019e36216b69c2c4ce50b83b7bd966add3cf5ba554ec44f8bebcf5"
 
 [[package]]
 name = "libxgwx"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "bzip2",

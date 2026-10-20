@@ -125,7 +125,8 @@ fn parameters(doc: &XgwxDocument, offset: usize, limit: usize) -> Value {
         json!({"parameter_index":record.index(), "configuration_index":record.configuration_index(),
             "parameter_type":summary.parameter_type, "attributes":attrs(&summary.attributes),
             "sections":summary.sections.iter().map(|section| json!({"name":section.name,"text":section.text,"child_count":section.child_count,"attributes":attrs(&section.attributes)})).collect::<Vec<_>>(),
-            "basic_operation_fields":editable})
+            "basic_operation_fields":editable, "native_fields":record.native_fields(),
+            "io_module_indices":record.io_module_indices(), "io_base_indices":record.io_base_indices()})
     })})
 }
 

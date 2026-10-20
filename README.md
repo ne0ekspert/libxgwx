@@ -1052,6 +1052,14 @@ inspection section `parameters` for indices and native control constraints. See
 the corresponding typed `xgwx_edit_basic_operation` and `xgwx_edit_basic_timing`
 tools with revision checks, dry runs and backup saves.
 
+### Native HSC, PID and positioning edits
+
+`ParameterRef::native_fields()` exposes existing writable fields in captured XGB
+records. With `write`, `parameter_mut().get(index)?.edit_native(&changes)` applies
+an atomic batch of `NativeParameterChange` values with explicit channel, loop,
+axis or step selectors and expected-value guards. C and WASM expose the same
+storage edits. See [supported layouts, examples and validation limits](docs/native-parameters.md).
+
 ### PLC tasks
 
 Task creation, scheduling edits, rename, guarded program assignment and empty-task

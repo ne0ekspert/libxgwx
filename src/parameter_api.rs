@@ -17,7 +17,7 @@ pub struct ParameterView<'a> {
 #[derive(Debug, Clone, Copy)]
 pub struct ParameterRef<'a> {
     doc: &'a XgwxDocument,
-    element: &'a XmlElement,
+    pub(crate) element: &'a XmlElement,
     index: usize,
     configuration_index: Option<usize>,
     configuration_cpu: Option<&'static CpuCatalogEntry>,
@@ -57,7 +57,7 @@ pub struct PidView<'a> {
 }
 impl XgwxDocument {
     /// Borrow all parameter sections, including records outside configurations.
-    /// Native HSC, PID and positioning writes are not yet supported.
+    /// With `write`, use `XgwxDocument::parameter_mut` for guarded native edits.
     pub fn parameter(&self) -> ParameterView<'_> {
         ParameterView {
             doc: self,
@@ -188,6 +188,30 @@ impl<'a> ParameterRef<'a> {
             Some("PID TUNE PARAMETER") => ParameterKind::PidTuning,
             _ => ParameterKind::Other,
         }
+    }
+    /// Installed module record indices belonging to this exact I/O section.
+    /// Indices address `XgwxDocument::module`; other parameter types return empty.
+    /// Repeated coordinates in another PLC never establish ownership.
+    pub fn io_module_indices(self) -> Vec<usize> {
+        self.io_record_indices("Module")
+    }
+    /// Base record indices belonging to this exact I/O section.
+    /// Indices address `XgwxDocument::base`, including its configuration scope.
+    pub fn io_base_indices(self) -> Vec<usize> {
+        self.io_record_indices("Base")
+    }
+    fn io_record_indices(self, name: &str) -> Vec<usize> {
+        if self.type_name() != Some("IO PARAMETER") {
+            return Vec::new();
+        }
+        let owned = self.element.descendants_named(name).collect::<Vec<_>>();
+        self.doc
+            .root
+            .descendants_named(name)
+            .enumerate()
+            .filter(|(_, node)| owned.iter().any(|owned| std::ptr::eq(*owned, *node)))
+            .map(|(index, _)| index)
+            .collect()
     }
     /// Native section metadata, including unknown XML attributes.
     pub fn summary(self) -> ParameterSummary {

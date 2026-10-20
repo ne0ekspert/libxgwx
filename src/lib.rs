@@ -74,7 +74,9 @@ pub use basic_parameters::{
 };
 #[cfg(feature = "write")]
 pub use basic_parameters::{ParameterCollectionEditor, ParameterEditor};
+mod native_parameters;
 mod parameter_api;
+pub use native_parameters::{NativeParameterChange, NativeParameterField, NativeParameterTarget};
 pub use parameter_api::{ParameterData, ParameterKind, ParameterRef, ParameterView, PidView};
 mod variable_api;
 #[cfg(feature = "write")]

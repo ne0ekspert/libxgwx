@@ -622,3 +622,13 @@ path = "password_acceptance.rs"
 name = "basic_parameter_acceptance"
 path = "basic_parameter_acceptance.rs"
 required-features = ["write"]
+
+[[bin]]
+name = "native_parameter_acceptance"
+path = "native_parameter_acceptance.rs"
+required-features = ["write"]
+
+[[bin]]
+name = "fenet_io_acceptance"
+path = "fenet_io_acceptance.rs"
+required-features = ["write"]

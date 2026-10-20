@@ -860,6 +860,8 @@ impl XgwxDocument {
             "rcvWaitTime" => Some(("RcvWaitTime", 2, 255)),
             "clientWaitTime" => Some(("ClientWaitTime", 2, 255)),
             "driverType" => Some(("DriverType", 2, 7)),
+            "rcvWaitTimeUnit" => Some(("RcvWaitTimeUnit", 0, 1)),
+            "clientWaitTimeUnit" => Some(("ClientWaitTimeUnit", 0, 1)),
             _ => None,
         };
         let prefix = match patch.field.as_str() {
@@ -872,7 +874,7 @@ impl XgwxDocument {
             "gateway2" => Some("Gateway2"),
             "dns2" => Some("Dns2"),
             "dhcp" | "dhcp2" | "stationNo" | "glofaSocketCount" | "rcvWaitTime"
-            | "clientWaitTime" | "driverType" => None,
+            | "clientWaitTime" | "driverType" | "rcvWaitTimeUnit" | "clientWaitTimeUnit" => None,
             _ => return Err(fail("unsupported FEnet setting")),
         };
         let (names, values) = if let Some(prefix) = prefix {

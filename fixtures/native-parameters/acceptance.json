@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-20",
+  "application": "XG5000 4.82.1.0",
+  "application_build_date": "2026-07-20",
+  "environment": "offline Windows 10, isolated copy-on-write VM",
+  "check_program": {
+    "baseline": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "edited": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "scope": "all programs"
+  },
+  "native_save_as": "pass",
+  "native_fields_retained": {
+    "hsc": 16,
+    "pid_calculation": 342,
+    "pid_tuning": 114,
+    "position": 792
+  },
+  "sha256": {
+    "fixtures/XGB_Enet01.xgwx": "78c7e72bbddb2406754acde02003360f9c86be099c6656956e4a984daec3bf64",
+    "fixtures/native-parameters/generated.xgwx": "1b9ee175e8dee6c622ace33b048b16ff8bd453bb47cd8f835f835f72e2127510",
+    "fixtures/native-parameters/resaved.xgwx": "826c6219dab357337af1918340e4246ccad105a655c2cba01cad842a69480f3c",
+    "src/native_parameters.rs": "011cdc383967454038251a0e27e92d81a6abd60f4fbf07c652cd937ef37e07bd"
+  }
+}

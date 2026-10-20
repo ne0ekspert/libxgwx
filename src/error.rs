@@ -237,6 +237,8 @@ pub enum XgwxError {
     AuthenticatedRewriteUnsupported,
     /// A basic-parameter edit failed layout, range or stale-value validation.
     BasicParameterEdit(String),
+    /// A native HSC, PID or positioning edit failed layout, range or stale-value validation.
+    NativeParameterEdit(String),
     BrowserHardwareEdit(String),
     BrowserNetworkEdit(String),
     SfcEdit(String),
@@ -498,6 +500,7 @@ impl fmt::Display for XgwxError {
             }
             Self::InvalidLadderEdit { reason } => write!(f, "cannot edit ladder cell: {reason}"),
             Self::BasicParameterEdit(message) => write!(f, "basic parameter edit: {message}"),
+            Self::NativeParameterEdit(message) => write!(f, "native parameter edit: {message}"),
             Self::BrowserHardwareEdit(reason) => write!(f, "hardware edit rejected: {reason}"),
             Self::ProgramDeletion(reason) => write!(f, "program deletion rejected: {reason}"),
             Self::ProgramReorder(reason) => write!(f, "program reorder rejected: {reason}"),

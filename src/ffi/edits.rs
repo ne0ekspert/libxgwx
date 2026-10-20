@@ -57,6 +57,11 @@ struct BasicParameterChange {
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum Edit {
+    #[serde(rename = "edit_native_parameters")]
+    NativeParameters {
+        parameter_index: usize,
+        changes: Vec<crate::NativeParameterChange>,
+    },
     CreateTask {
         configuration_index: usize,
         settings: crate::TaskSettings,
@@ -356,6 +361,14 @@ fn apply_one(doc: &mut XgwxDocument, edit: Edit) -> Result<()> {
             .task_mut()
             .get_if(task_index, &expected)
             .and_then(|mut t| t.assign_program(program_index, &expected_object_id, &expected_task))
+            .map_err(operation),
+        Edit::NativeParameters {
+            parameter_index,
+            changes,
+        } => doc
+            .parameter_mut()
+            .get(parameter_index)
+            .and_then(|mut p| p.edit_native(&changes))
             .map_err(operation),
         Edit::EditBasicOperation {
             parameter_index,

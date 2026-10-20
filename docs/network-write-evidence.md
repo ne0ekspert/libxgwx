@@ -1,9 +1,17 @@
 # Network protocol write evidence and capture requirements
 
-Reviewed 2026-10-05. This is an evidence inventory, not native acceptance of new writes.
+Updated 2026-10-20. The inventory below records the historical 2026-10-05
+assessment. Later native captures and implementations supersede its statements
+that all communication settings are read-only: see `fixtures/networks/README.md`
+for module FEnet/Cnet evidence and `docs/native-parameters.md` for legacy
+`FENET PARAMETER` / `Safety_Comm` editing and I/O section ownership.
+FEnet receive/client timeout units now use the captured 0=seconds, 1=10 ms
+encodings in the library, VS Code selectors and MCP networks property IR.
+
+Historical assessment (2026-10-05): this is an evidence inventory, not native acceptance of new writes.
 No device/server connection, OS network change, deployment, or new protocol writer was performed.
 
-## Current conclusion
+## Historical conclusion (2026-10-05)
 
 The parser establishes where several protocol values are stored and how they are read. It does not establish each module/CPU's valid values, coupled updates or native acceptance of changing those values. Existing communication profiles support creating captured defaults; they do not validate arbitrary edits to an existing configuration. The current browser therefore edits existing network metadata only. Network names/descriptions are not a complete communication-settings editor.
 

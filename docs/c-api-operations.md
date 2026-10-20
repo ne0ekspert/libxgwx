@@ -16,6 +16,7 @@ Read `programs` with `xgwx_document_inspect_section_json` to capture `object_id`
 | `create_task_program` | `task_index: usize`, `expected: TaskSnapshot`, `name: String`, `language: String`, `object_id: String`, `symbol_id: String` |
 | `edit_basic_operation` | `parameter_index: usize`, `changes: Vec<BasicParameterChange>` |
 | `edit_basic_timing` | Same fields; legacy XGK timing subset only |
+| `edit_native_parameters` | `parameter_index: usize`, `changes: Vec<NativeParameterChange>`; see [native parameter schemas](native-parameters.md#c-and-wasm) |
 | `edit_ld_label` | `program_index: usize`, `expected_object_id: String`, `raw_y: u32`, `expected: Option<String>`, `replacement: Option<String>` |
 | `edit_opcua_settings` | `base: u32`, `slot: u32`, `changes: Vec<OpcUaFieldEdit>` |
 | `edit_opcua_tag` | `configuration_index: usize`, `expected_tags: Vec<OpcUaTag>`, `index: Option<usize>`, `tag: Option<OpcUaTag>` |

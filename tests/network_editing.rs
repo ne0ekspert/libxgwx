@@ -349,3 +349,20 @@ fn rapienet_station_range_uses_the_existing_protocol() {
     );
     assert_eq!(doc.container().xml(), original);
 }
+
+#[test]
+fn fenet_timeout_units_follow_native_seconds_and_ten_millisecond_encodings() {
+    let mut doc = XgwxDocument::parse(include_bytes!(
+        "../fixtures/networks/fenet-modbus-native.xgwx"
+    ))
+    .unwrap();
+    for field in ["rcvWaitTimeUnit", "clientWaitTimeUnit"] {
+        let original = doc.container().xml().to_owned();
+        hardware_support::edit_fenet_field(&mut doc, &patch(field, "0", "1")).unwrap();
+        let changed = doc.container().xml().to_owned();
+        assert!(hardware_support::edit_fenet_field(&mut doc, &patch(field, "1", "2")).is_err());
+        assert_eq!(doc.container().xml(), changed);
+        hardware_support::edit_fenet_field(&mut doc, &patch(field, "1", "0")).unwrap();
+        assert_eq!(doc.container().xml(), original);
+    }
+}
