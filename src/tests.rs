@@ -294,7 +294,7 @@ fn cpu_catalog_maps_fixture_configuration_types() {
     ] {
         let entry = cpu_for_type(type_code).expect("XGI type is cataloged");
         assert_eq!(entry.model, model);
-        assert_eq!(entry.family, "XGI");
+        assert_eq!(entry.family, crate::CpuFamily::Xgi);
         assert_eq!(entry.max_base, max_base);
     }
 }

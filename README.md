@@ -618,6 +618,9 @@ LIBXGWX_FIXTURE=path/to/project.xgwx cargo test parses_real_fixture_from_env -- 
 
 CPU and hardware writes are CPU-aware: XGK model changes check retained base
 and slot limits; cross-family and compact-model conversions are rejected.
+`CpuCatalogEntry::family` uses `CpuFamily::{Xgk, Xgb, Xgr, Xgi}`.
+Rust callers should compare enum variants; `as_str()` and `Display` provide
+uppercase family names. WASM and FFI JSON retain strings such as `"XGK"`.
 The CPU catalog also recognizes XGI models, including
 `XGI-CPUE` (configuration type `106`). An XGI configuration can select its
 existing model without changing the file. XGI-CPUE, CPUS, CPUH, CPUU, CPUU/D and CPUUN can switch between models

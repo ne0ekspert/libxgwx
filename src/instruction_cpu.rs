@@ -24,7 +24,7 @@ pub fn ladder_instruction_cpu_allowed(name: &str, model: &str) -> Option<bool> {
     let cpu = crate::cpu_catalog()
         .iter()
         .find(|cpu| cpu.model.eq_ignore_ascii_case(model.trim()))?;
-    if cpu.family != "XGK" {
+    if cpu.family != crate::CpuFamily::Xgk {
         return None;
     }
     let restriction = ladder_instruction_cpu_restriction(name)?;
@@ -38,7 +38,7 @@ mod tests {
     fn reviewed_model_restrictions_cover_both_xgk_generations() {
         for cpu in crate::cpu_catalog()
             .iter()
-            .filter(|cpu| cpu.family == "XGK")
+            .filter(|cpu| cpu.family == crate::CpuFamily::Xgk)
         {
             let high_performance = matches!(cpu.model, "XGK-CPUUN" | "XGK-CPUHN" | "XGK-CPUSN");
             for command in ["INLATCH", "GETIP", "SETIP", "CPMSG"] {

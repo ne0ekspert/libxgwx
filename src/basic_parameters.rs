@@ -220,7 +220,7 @@ impl ParameterRef<'_> {
         let iec = section.name == "XGIBasicParam"
             && self
                 .configuration_cpu()
-                .is_some_and(|cpu| cpu.family == "XGI");
+                .is_some_and(|cpu| cpu.family == crate::CpuFamily::Xgi);
         if !(section.name == "XGTBasicParam" || iec)
             || attr("bp_ver") != Some("100")
             || attr("size") != Some("400")

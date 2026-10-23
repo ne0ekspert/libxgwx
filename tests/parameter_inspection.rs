@@ -95,7 +95,7 @@ fn basic_controls_follow_exact_nearest_cpu_and_configuration_scope() {
         let expected = record
             .configuration()
             .and_then(|c| c.cpu())
-            .is_some_and(|cpu| cpu.family == "XGI");
+            .is_some_and(|cpu| cpu.family == xgwx::CpuFamily::Xgi);
         assert_eq!(record.basic_operation_fields().len(), usize::from(expected));
     }
     let scoped = doc.configuration().get(0).unwrap().parameters().list();
@@ -139,7 +139,7 @@ fn cpu_catalog_and_type_parsing_keep_operation_controls_compatible() {
             .get(0)
             .unwrap()
             .cpu()
-            .is_some_and(|cpu| cpu.family == "XGI");
+            .is_some_and(|cpu| cpu.family == xgwx::CpuFamily::Xgi);
         let records = doc.parameter().list();
         assert_eq!(
             records[0].basic_operation_fields().len(),

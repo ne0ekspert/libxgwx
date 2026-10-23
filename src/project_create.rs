@@ -27,19 +27,19 @@ pub fn create_project(cpu_model: &str, language: &str) -> Result<XgwxDocument, X
         return Err(fail("unknown program language"));
     }
     let profile = match (cpu.family, cpu.type_code, language.as_str()) {
-        ("XGK", 3, "ST") => "xgk-auto",
-        ("XGK", _, "LD" | "IL") => "xgk",
-        ("XGI", _, "LD" | "ST" | "IL") => "xgi",
-        ("XGI", 100 | 102 | 104 | 106 | 107 | 111, "SFC") => "xgi-sfc",
-        ("XGB", 109, "ST" | "IL") => "xece",
-        ("XGB", 103, "ST" | "IL") => "xech",
-        ("XGB", 108, "ST" | "IL") => "xecs",
-        ("XGB", 112, "ST" | "IL") => "xecu",
-        ("XGB", 116, "ST" | "IL") => "xemh2",
-        ("XGB", 115, "ST" | "IL") => "xemhp",
-        ("XGB", 114, "ST" | "IL") => "gipam",
-        ("XGB", 113, "ST" | "IL") => "kl",
-        ("XGR", 101, "ST" | "IL") => "xgr",
+        (crate::CpuFamily::Xgk, 3, "ST") => "xgk-auto",
+        (crate::CpuFamily::Xgk, _, "LD" | "IL") => "xgk",
+        (crate::CpuFamily::Xgi, _, "LD" | "ST" | "IL") => "xgi",
+        (crate::CpuFamily::Xgi, 100 | 102 | 104 | 106 | 107 | 111, "SFC") => "xgi-sfc",
+        (crate::CpuFamily::Xgb, 109, "ST" | "IL") => "xece",
+        (crate::CpuFamily::Xgb, 103, "ST" | "IL") => "xech",
+        (crate::CpuFamily::Xgb, 108, "ST" | "IL") => "xecs",
+        (crate::CpuFamily::Xgb, 112, "ST" | "IL") => "xecu",
+        (crate::CpuFamily::Xgb, 116, "ST" | "IL") => "xemh2",
+        (crate::CpuFamily::Xgb, 115, "ST" | "IL") => "xemhp",
+        (crate::CpuFamily::Xgb, 114, "ST" | "IL") => "gipam",
+        (crate::CpuFamily::Xgb, 113, "ST" | "IL") => "kl",
+        (crate::CpuFamily::Xgr, 101, "ST" | "IL") => "xgr",
         _ => return Err(fail("no native defaults for this CPU and program language")),
     };
     let (xml, security): (&str, &[u8]) = match profile {
@@ -114,7 +114,7 @@ pub fn create_project(cpu_model: &str, language: &str) -> Result<XgwxDocument, X
         _ => return Err(fail("unknown default program kind")),
     };
     // Vendor IL is a view of the same XGK ladder records.
-    if native_language != language && !(cpu.family == "XGK" && language == "IL") {
+    if native_language != language && !(cpu.family == crate::CpuFamily::Xgk && language == "IL") {
         doc.delete_program(
             0,
             program

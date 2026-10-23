@@ -406,7 +406,7 @@ impl XgwxDocument {
                         .configuration()
                         .get(0)?
                         .cpu()
-                        .is_none_or(|c| c.family != "XGK")
+                        .is_none_or(|c| c.family != crate::CpuFamily::Xgk)
                     || p.attribute("Kind") != Some("0")
                 {
                     return Err(fail(PasswordError::UnsupportedLayout));
@@ -463,7 +463,7 @@ fn single_body_protection(program: roxmltree::Node<'_, '_>) -> bool {
     else {
         return false;
     };
-    cpu.family == "XGI"
+    cpu.family == crate::CpuFamily::Xgi
         && match program.attribute("Kind") {
             Some("4" | "9") => children[0].children().any(|n| n.has_tag_name("ST_Program")),
             Some("3") => children[0]

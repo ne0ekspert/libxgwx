@@ -172,14 +172,24 @@ impl XgwxDocument {
             ));
         }
         let template = match (cpu.family, patch.language.as_str()) {
-            ("XGK", "LD") if self.xgk_auto_allocation() => {
+            (crate::CpuFamily::Xgk, "LD") if self.xgk_auto_allocation() => {
                 include_str!("program_templates/xgk-auto-ld.xml")
             }
-            ("XGK", "LD" | "IL") => include_str!("program_templates/xgk-ld.xml"),
-            ("XGI" | "XGK" | "XGB" | "XGR", "ST") => include_str!("program_templates/xgi-st.xml"),
-            ("XGI" | "XGB" | "XGR", "IL") => include_str!("program_templates/xgi-il.xml"),
-            ("XGI", "LD") => include_str!("program_templates/xgi-ld.xml"),
-            ("XGI", "SFC") if [100, 102, 104, 106, 107, 111].contains(&cpu.type_code) => {
+            (crate::CpuFamily::Xgk, "LD" | "IL") => include_str!("program_templates/xgk-ld.xml"),
+            (
+                crate::CpuFamily::Xgi
+                | crate::CpuFamily::Xgk
+                | crate::CpuFamily::Xgb
+                | crate::CpuFamily::Xgr,
+                "ST",
+            ) => include_str!("program_templates/xgi-st.xml"),
+            (crate::CpuFamily::Xgi | crate::CpuFamily::Xgb | crate::CpuFamily::Xgr, "IL") => {
+                include_str!("program_templates/xgi-il.xml")
+            }
+            (crate::CpuFamily::Xgi, "LD") => include_str!("program_templates/xgi-ld.xml"),
+            (crate::CpuFamily::Xgi, "SFC")
+                if [100, 102, 104, 106, 107, 111].contains(&cpu.type_code) =>
+            {
                 include_str!("program_templates/xgi-sfc.xml")
             }
             _ => {
@@ -252,7 +262,13 @@ impl XgwxDocument {
             .value()
             .parse::<u32>()
             .ok()
-            .and_then(|n| n.checked_add(if cpu.family == "XGK" { 1 } else { 3 }))
+            .and_then(|n| {
+                n.checked_add(if cpu.family == crate::CpuFamily::Xgk {
+                    1
+                } else {
+                    3
+                })
+            })
             .ok_or_else(|| fail("invalid workspace node count"))?;
         let end = list.range().end;
         let closing = self.xml[list.range()]

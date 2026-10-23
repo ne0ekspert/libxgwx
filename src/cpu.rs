@@ -1,6 +1,35 @@
 #[cfg(feature = "write")]
 use crate::XgwxError;
 
+/// CPU family used for compatibility validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize))]
+#[cfg_attr(feature = "wasm", serde(rename_all = "UPPERCASE"))]
+pub enum CpuFamily {
+    Xgk,
+    Xgb,
+    Xgr,
+    Xgi,
+}
+
+impl CpuFamily {
+    /// Return the native uppercase family name used in protocol output.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Xgk => "XGK",
+            Self::Xgb => "XGB",
+            Self::Xgr => "XGR",
+            Self::Xgi => "XGI",
+        }
+    }
+}
+
+impl std::fmt::Display for CpuFamily {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// One CPU model selectable in an XG5000 project configuration.
 ///
 /// `type_code` is the numeric value stored in the `<Configuration Type>`
@@ -12,7 +41,7 @@ pub struct CpuCatalogEntry {
     /// Cataloged native model name.
     pub model: &'static str,
     /// CPU family used for compatibility validation.
-    pub family: &'static str,
+    pub family: CpuFamily,
     /// Native Configuration Type value.
     pub type_code: u32,
     /// Maximum supported base count; valid base numbers are below this limit.
@@ -24,203 +53,203 @@ pub struct CpuCatalogEntry {
 const CPU_CATALOG: &[CpuCatalogEntry] = &[
     CpuCatalogEntry {
         model: "XGK-CPUH",
-        family: "XGK",
+        family: CpuFamily::Xgk,
         type_code: 0,
         max_base: 8,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGK-CPUS",
-        family: "XGK",
+        family: CpuFamily::Xgk,
         type_code: 1,
         max_base: 4,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGK-CPUA",
-        family: "XGK",
+        family: CpuFamily::Xgk,
         type_code: 3,
         max_base: 4,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGK-CPUE",
-        family: "XGK",
+        family: CpuFamily::Xgk,
         type_code: 4,
         max_base: 2,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGK-CPUU",
-        family: "XGK",
+        family: CpuFamily::Xgk,
         type_code: 5,
         max_base: 8,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGK-CPUUN",
-        family: "XGK",
+        family: CpuFamily::Xgk,
         type_code: 14,
         max_base: 8,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGK-CPUHN",
-        family: "XGK",
+        family: CpuFamily::Xgk,
         type_code: 16,
         max_base: 8,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGK-CPUSN",
-        family: "XGK",
+        family: CpuFamily::Xgk,
         type_code: 17,
         max_base: 4,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGB-XBMS",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 2,
         max_base: 1,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGB-DR16C3",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 6,
         max_base: 1,
         max_slot: 8,
     },
     CpuCatalogEntry {
         model: "XGB-XBCH",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 7,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-DR32HL",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 8,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XBCE",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 9,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XBCS",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 10,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XBCEB",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 12,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XBCEX",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 13,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XBCU",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 15,
         max_base: 1,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGB-XBMH",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 18,
         max_base: 1,
         max_slot: 9,
     },
     CpuCatalogEntry {
         model: "XGB-XBMHP",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 19,
         max_base: 1,
         max_slot: 9,
     },
     CpuCatalogEntry {
         model: "XGB-XBMH2",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 21,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XBCXS",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 22,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XECH",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 103,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XECS",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 108,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XECE",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 109,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XECU",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 112,
         max_base: 1,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGB-KL",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 113,
         max_base: 1,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGB-GIPAM",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 114,
         max_base: 1,
         max_slot: 2,
     },
     CpuCatalogEntry {
         model: "XGB-XEMHP",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 115,
         max_base: 1,
         max_slot: 11,
     },
     CpuCatalogEntry {
         model: "XGB-XEMH2",
-        family: "XGB",
+        family: CpuFamily::Xgb,
         type_code: 116,
         max_base: 1,
         max_slot: 11,
@@ -228,7 +257,7 @@ const CPU_CATALOG: &[CpuCatalogEntry] = &[
     // Captured from native XG5000 4.82.1 XGR ST/IL projects.
     CpuCatalogEntry {
         model: "XGR-CPUH",
-        family: "XGR",
+        family: CpuFamily::Xgr,
         type_code: 101,
         max_base: 8,
         max_slot: 12,
@@ -238,49 +267,49 @@ const CPU_CATALOG: &[CpuCatalogEntry] = &[
     // Physical rack limits come from LS ELECTRIC's CPU documentation.
     CpuCatalogEntry {
         model: "XGI-CPUU",
-        family: "XGI",
+        family: CpuFamily::Xgi,
         type_code: 100,
         max_base: 8,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGI-CPUH",
-        family: "XGI",
+        family: CpuFamily::Xgi,
         type_code: 102,
         max_base: 8,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGI-CPUS",
-        family: "XGI",
+        family: CpuFamily::Xgi,
         type_code: 104,
         max_base: 4,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGI-CPUE",
-        family: "XGI",
+        family: CpuFamily::Xgi,
         type_code: 106,
         max_base: 2,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGI-CPUU/D",
-        family: "XGI",
+        family: CpuFamily::Xgi,
         type_code: 107,
         max_base: 8,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGI-CPUS/P",
-        family: "XGI",
+        family: CpuFamily::Xgi,
         type_code: 110,
         max_base: 1,
         max_slot: 12,
     },
     CpuCatalogEntry {
         model: "XGI-CPUUN",
-        family: "XGI",
+        family: CpuFamily::Xgi,
         type_code: 111,
         max_base: 8,
         max_slot: 12,
@@ -362,5 +391,27 @@ impl crate::XgwxDocument {
             return None;
         }
         Some(&XBM_DR16S)
+    }
+}
+
+#[cfg(all(test, feature = "wasm"))]
+mod tests {
+    #[test]
+    fn catalog_serialization_preserves_uppercase_family_names() {
+        let catalog = serde_json::to_value(super::cpu_catalog()).unwrap();
+        for (model, family) in [
+            ("XGK-CPUH", "XGK"),
+            ("XGB-XBMS", "XGB"),
+            ("XGR-CPUH", "XGR"),
+            ("XGI-CPUU", "XGI"),
+        ] {
+            let entry = catalog
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|entry| entry["model"] == model)
+                .unwrap();
+            assert_eq!(entry["family"], family);
+        }
     }
 }

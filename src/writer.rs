@@ -997,7 +997,7 @@ impl XgwxDocument {
         if current.type_code == entry.type_code {
             return Ok(());
         }
-        if current.family == "XGI" && entry.family == "XGI" {
+        if current.family == crate::CpuFamily::Xgi && entry.family == crate::CpuFamily::Xgi {
             // XGI migrations also update workspace counts and native defaults.
             // Keep their existing single-PLC guard until scoped migration is validated.
             if self.configurations().len() != 1 {
@@ -1005,7 +1005,7 @@ impl XgwxDocument {
             }
             return self.select_xgi_source_cpu(current, entry);
         }
-        if current.family != "XGK" || entry.family != "XGK" {
+        if current.family != crate::CpuFamily::Xgk || entry.family != crate::CpuFamily::Xgk {
             return Err(XgwxError::UnsupportedCpuChange {
                 from: current.model.into(),
                 to: entry.model.into(),
@@ -1628,7 +1628,9 @@ impl XgwxDocument {
 
     fn require_rack_hardware(&self) -> Result<&'static CpuCatalogEntry, XgwxError> {
         let cpu = self.hardware_cpu()?;
-        if !matches!(cpu.family, "XGK" | "XGI") || cpu.type_code == 110 {
+        if !matches!(cpu.family, crate::CpuFamily::Xgk | crate::CpuFamily::Xgi)
+            || cpu.type_code == 110
+        {
             return Err(XgwxError::UnsupportedCpuHardware {
                 type_code: cpu.type_code,
             });
@@ -14048,7 +14050,7 @@ fn push_network_configuration_additions(
                 .iter()
                 .find(|c| Some(c.type_code) == cpu_type)
                 .map(|c| c.family)
-                .unwrap_or("XGK");
+                .unwrap_or(crate::CpuFamily::Xgk);
             let app =
                 escape_xml_attribute(&format!("XG5000.{family}.OPCUAServer/{configuration_name}"));
             include_str!("eopct_default.xml")

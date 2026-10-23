@@ -558,3 +558,23 @@ fn legacy_cpu_operation_cannot_implicitly_choose_the_first_of_multiple_plcs() {
         assert_eq!(doc.bytes(), input);
     }
 }
+
+#[test]
+fn cpu_catalog_inspection_preserves_uppercase_family_names() {
+    let doc = Document::parse(include_bytes!("../fixtures/elements.xgwx"));
+    let catalog = doc.section_page("catalog.cpu", None, 0, 100);
+    for (model, family) in [
+        ("XGK-CPUH", "XGK"),
+        ("XGB-XBMS", "XGB"),
+        ("XGR-CPUH", "XGR"),
+        ("XGI-CPUU", "XGI"),
+    ] {
+        let entry = catalog["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["model"] == model)
+            .unwrap();
+        assert_eq!(entry["family"], family);
+    }
+}
