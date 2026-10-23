@@ -248,7 +248,7 @@ mod write {
             let cpu = config.attribute("Type").and_then(|s| s.parse::<u32>().ok());
             if !crate::cpu_catalog()
                 .iter()
-                .any(|c| c.family == "XGK" && Some(c.type_code) == cpu)
+                .any(|c| c.family == crate::CpuFamily::Xgk && Some(c.type_code) == cpu)
             {
                 return Err(fail(
                     "OPC UA tag-list editing requires an XGK CPU; IEC CPUs use variable export flags",

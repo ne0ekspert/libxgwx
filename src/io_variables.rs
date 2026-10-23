@@ -96,7 +96,7 @@ pub(crate) fn plan(doc: &XgwxDocument) -> Result<Vec<IoVariableGenerationRow>, X
     let cpu = match configurations.as_slice() {
         [element] => crate::internal::attr_u32(element, "Type")
             .and_then(crate::cpu::cpu_for_type)
-            .filter(|cpu| cpu.family == "XGK"),
+            .filter(|cpu| cpu.family == crate::CpuFamily::Xgk),
         _ => None,
     }
     .ok_or_else(|| invalid("I/O variable generation supports XGK global symbols"))?;

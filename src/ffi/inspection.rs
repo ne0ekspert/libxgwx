@@ -143,7 +143,9 @@ fn configuration(value: &ConfigurationSummary) -> Value {
 }
 
 fn cpu(value: &CpuCatalogEntry) -> Value {
-    fields!(value; model, family, type_code, max_base, max_slot)
+    let mut result = fields!(value; model, type_code, max_base, max_slot);
+    result["family"] = json!(value.family.as_str());
+    result
 }
 
 #[cfg(feature = "write")]

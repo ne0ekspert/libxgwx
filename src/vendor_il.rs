@@ -44,7 +44,7 @@ impl XgwxDocument {
             || !configs[0]
                 .type_code
                 .and_then(crate::cpu::cpu_for_type)
-                .is_some_and(|c| c.family == "XGK")
+                .is_some_and(|c| c.family == crate::CpuFamily::Xgk)
         {
             return vec![];
         }

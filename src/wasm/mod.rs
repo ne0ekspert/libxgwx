@@ -2614,7 +2614,7 @@ impl WasmDocumentSummary {
                         configuration_name: configuration.name.clone(),
                         type_code: configuration.type_code,
                         model: entry.map(|entry| entry.model),
-                        family: entry.map(|entry| entry.family),
+                        family: entry.map(|entry| entry.family.as_str()),
                     },
                     program_indices: selected
                         .programs()
@@ -2636,7 +2636,7 @@ impl WasmDocumentSummary {
                     configuration_name: configuration.name.clone(),
                     type_code: configuration.type_code,
                     model: entry.map(|entry| entry.model),
-                    family: entry.map(|entry| entry.family),
+                    family: entry.map(|entry| entry.family.as_str()),
                 }
             });
         let networks = doc.networks();

@@ -383,7 +383,7 @@ impl ParameterRef<'_> {
             && self.configuration_index().is_some()
             && !self
                 .configuration_cpu()
-                .is_some_and(|cpu| cpu.family == "XGK")
+                .is_some_and(|cpu| cpu.family == crate::CpuFamily::Xgk)
         {
             return out;
         }
@@ -391,7 +391,7 @@ impl ParameterRef<'_> {
             && self.configuration_index().is_some()
             && !self
                 .configuration_cpu()
-                .is_some_and(|cpu| cpu.family == "XGB")
+                .is_some_and(|cpu| cpu.family == crate::CpuFamily::Xgb)
         {
             return out;
         }

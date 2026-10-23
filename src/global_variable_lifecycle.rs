@@ -158,7 +158,7 @@ impl XgwxDocument {
             .collect();
         if configs.len() != 1
             || !crate::cpu_catalog().iter().any(|c| {
-                c.family == "XGK"
+                c.family == crate::CpuFamily::Xgk
                     && configs[0]
                         .attribute("Type")
                         .and_then(|t| t.parse::<u32>().ok())

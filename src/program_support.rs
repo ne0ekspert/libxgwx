@@ -8,7 +8,7 @@ impl XgwxDocument {
             && configs[0]
                 .type_code
                 .and_then(crate::cpu::cpu_for_type)
-                .is_some_and(|c| c.family == "XGK")
+                .is_some_and(|c| c.family == crate::CpuFamily::Xgk)
             && configs[0].attribute.is_some_and(|a| a & 0x20 != 0)
             && self
                 .root
